@@ -736,8 +736,9 @@
             }, [sampleJson]);
 
             useEffect(() => {
+                console.log('⚡ useEffect triggered - about to load chart from GitHub');
                 loadChartFromGitHub();
-            }, [loadChartFromGitHub]);
+            }, []); // Empty dependency array to run once on mount
 
             useEffect(() => {
                 if (uploadedImage && recognitionResults.length > 0) {
