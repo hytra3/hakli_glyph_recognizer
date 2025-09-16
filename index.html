@@ -102,9 +102,9 @@
                 variantMatching: true
             });
             
-            const canvasRef = ef(null);
-            const imageRef = ef(null);
-            const analysisCanvasRef = ef(null);
+            const canvasRef = useRef(null);
+            const imageRef = useRef(null);
+            const analysisCanvasRef = useRef(null);
 
             // Load symbol images from URLs
             const loadSymbolImages = useCallback(async (symbols) => {
@@ -222,7 +222,7 @@
                 return "Other Symbols";
             }, []);
 
-            const handleJsonLoad = useCallback(() => {
+            const handleJsonLoad = useCallback(async () => {
                 if (!jsonInput.trim()) {
                     alert('Please paste your JSON chart data');
                     return;
@@ -271,7 +271,7 @@
                     setChartLoadStatus('error');
                     alert('Error parsing JSON. Please check the format and try again.');
                 }
-            }, [jsonInput, determineSymbolCategory]);
+            }, [jsonInput, determineSymbolCategory, loadSymbolImages]);
 
             // Load chart from GitHub automatically
             const loadChartFromGitHub = useCallback(async () => {
@@ -366,7 +366,7 @@
                     setEquivalenceChart(demoChart);
                     setChartLoadStatus('error');
                 }
-            }, [determineSymbolCategory]);
+            }, [determineSymbolCategory, loadSymbolImages]);
 
             const handleImageUpload = useCallback((event) => {
                 const file = event.target.files[0];
