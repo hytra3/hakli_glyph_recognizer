@@ -111,8 +111,10 @@
                 if (!relativePath) return null;
                 if (relativePath.startsWith('http')) return relativePath; // Already full URL
                 
-                const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/blob/main/';
-                return baseUrl + relativePath;
+                const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/';
+                const fullUrl = baseUrl + relativePath;
+                console.log(`Converting path: "${relativePath}" -> "${fullUrl}"`);
+                return fullUrl;
             }, []);
 
             // Load symbol images from URLs
@@ -131,10 +133,14 @@
                                         img.crossOrigin = 'anonymous';
                                         await new Promise((resolve, reject) => {
                                             img.onload = () => {
+                                                console.log(`✅ Successfully loaded: ${fullUrl}`);
                                                 imageCache[`${symbol.id}_primary`] = img;
                                                 resolve();
                                             };
-                                            img.onerror = reject;
+                                            img.onerror = (error) => {
+                                                console.error(`❌ Failed to load: ${fullUrl}`, error);
+                                                reject(error);
+                                            };
                                             img.src = fullUrl;
                                         });
                                     }
@@ -1124,7 +1130,8 @@
             );
         };
 
-        ReactDOM.render(<HakliSymbolRecognizer />, document.getElementById('root'));
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<HakliSymbolRecognizer />);
     </script>
 </body>
 </html>
