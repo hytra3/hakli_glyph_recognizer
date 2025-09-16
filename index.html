@@ -106,6 +106,15 @@
             const imageRef = useRef(null);
             const analysisCanvasRef = useRef(null);
 
+            // Convert relative paths to full GitHub URLs
+            const convertToGitHubUrl = useCallback((relativePath) => {
+                if (!relativePath) return null;
+                if (relativePath.startsWith('http')) return relativePath; // Already full URL
+                
+                const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/';
+                return baseUrl + relativePath;
+            }, []);
+
             // Load symbol images from URLs
             const loadSymbolImages = useCallback(async (symbols) => {
                 const imageCache = {};
@@ -116,16 +125,19 @@
                             // Load primary image
                             if (symbol.images.primary) {
                                 try {
-                                    const img = new Image();
-                                    img.crossOrigin = 'anonymous';
-                                    await new Promise((resolve, reject) => {
-                                        img.onload = () => {
-                                            imageCache[`${symbol.id}_primary`] = img;
-                                            resolve();
-                                        };
-                                        img.onerror = reject;
-                                        img.src = symbol.images.primary;
-                                    });
+                                    const fullUrl = convertToGitHubUrl(symbol.images.primary);
+                                    if (fullUrl) {
+                                        const img = new Image();
+                                        img.crossOrigin = 'anonymous';
+                                        await new Promise((resolve, reject) => {
+                                            img.onload = () => {
+                                                imageCache[`${symbol.id}_primary`] = img;
+                                                resolve();
+                                            };
+                                            img.onerror = reject;
+                                            img.src = fullUrl;
+                                        });
+                                    }
                                 } catch (e) {
                                     console.warn(`Failed to load primary image for ${symbol.name}:`, e);
                                 }
@@ -135,16 +147,19 @@
                             if (symbol.images.variants && Array.isArray(symbol.images.variants)) {
                                 for (let i = 0; i < symbol.images.variants.length; i++) {
                                     try {
-                                        const img = new Image();
-                                        img.crossOrigin = 'anonymous';
-                                        await new Promise((resolve, reject) => {
-                                            img.onload = () => {
-                                                imageCache[`${symbol.id}_variant_${i}`] = img;
-                                                resolve();
-                                            };
-                                            img.onerror = reject;
-                                            img.src = symbol.images.variants[i];
-                                        });
+                                        const fullUrl = convertToGitHubUrl(symbol.images.variants[i]);
+                                        if (fullUrl) {
+                                            const img = new Image();
+                                            img.crossOrigin = 'anonymous';
+                                            await new Promise((resolve, reject) => {
+                                                img.onload = () => {
+                                                    imageCache[`${symbol.id}_variant_${i}`] = img;
+                                                    resolve();
+                                                };
+                                                img.onerror = reject;
+                                                img.src = fullUrl;
+                                            });
+                                        }
                                     } catch (e) {
                                         console.warn(`Failed to load variant ${i} for ${symbol.name}:`, e);
                                     }
@@ -155,16 +170,19 @@
                             if (symbol.images.examples && Array.isArray(symbol.images.examples)) {
                                 for (let i = 0; i < symbol.images.examples.length; i++) {
                                     try {
-                                        const img = new Image();
-                                        img.crossOrigin = 'anonymous';
-                                        await new Promise((resolve, reject) => {
-                                            img.onload = () => {
-                                                imageCache[`${symbol.id}_example_${i}`] = img;
-                                                resolve();
-                                            };
-                                            img.onerror = reject;
-                                            img.src = symbol.images.examples[i];
-                                        });
+                                        const fullUrl = convertToGitHubUrl(symbol.images.examples[i]);
+                                        if (fullUrl) {
+                                            const img = new Image();
+                                            img.crossOrigin = 'anonymous';
+                                            await new Promise((resolve, reject) => {
+                                                img.onload = () => {
+                                                    imageCache[`${symbol.id}_example_${i}`] = img;
+                                                    resolve();
+                                                };
+                                                img.onerror = reject;
+                                                img.src = fullUrl;
+                                            });
+                                        }
                                     } catch (e) {
                                         console.warn(`Failed to load example ${i} for ${symbol.name}:`, e);
                                     }
@@ -177,7 +195,7 @@
                 }
                 
                 return imageCache;
-            }, []);
+            }, [convertToGitHubUrl]);
 
             // State for loaded images
             const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
