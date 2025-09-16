@@ -111,7 +111,7 @@
                 if (!relativePath) return null;
                 if (relativePath.startsWith('http')) return relativePath; // Already full URL
                 
-                const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/';
+                const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/blob/main/';
                 return baseUrl + relativePath;
             }, []);
 
