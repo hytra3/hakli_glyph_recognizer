@@ -193,65 +193,100 @@
                 }
             }, [jsonInput, determineSymbolCategory]);
 
-            const loadDemoChart = useCallback(() => {
-                const demoChart = {
-                    chart_name: "Demo Hakli Symbols",
-                    version: "1.0",
-                    symbols: [
-                        {
-                            id: 1,
-                            name: "h",
-                            arabic: "ح",
-                            english_equivalent: "h", 
-                            description: "Letter h (ح)",
-                            category: "Basic Consonants",
-                            images: { 
-                                primary: null,
-                                variants: [],
-                                examples: []
-                            },
-                            confidence_weights: { primary: 1.0, variants: 0.9, examples: 0.8 }
-                        },
-                        {
-                            id: 2,
-                            name: "l",
-                            arabic: "ل",
-                            english_equivalent: "l",
-                            description: "Letter l (ل)", 
-                            category: "Basic Consonants",
-                            images: { 
-                                primary: null,
-                                variants: [],
-                                examples: []
-                            },
-                            confidence_weights: { primary: 1.0, variants: 0.9, examples: 0.8 }
-                        },
-                        {
-                            id: 3,
-                            name: "h-dot",
-                            arabic: "ح",
-                            english_equivalent: "ḥ",
-                            description: "Letter h with dot", 
-                            category: "Dotted Letters",
-                            images: { 
-                                primary: null,
-                                variants: [],
-                                examples: []
-                            },
-                            confidence_weights: { primary: 1.0, variants: 0.9, examples: 0.8 }
-                        }
-                    ],
-                    categories: ["Basic Consonants", "Dotted Letters"],
-                    metadata: {
-                        created: new Date().toISOString(),
-                        total_symbols: 3,
-                        total_images: 0
-                    }
-                };
+            // Load chart from GitHub automatically
+            const loadChartFromGitHub = useCallback(async () => {
+                setChartLoadStatus('loading');
                 
-                setEquivalenceChart(demoChart);
-                setChartLoadStatus('loaded');
-            }, []);
+                // Replace with your GitHub raw file URL
+                // Format: https://raw.githubusercontent.com/USERNAME/REPOSITORY/main/Hakli_symbols.JSON
+                const githubJsonUrl = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPOSITORY/main/Hakli_symbols.JSON';
+                
+                try {
+                    const response = await fetch(githubJsonUrl);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const chartData = await response.json();
+                    
+                    const processedChart = {
+                        chart_name: "Hakli Archaeological Script Symbols",
+                        version: "1.0", 
+                        source_image: chartData.source_image || "github_chart",
+                        extraction_date: chartData.extraction_date || new Date().toISOString(),
+                        symbols: chartData.symbols.map(symbol => ({
+                            ...symbol,
+                            english_equivalent: symbol.name,
+                            category: determineSymbolCategory(symbol.name),
+                            confidence_weights: {
+                                primary: 1.0,
+                                variants: 0.9,
+                                examples: 0.8
+                            }
+                        })),
+                        categories: [...new Set(chartData.symbols.map(s => determineSymbolCategory(s.name)))],
+                        metadata: {
+                            created: chartData.extraction_date || new Date().toISOString(),
+                            total_symbols: chartData.symbols.length,
+                            total_images: chartData.symbols.reduce((sum, s) => {
+                                return sum + 1 + (s.images.variants?.length || 0) + (s.images.examples?.length || 0);
+                            }, 0)
+                        }
+                    };
+                    
+                    setEquivalenceChart(processedChart);
+                    setChartLoadStatus('loaded');
+                    
+                } catch (error) {
+                    console.error('Error loading chart from GitHub:', error);
+                    
+                    // Fallback to demo chart
+                    const demoChart = {
+                        chart_name: "Demo Hakli Symbols (GitHub Load Failed)",
+                        version: "1.0",
+                        symbols: [
+                            {
+                                id: 1,
+                                name: "h",
+                                arabic: "ح",
+                                english_equivalent: "h", 
+                                description: "Letter h (ح)",
+                                category: "Basic Consonants",
+                                images: { 
+                                    primary: null,
+                                    variants: [],
+                                    examples: []
+                                },
+                                confidence_weights: { primary: 1.0, variants: 0.9, examples: 0.8 }
+                            },
+                            {
+                                id: 2,
+                                name: "l",
+                                arabic: "ل",
+                                english_equivalent: "l",
+                                description: "Letter l (ل)", 
+                                category: "Basic Consonants",
+                                images: { 
+                                    primary: null,
+                                    variants: [],
+                                    examples: []
+                                },
+                                confidence_weights: { primary: 1.0, variants: 0.9, examples: 0.8 }
+                            }
+                        ],
+                        categories: ["Basic Consonants"],
+                        metadata: {
+                            created: new Date().toISOString(),
+                            total_symbols: 2,
+                            total_images: 0
+                        }
+                    };
+                    
+                    setEquivalenceChart(demoChart);
+                    setChartLoadStatus('error');
+                }
+            }, [determineSymbolCategory]);
 
             const handleImageUpload = useCallback((event) => {
                 const file = event.target.files[0];
@@ -457,8 +492,8 @@
             }, [sampleJson]);
 
             useEffect(() => {
-                loadDemoChart();
-            }, [loadDemoChart]);
+                loadChartFromGitHub();
+            }, [loadChartFromGitHub]);
 
             useEffect(() => {
                 if (uploadedImage && recognitionResults.length > 0) {
@@ -481,53 +516,61 @@
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                                     <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
                                         <FileText />
-                                        Symbol Chart
+                                        Auto-Load from GitHub
                                     </h3>
                                     
-                                    {!showJsonInput ? (
-                                        <div className="space-y-3">
+                                    <div className="space-y-3">
+                                        <div className="text-sm text-blue-700">
+                                            <p className="mb-2">📁 Currently loading from:</p>
+                                            <code className="text-xs bg-blue-100 p-2 rounded block break-all">
+                                                https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPOSITORY/main/Hakli_symbols.JSON
+                                            </code>
+                                        </div>
+                                        
+                                        <button
+                                            onClick={loadChartFromGitHub}
+                                            className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                                            disabled={chartLoadStatus === 'loading'}
+                                        >
+                                            {chartLoadStatus === 'loading' ? 'Loading...' : 'Reload Chart from GitHub'}
+                                        </button>
+                                        
+                                        {!showJsonInput ? (
                                             <button
                                                 onClick={() => setShowJsonInput(true)}
-                                                className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                                                className="w-full bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors"
                                             >
-                                                Load Custom Chart JSON
+                                                Manual JSON Override
                                             </button>
-                                            <button
-                                                onClick={copySampleJson}
-                                                className="w-full bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
-                                            >
-                                                <Copy />
-                                                Copy Sample JSON Format
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            <textarea
-                                                value={jsonInput}
-                                                onChange={(e) => setJsonInput(e.target.value)}
-                                                placeholder="Paste your Hakli_symbols.JSON content here..."
-                                                className="w-full h-32 p-3 border border-gray-300 rounded resize-none text-xs font-mono"
-                                            />
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={handleJsonLoad}
-                                                    className="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                                                    disabled={!jsonInput.trim()}
-                                                >
-                                                    Load Chart
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setShowJsonInput(false);
-                                                        setJsonInput('');
-                                                    }}
-                                                    className="flex-1 bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-                                                >
-                                                    Cancel
-                                                </button>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <textarea
+                                                    value={jsonInput}
+                                                    onChange={(e) => setJsonInput(e.target.value)}
+                                                    placeholder="Paste JSON to override GitHub version..."
+                                                    className="w-full h-24 p-2 border border-gray-300 rounded text-xs font-mono resize-none"
+                                                />
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={handleJsonLoad}
+                                                        className="flex-1 bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
+                                                        disabled={!jsonInput.trim()}
+                                                    >
+                                                        Load Override
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setShowJsonInput(false);
+                                                            setJsonInput('');
+                                                        }}
+                                                        className="flex-1 bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700 text-sm"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -797,13 +840,13 @@
                             <h3 className="font-semibold text-gray-800 mb-4">Setup Instructions</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <h4 className="font-medium text-gray-800 mb-2">For GitHub Pages:</h4>
+                                    <h4 className="font-medium text-gray-800 mb-2">Setting Up GitHub Auto-Load:</h4>
                                     <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-                                        <li>Create GitHub account and new repository</li>
-                                        <li>Upload this HTML as <code className="bg-gray-200 px-1">index.html</code></li>
-                                        <li>Enable GitHub Pages in Settings → Pages</li>
-                                        <li>Get URL: <code className="bg-gray-200 px-1">https://username.github.io/repo-name</code></li>
-                                        <li>Embed this URL in Google Sites</li>
+                                        <li>Upload your <code className="bg-gray-200 px-1">Hakli_symbols.JSON</code> to GitHub</li>
+                                        <li>Get the raw file URL (click Raw button)</li>
+                                        <li>Replace the URL in the HTML code (line ~167)</li>
+                                        <li>Save and deploy - it will auto-load your chart!</li>
+                                        <li>Update JSON anytime by pushing to GitHub</li>
                                     </ol>
                                 </div>
                                 <div>
