@@ -102,9 +102,9 @@
                 variantMatching: true
             });
             
-            const canvasRef = useRef(null);
-            const imageRef = useRef(null);
-            const analysisCanvasRef = useRef(null);
+            const canvasRef = ef(null);
+            const imageRef = ef(null);
+            const analysisCanvasRef = ef(null);
 
             // Load symbol images from URLs
             const loadSymbolImages = useCallback(async (symbols) => {
@@ -279,7 +279,7 @@
                 
                 // Replace with your GitHub raw file URL
                 // Format: https://raw.githubusercontent.com/USERNAME/REPOSITORY/main/Hakli_symbols.JSON
-                const githubJsonUrl = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPOSITORY/main/Hakli_symbols.JSON';
+                const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
                 
                 try {
                     const response = await fetch(githubJsonUrl);
@@ -743,7 +743,7 @@
                                         <div className="text-sm text-blue-700">
                                             <p className="mb-2">📁 Currently loading from:</p>
                                             <code className="text-xs bg-blue-100 p-2 rounded block break-all">
-                                                https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPOSITORY/main/Hakli_symbols.JSON
+                                                hytra3:Hakli_symbols.JSON
                                             </code>
                                         </div>
                                         
