@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hakli Symbol Recognizer - Complete Version</title>
+    <script src="https://docs.opencv.org/4.8.0/opencv.js"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -205,8 +206,182 @@
 
             // State for loaded images
             const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
+            const [isOpenCVReady, setIsOpenCVReady] = useState(false);
             const [wordBoundaries, setWordBoundaries] = useState(new Set()); // Track which symbol positions start new words
 
+            // Check if OpenCV is ready
+            useEffect(() => {
+                const checkOpenCV = () => {
+                    if (typeof cv !== 'undefined' && cv.Mat) {
+                        console.log('✅ OpenCV.js loaded successfully');
+                        setIsOpenCVReady(true);
+                    } else {
+                        console.log('⏳ Waiting for OpenCV.js...');
+                        setTimeout(checkOpenCV, 100);
+                    }
+                };
+                checkOpenCV();
+            }, []);
+
+            // Symbol isolation using OpenCV contour detection
+            const isolateSymbols = useCallback((imageElement) => {
+                if (!isOpenCVReady || !imageElement) {
+                    console.warn('OpenCV not ready or no image');
+                    return [];
+                }
+
+                try {
+                    // Convert image to OpenCV Mat
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = imageElement.naturalWidth;
+                    canvas.height = imageElement.naturalHeight;
+                    ctx.drawImage(imageElement, 0, 0);
+
+                    const src = cv.imread(canvas);
+                    const gray = new cv.Mat();
+                    const binary = new cv.Mat();
+                    const morphKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+                    const contours = new cv.MatVector();
+                    const hierarchy = new cv.Mat();
+
+                    // Convert to grayscale
+                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+                    // Adaptive thresholding for better symbol separation
+                    cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+
+                    // Morphological operations to clean up noise
+                    cv.morphologyEx(binary, binary, cv.MORPH_CLOSE, morphKernel);
+                    cv.morphologyEx(binary, binary, cv.MORPH_OPEN, morphKernel);
+
+                    // Find contours
+                    cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                    const isolatedSymbols = [];
+                    const minArea = processingSettings.minSymbolSize * processingSettings.minSymbolSize;
+                    const maxArea = processingSettings.maxSymbolSize * processingSettings.maxSymbolSize;
+
+                    // Process each contour
+                    for (let i = 0; i < contours.size(); i++) {
+                        const contour = contours.get(i);
+                        const boundingRect = cv.boundingRect(contour);
+                        const area = cv.contourArea(contour);
+
+                        // Filter by area and aspect ratio
+                        if (area > minArea && area < maxArea) {
+                            const aspectRatio = boundingRect.width / boundingRect.height;
+                            
+                            // Accept reasonable aspect ratios for symbols
+                            if (aspectRatio > 0.2 && aspectRatio < 5.0) {
+                                // Add padding around the symbol
+                                const padding = 5;
+                                const x = Math.max(0, boundingRect.x - padding);
+                                const y = Math.max(0, boundingRect.y - padding);
+                                const width = Math.min(src.cols - x, boundingRect.width + 2 * padding);
+                                const height = Math.min(src.rows - y, boundingRect.height + 2 * padding);
+
+                                isolatedSymbols.push({
+                                    x: x,
+                                    y: y,
+                                    width: width,
+                                    height: height,
+                                    area: area,
+                                    contour: contour.clone()
+                                });
+                            }
+                        }
+                        contour.delete();
+                    }
+
+                    // Clean up OpenCV objects
+                    src.delete();
+                    gray.delete();
+                    binary.delete();
+                    morphKernel.delete();
+                    contours.delete();
+                    hierarchy.delete();
+
+                    // Sort symbols left to right for reading order
+                    isolatedSymbols.sort((a, b) => a.x - b.x);
+
+                    console.log(`🔍 Isolated ${isolatedSymbols.length} potential symbols`);
+                    return isolatedSymbols;
+
+                } catch (error) {
+                    console.error('Error in symbol isolation:', error);
+                    return [];
+                }
+            }, [isOpenCVReady, processingSettings]);
+
+            // Enhanced template matching with isolated symbols
+            const templateMatchIsolated = useCallback((isolatedSymbol, templateImg, threshold = 0.7) => {
+                if (!isOpenCVReady || !templateImg) return null;
+
+                try {
+                    // Create canvas for the isolated symbol region
+                    const symbolCanvas = document.createElement('canvas');
+                    const symbolCtx = symbolCanvas.getContext('2d');
+                    symbolCanvas.width = isolatedSymbol.width;
+                    symbolCanvas.height = isolatedSymbol.height;
+                    
+                    // Draw the isolated symbol region
+                    symbolCtx.drawImage(
+                        imageRef.current,
+                        isolatedSymbol.x, isolatedSymbol.y, isolatedSymbol.width, isolatedSymbol.height,
+                        0, 0, isolatedSymbol.width, isolatedSymbol.height
+                    );
+
+                    // Template matching using OpenCV
+                    const symbolMat = cv.imread(symbolCanvas);
+                    const templateCanvas = document.createElement('canvas');
+                    const templateCtx = templateCanvas.getContext('2d');
+                    templateCanvas.width = templateImg.width;
+                    templateCanvas.height = templateImg.height;
+                    templateCtx.drawImage(templateImg, 0, 0);
+                    const templateMat = cv.imread(templateCanvas);
+
+                    const result = new cv.Mat();
+                    
+                    // Resize template to match symbol size for better comparison
+                    const resizedTemplate = new cv.Mat();
+                    const symbolSize = new cv.Size(isolatedSymbol.width, isolatedSymbol.height);
+                    cv.resize(templateMat, resizedTemplate, symbolSize);
+
+                    // Convert both to grayscale
+                    const symbolGray = new cv.Mat();
+                    const templateGray = new cv.Mat();
+                    cv.cvtColor(symbolMat, symbolGray, cv.COLOR_RGBA2GRAY);
+                    cv.cvtColor(resizedTemplate, templateGray, cv.COLOR_RGBA2GRAY);
+
+                    // Template matching
+                    cv.matchTemplate(symbolGray, templateGray, result, cv.TM_CCOEFF_NORMED);
+                    
+                    const minMaxLoc = cv.minMaxLoc(result);
+                    const confidence = minMaxLoc.maxVal;
+
+                    // Clean up
+                    symbolMat.delete();
+                    templateMat.delete();
+                    resizedTemplate.delete();
+                    symbolGray.delete();
+                    templateGray.delete();
+                    result.delete();
+
+                    return confidence > threshold ? {
+                        confidence: confidence,
+                        position: {
+                            x: isolatedSymbol.x,
+                            y: isolatedSymbol.y,
+                            width: isolatedSymbol.width,
+                            height: isolatedSymbol.height
+                        }
+                    } : null;
+
+                } catch (error) {
+                    console.error('Template matching error:', error);
+                    return null;
+                }
             const toggleWordBoundary = useCallback((symbolIndex) => {
                 setWordBoundaries(prev => {
                     const newBoundaries = new Set(prev);
@@ -593,7 +768,7 @@
                 };
             }, [processingSettings]);
 
-            // Real multi-image symbol detection
+            // Enhanced symbol detection with isolation
             const detectSymbols = useCallback(async () => {
                 if (!uploadedImage || !equivalenceChart || !imageRef.current) return;
                 
@@ -605,97 +780,111 @@
                 // Show progress
                 await new Promise(resolve => setTimeout(resolve, 500));
                 
-                const detectionResults = [];
-                const sourceCanvas = analysisCanvasRef.current;
+                console.log('🔍 Starting symbol isolation...');
                 
-                // Process each symbol with real template matching
-                for (const symbol of equivalenceChart.symbols) {
-                    let symbolMatches = [];
+                // First, isolate individual symbols from the inscription
+                const isolatedSymbols = isolateSymbols(imageRef.current);
+                
+                if (isolatedSymbols.length === 0) {
+                    console.warn('No symbols isolated - falling back to basic detection');
+                    setIsProcessing(false);
+                    return;
+                }
+
+                console.log(`📊 Found ${isolatedSymbols.length} isolated symbols, now matching against templates...`);
+                
+                const detectionResults = [];
+                
+                // Match each isolated symbol against our templates
+                for (let i = 0; i < isolatedSymbols.length; i++) {
+                    const isolatedSymbol = isolatedSymbols[i];
+                    let bestMatch = null;
                     
-                    // Check primary image
-                    const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
-                    if (primaryImg) {
-                        const matches = templateMatch(sourceCanvas, primaryImg, processingSettings.detectionSensitivity);
-                        matches.forEach(match => {
-                            symbolMatches.push({
-                                ...match,
-                                matchType: 'primary',
-                                confidence: match.confidence * (symbol.confidence_weights?.primary || 1.0)
+                    // Test against each symbol in our chart
+                    for (const symbol of equivalenceChart.symbols) {
+                        // Check primary image
+                        const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
+                        if (primaryImg) {
+                            const match = templateMatchIsolated(isolatedSymbol, primaryImg, processingSettings.detectionSensitivity);
+                            if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
+                                bestMatch = {
+                                    ...match,
+                                    symbol: symbol,
+                                    matchType: 'primary',
+                                    confidence: match.confidence * (symbol.confidence_weights?.primary || 1.0)
+                                };
+                            }
+                        }
+                        
+                        // Check variant images if enabled
+                        if (processingSettings.variantMatching && symbol.images.variants) {
+                            symbol.images.variants.forEach((variantPath, index) => {
+                                const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
+                                if (variantImg) {
+                                    const match = templateMatchIsolated(isolatedSymbol, variantImg, processingSettings.detectionSensitivity * 0.9);
+                                    if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
+                                        bestMatch = {
+                                            ...match,
+                                            symbol: symbol,
+                                            matchType: 'variant',
+                                            variantIndex: index,
+                                            confidence: match.confidence * (symbol.confidence_weights?.variants || 0.9)
+                                        };
+                                    }
+                                }
                             });
-                        });
+                        }
+                        
+                        // Check example images
+                        if (symbol.images.examples) {
+                            symbol.images.examples.forEach((examplePath, index) => {
+                                const exampleImg = loadedSymbolImages[`${symbol.id}_example_${index}`];
+                                if (exampleImg) {
+                                    const match = templateMatchIsolated(isolatedSymbol, exampleImg, processingSettings.detectionSensitivity * 0.8);
+                                    if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
+                                        bestMatch = {
+                                            ...match,
+                                            symbol: symbol,
+                                            matchType: 'example',
+                                            exampleIndex: index,
+                                            confidence: match.confidence * (symbol.confidence_weights?.examples || 0.7)
+                                        };
+                                    }
+                                }
+                            });
+                        }
                     }
                     
-                    // Check variant images if enabled
-                    if (processingSettings.variantMatching && symbol.images.variants) {
-                        symbol.images.variants.forEach((variantPath, index) => {
-                            const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
-                            if (variantImg) {
-                                const matches = templateMatch(sourceCanvas, variantImg, processingSettings.detectionSensitivity * 0.9);
-                                matches.forEach(match => {
-                                    symbolMatches.push({
-                                        ...match,
-                                        matchType: 'variant',
-                                        variantIndex: index,
-                                        confidence: match.confidence * (symbol.confidence_weights?.variants || 0.9)
-                                    });
-                                });
-                            }
-                        });
-                    }
-                    
-                    // Check example images
-                    if (symbol.images.examples) {
-                        symbol.images.examples.forEach((examplePath, index) => {
-                            const exampleImg = loadedSymbolImages[`${symbol.id}_example_${index}`];
-                            if (exampleImg) {
-                                const matches = templateMatch(sourceCanvas, exampleImg, processingSettings.detectionSensitivity * 0.8);
-                                matches.forEach(match => {
-                                    symbolMatches.push({
-                                        ...match,
-                                        matchType: 'example',
-                                        exampleIndex: index,
-                                        confidence: match.confidence * (symbol.confidence_weights?.examples || 0.7)
-                                    });
-                                });
-                            }
-                        });
-                    }
-                    
-                    // Add real matches only - no fallback simulation
-                    // Process best matches for this symbol
-                    const bestMatches = symbolMatches
-                        .filter(match => match.confidence > processingSettings.detectionSensitivity * 0.8)
-                        .sort((a, b) => b.confidence - a.confidence)
-                        .slice(0, 2);
-                    
-                    bestMatches.forEach((match) => {
+                    // Add the best match if it meets our threshold
+                    if (bestMatch && bestMatch.confidence > processingSettings.detectionSensitivity * 0.7) {
                         detectionResults.push({
-                            symbol: symbol,
-                            confidence: Math.min(0.95, match.confidence),
-                            position: {
-                                x: match.x,
-                                y: match.y,
-                                width: match.width || (40 + (match.scale * 30)),
-                                height: match.height || (40 + (match.scale * 30))
-                            },
+                            symbol: bestMatch.symbol,
+                            confidence: Math.min(0.95, bestMatch.confidence),
+                            position: bestMatch.position,
                             matchDetails: {
-                                type: match.matchType,
-                                variantIndex: match.variantIndex,
-                                exampleIndex: match.exampleIndex,
-                                scale: match.scale
+                                type: bestMatch.matchType,
+                                variantIndex: bestMatch.variantIndex,
+                                exampleIndex: bestMatch.exampleIndex,
+                                scale: 1.0,
+                                isolatedIndex: i
                             },
-                            characteristics: `${match.matchType} match (${symbol.name}) - scale: ${((match.scale || 1) * 100).toFixed(0)}%`
+                            characteristics: `${bestMatch.matchType} match (${bestMatch.symbol.name}) - isolated symbol #${i + 1}`
                         });
-                    });
+                    }
                 }
                 
-                const filteredResults = detectionResults
-                    .sort((a, b) => b.confidence - a.confidence)
-                    .slice(0, 10);
+                // Clean up any remaining contours
+                isolatedSymbols.forEach(symbol => {
+                    if (symbol.contour) {
+                        symbol.contour.delete();
+                    }
+                });
                 
-                setRecognitionResults(filteredResults);
+                console.log(`✅ Detection complete: ${detectionResults.length} symbols matched`);
+                
+                setRecognitionResults(detectionResults);
                 setIsProcessing(false);
-            }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, templateMatch, analyzeImage]);
+            }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, isolateSymbols, templateMatchIsolated, analyzeImage]);
 
             const drawDetectionResults = useCallback(() => {
                 if (!canvasRef.current || !imageRef.current || recognitionResults.length === 0) return;
@@ -1127,18 +1316,23 @@
 
                                 <button
                                     onClick={detectSymbols}
-                                    disabled={!uploadedImage || !equivalenceChart || isProcessing}
+                                    disabled={!uploadedImage || !equivalenceChart || isProcessing || !isOpenCVReady}
                                     className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                                 >
-                                    {isProcessing ? (
+                                    {!isOpenCVReady ? (
                                         <>
                                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                            Analyzing...
+                                            Loading OpenCV...
+                                        </>
+                                    ) : isProcessing ? (
+                                        <>
+                                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            Isolating & Analyzing...
                                         </>
                                     ) : (
                                         <>
                                             <Zap />
-                                            Detect Symbols
+                                            Isolate & Detect Symbols
                                         </>
                                     )}
                                 </button>
