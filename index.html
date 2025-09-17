@@ -1958,6 +1958,11 @@
             );
         };
 
+        // Wait for page to load before initializing React
+        if (typeof cv === 'undefined') {
+            console.log('⏳ Waiting for OpenCV to load...');
+        }
+
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<HakliSymbolRecognizer />);
     </script>
