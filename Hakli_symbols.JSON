@@ -27,8 +27,7 @@
         {
           "primary": "symbols/l_00.png",
           "variants": [
-            "symbols/l-01.png",
-            "symbols/l_02.png"
+            "symbols/l_01.png"
           ],
           "examples": [
             "examples/KMD_28-31.png",
@@ -113,7 +112,7 @@
         {
           "primary": "symbols/s-2_00.png",
           "variants": [
-            "symbols/s-02_01.png"
+            "symbols/s-2_01.png"
           ],
           "examples": [
             "examples/KMD_28-31.png",
@@ -181,7 +180,7 @@
         {
           "primary": "symbols/s-1_00.png",
           "variants": [
-            "symbols/s-1.png"
+            "symbols/s-1_01.png"
           ],
           "examples": [
             "examples/KMD_28-31.png",
@@ -232,7 +231,7 @@
         {
           "primary": "symbols/h-breve_00.png",
           "variants": [
-            "symbols/h-breve_01.png"
+            
           ],
           "examples": [
             "examples/KMD_28-31.png",
@@ -249,7 +248,7 @@
         {
           "primary": "symbols/f_00.png",
           "variants": [
-            "symbols/f_01.png"
+            
           ],
           "examples": [
             "examples/KMD_28-31.png",
