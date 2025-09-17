@@ -204,6 +204,7 @@
             }, [convertToGitHubUrl]);
 
             // State for loaded images
+            const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
             const [wordBoundaries, setWordBoundaries] = useState(new Set()); // Track which symbol positions start new words
 
             const toggleWordBoundary = useCallback((symbolIndex) => {
@@ -765,6 +766,80 @@
                     alert('Sample JSON copied to clipboard!');
                 });
             }, [sampleJson]);
+
+            // Create a reference function for the reload button
+            const loadChart = useCallback(() => {
+                console.log('🔄 Manual reload triggered');
+                
+                const loadChartInternal = async () => {
+                    console.log('🔄 loadChart function started');
+                    console.log('🔄 Starting to load chart from GitHub...');
+                    setChartLoadStatus('loading');
+                    
+                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
+                    
+                    try {
+                        console.log('📡 Fetching JSON from:', githubJsonUrl);
+                        const response = await fetch(githubJsonUrl);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const chartData = await response.json();
+                        console.log('✅ JSON loaded successfully:', chartData);
+                        
+                        const processedChart = {
+                            chart_name: "Hakli Archaeological Script Symbols",
+                            version: "1.0", 
+                            source_image: chartData.source_image || "github_chart",
+                            extraction_date: chartData.extraction_date || new Date().toISOString(),
+                            symbols: chartData.symbols.map(symbol => ({
+                                ...symbol,
+                                english_equivalent: symbol.name,
+                                category: determineSymbolCategory(symbol.name),
+                                confidence_weights: {
+                                    primary: 1.0,
+                                    variants: 0.9,
+                                    examples: 0.8
+                                }
+                            })),
+                            categories: [...new Set(chartData.symbols.map(s => determineSymbolCategory(s.name)))],
+                            metadata: {
+                                created: chartData.extraction_date || new Date().toISOString(),
+                                total_symbols: chartData.symbols.length,
+                                total_images: chartData.symbols.reduce((sum, s) => {
+                                    return sum + 1 + (s.images.variants?.length || 0) + (s.images.examples?.length || 0);
+                                }, 0)
+                            }
+                        };
+                        
+                        console.log('📊 Processed chart:', processedChart);
+                        setEquivalenceChart(processedChart);
+                        setChartLoadStatus('loaded');
+                        
+                        // Load symbol images for real template matching
+                        console.log('🖼️ Starting to load symbol images...');
+                        const imageCache = await loadSymbolImages(processedChart.symbols);
+                        console.log('✅ Image loading complete. Loaded count:', Object.keys(imageCache).length);
+                        setLoadedSymbolImages(imageCache);
+                        
+                    } catch (error) {
+                        console.error('❌ Error loading chart from GitHub:', error);
+                        
+                        setEquivalenceChart({
+                            chart_name: "Demo Hakli Symbols (GitHub Load Failed)",
+                            version: "1.0",
+                            symbols: [],
+                            categories: [],
+                            metadata: { created: new Date().toISOString(), total_symbols: 0, total_images: 0 }
+                        });
+                        setChartLoadStatus('error');
+                    }
+                };
+                
+                loadChartInternal();
+            }, [loadSymbolImages, determineSymbolCategory]);
 
             useEffect(() => {
                 console.log('⚡ useEffect triggered - about to load chart from GitHub');
