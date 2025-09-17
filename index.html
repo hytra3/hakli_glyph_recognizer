@@ -92,6 +92,7 @@
             const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
             const [isOpenCVReady, setIsOpenCVReady] = useState(false);
             const [wordBoundaries, setWordBoundaries] = useState(new Set());
+            const [isolatedSymbolsDebug, setIsolatedSymbolsDebug] = useState([]);
             const [processingSettings, setProcessingSettings] = useState({
                 contrastThreshold: 127,
                 minSymbolSize: 15,
@@ -478,6 +479,31 @@
 
                     isolatedSymbols.sort((a, b) => a.x - b.x);
                     console.log(`🔍 Isolated ${isolatedSymbols.length} potential symbols`);
+                    
+                    // Create debug images of isolated symbols
+                    const debugSymbols = isolatedSymbols.map((symbol, index) => {
+                        const debugCanvas = document.createElement('canvas');
+                        const debugCtx = debugCanvas.getContext('2d');
+                        debugCanvas.width = symbol.width;
+                        debugCanvas.height = symbol.height;
+                        
+                        debugCtx.drawImage(
+                            canvas, 
+                            symbol.x, symbol.y, symbol.width, symbol.height,
+                            0, 0, symbol.width, symbol.height
+                        );
+                        
+                        return {
+                            id: index,
+                            dataUrl: debugCanvas.toDataURL(),
+                            bounds: symbol,
+                            area: symbol.area
+                        };
+                    });
+                    
+                    // Store debug info (only in browser memory)
+                    setIsolatedSymbolsDebug(debugSymbols);
+                    
                     return isolatedSymbols;
 
                 } catch (error) {
@@ -571,22 +597,29 @@
                 console.log(`📊 Found ${isolatedSymbols.length} isolated symbols, now matching...`);
                 
                 const detectionResults = [];
+                let matchAttempts = 0;
+                let successfulMatches = 0;
                 
                 for (let i = 0; i < isolatedSymbols.length; i++) {
                     const isolatedSymbol = isolatedSymbols[i];
                     let bestMatch = null;
+                    console.log(`🔍 Testing isolated symbol #${i + 1} (${isolatedSymbol.width}x${isolatedSymbol.height})`);
                     
                     for (const symbol of equivalenceChart.symbols) {
                         const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
                         if (primaryImg) {
+                            matchAttempts++;
                             const match = templateMatchIsolated(isolatedSymbol, primaryImg, processingSettings.detectionSensitivity);
-                            if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
-                                bestMatch = {
-                                    ...match,
-                                    symbol: symbol,
-                                    matchType: 'primary',
-                                    confidence: match.confidence * (symbol.confidence_weights?.primary || 1.0)
-                                };
+                            if (match) {
+                                console.log(`✅ Match found: ${symbol.name} with confidence ${match.confidence.toFixed(3)}`);
+                                if (!bestMatch || match.confidence > bestMatch.confidence) {
+                                    bestMatch = {
+                                        ...match,
+                                        symbol: symbol,
+                                        matchType: 'primary',
+                                        confidence: match.confidence * (symbol.confidence_weights?.primary || 1.0)
+                                    };
+                                }
                             }
                         }
                         
@@ -594,6 +627,7 @@
                             symbol.images.variants.forEach((variantPath, index) => {
                                 const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
                                 if (variantImg) {
+                                    matchAttempts++;
                                     const match = templateMatchIsolated(isolatedSymbol, variantImg, processingSettings.detectionSensitivity * 0.9);
                                     if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
                                         bestMatch = {
@@ -612,6 +646,7 @@
                             symbol.images.examples.forEach((examplePath, index) => {
                                 const exampleImg = loadedSymbolImages[`${symbol.id}_example_${index}`];
                                 if (exampleImg) {
+                                    matchAttempts++;
                                     const match = templateMatchIsolated(isolatedSymbol, exampleImg, processingSettings.detectionSensitivity * 0.8);
                                     if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
                                         bestMatch = {
@@ -628,6 +663,7 @@
                     }
                     
                     if (bestMatch && bestMatch.confidence > processingSettings.detectionSensitivity * 0.7) {
+                        successfulMatches++;
                         detectionResults.push({
                             symbol: bestMatch.symbol,
                             confidence: Math.min(0.95, bestMatch.confidence),
@@ -641,6 +677,8 @@
                             },
                             characteristics: `${bestMatch.matchType} match (${bestMatch.symbol.name}) - isolated symbol #${i + 1}`
                         });
+                    } else {
+                        console.log(`❌ No match found for isolated symbol #${i + 1}`);
                     }
                 }
                 
@@ -650,7 +688,8 @@
                     }
                 });
                 
-                console.log(`✅ Detection complete: ${detectionResults.length} symbols matched`);
+                console.log(`✅ Detection complete: ${detectionResults.length} symbols matched out of ${isolatedSymbols.length} isolated`);
+                console.log(`📊 Total match attempts: ${matchAttempts}, Successful matches: ${successfulMatches}`);
                 
                 setRecognitionResults(detectionResults);
                 setIsProcessing(false);
@@ -1022,7 +1061,32 @@
                                         )}
                                     </div>
 
-                                    {recognitionResults.length > 0 && (
+                                    {isolatedSymbolsDebug.length > 0 && (
+                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-yellow-800 mb-3">Isolated Symbols Debug ({isolatedSymbolsDebug.length} found)</h4>
+                                        <div className="grid grid-cols-4 gap-3 max-h-40 overflow-y-auto">
+                                            {isolatedSymbolsDebug.map((debugSymbol) => (
+                                                <div key={debugSymbol.id} className="bg-white rounded p-2 border">
+                                                    <img 
+                                                        src={debugSymbol.dataUrl} 
+                                                        alt={`Isolated #${debugSymbol.id + 1}`}
+                                                        className="w-full h-auto border rounded mb-1"
+                                                        style={{minHeight: '30px', maxHeight: '60px', objectFit: 'contain'}}
+                                                    />
+                                                    <div className="text-xs text-center text-gray-600">
+                                                        #{debugSymbol.id + 1}
+                                                        <br />
+                                                        {debugSymbol.bounds.width}×{debugSymbol.bounds.height}
+                                                        <br />
+                                                        Area: {debugSymbol.area.toFixed(0)}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {recognitionResults.length > 0 && (
                                         <div className="mt-3 bg-gray-50 rounded-lg p-3">
                                             <h4 className="font-semibold text-gray-800 mb-2 text-sm">Match Types:</h4>
                                             <div className="grid grid-cols-3 gap-3 text-xs">
