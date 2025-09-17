@@ -204,7 +204,50 @@
             }, [convertToGitHubUrl]);
 
             // State for loaded images
-            const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
+            const [wordBoundaries, setWordBoundaries] = useState(new Set()); // Track which symbol positions start new words
+
+            const toggleWordBoundary = useCallback((symbolIndex) => {
+                setWordBoundaries(prev => {
+                    const newBoundaries = new Set(prev);
+                    if (newBoundaries.has(symbolIndex)) {
+                        newBoundaries.delete(symbolIndex);
+                    } else {
+                        newBoundaries.add(symbolIndex);
+                    }
+                    return newBoundaries;
+                });
+            }, []);
+
+            const formatInscriptionWithBoundaries = useCallback((results) => {
+                const sortedResults = results.sort((a, b) => a.position.x - b.position.x);
+                const parts = [];
+                
+                sortedResults.forEach((result, index) => {
+                    if (index === 0 || wordBoundaries.has(index)) {
+                        if (parts.length > 0) parts.push(' | '); // Word separator
+                    }
+                    parts.push(result.symbol.name);
+                    if (index < sortedResults.length - 1 && !wordBoundaries.has(index + 1)) {
+                        parts.push('-');
+                    }
+                });
+                
+                return parts.join('');
+            }, [wordBoundaries]);
+
+            const formatArabicWithBoundaries = useCallback((results) => {
+                const sortedResults = results.sort((a, b) => a.position.x - b.position.x);
+                const parts = [];
+                
+                sortedResults.forEach((result, index) => {
+                    if (index === 0 || wordBoundaries.has(index)) {
+                        if (parts.length > 0) parts.push(' '); // Word separator for Arabic
+                    }
+                    parts.push(result.symbol.arabic || result.symbol.name);
+                });
+                
+                return parts.join('');
+            }, [wordBoundaries]);
 
             const sampleJson = `{
   "source_image": "sample-inscription.jpg",
@@ -617,19 +660,7 @@
                         });
                     }
                     
-                    // Add fallback simulation if no images loaded
-                    if (symbolMatches.length === 0 && Math.random() > 0.6) {
-                        symbolMatches.push({
-                            x: Math.random() * Math.max(100, sourceCanvas.width - 100),
-                            y: Math.random() * Math.max(100, sourceCanvas.height - 100),
-                            width: 30 + Math.random() * 40,
-                            height: 30 + Math.random() * 40,
-                            confidence: processingSettings.detectionSensitivity + Math.random() * 0.2,
-                            scale: 0.8 + Math.random() * 0.4,
-                            matchType: 'simulated'
-                        });
-                    }
-                    
+                    // Add real matches only - no fallback simulation
                     // Process best matches for this symbol
                     const bestMatches = symbolMatches
                         .filter(match => match.confidence > processingSettings.detectionSensitivity * 0.8)
@@ -849,111 +880,108 @@
                         
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                             <div className="space-y-4">
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                    <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2 text-sm">
                                         <FileText />
-                                        Auto-Load from GitHub
+                                        Auto-Load: hytra3:Hakli_symbols.JSON
                                     </h3>
                                     
-                                    <div className="space-y-3">
-                                        <div className="text-sm text-blue-700">
-                                            <p className="mb-2">📁 Currently loading from:</p>
-                                            <code className="text-xs bg-blue-100 p-2 rounded block break-all">
-                                                hytra3:Hakli_symbols.JSON
-                                            </code>
-                                        </div>
-                                        
+                                    <div className="flex gap-2">
                                         <button
-                                            onClick={loadChartFromGitHub}
-                                            className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                                            onClick={loadChart}
+                                            className="flex-1 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
                                             disabled={chartLoadStatus === 'loading'}
                                         >
-                                            {chartLoadStatus === 'loading' ? 'Loading...' : 'Reload Chart from GitHub'}
+                                            {chartLoadStatus === 'loading' ? 'Loading...' : 'Reload'}
                                         </button>
                                         
                                         {!showJsonInput ? (
                                             <button
                                                 onClick={() => setShowJsonInput(true)}
-                                                className="w-full bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors"
+                                                className="flex-1 bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors text-sm"
                                             >
-                                                Manual JSON Override
+                                                Override
                                             </button>
                                         ) : (
-                                            <div className="space-y-2">
-                                                <textarea
-                                                    value={jsonInput}
-                                                    onChange={(e) => setJsonInput(e.target.value)}
-                                                    placeholder="Paste JSON to override GitHub version..."
-                                                    className="w-full h-24 p-2 border border-gray-300 rounded text-xs font-mono resize-none"
-                                                />
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={handleJsonLoad}
-                                                        className="flex-1 bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
-                                                        disabled={!jsonInput.trim()}
-                                                    >
-                                                        Load Override
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setShowJsonInput(false);
-                                                            setJsonInput('');
-                                                        }}
-                                                        className="flex-1 bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700 text-sm"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                </div>
+                                            <button
+                                                onClick={() => {
+                                                    setShowJsonInput(false);
+                                                    setJsonInput('');
+                                                }}
+                                                className="flex-1 bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 text-sm"
+                                            >
+                                                Cancel
+                                            </button>
+                                        )}
+                                    </div>
+                                    
+                                    {showJsonInput && (
+                                        <div className="mt-3">
+                                            <textarea
+                                                value={jsonInput}
+                                                onChange={(e) => setJsonInput(e.target.value)}
+                                                placeholder="Paste JSON override..."
+                                                className="w-full h-16 p-2 border border-gray-300 rounded text-xs font-mono resize-none"
+                                            />
+                                            <button
+                                                onClick={handleJsonLoad}
+                                                className="w-full mt-2 bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-xs"
+                                                disabled={!jsonInput.trim()}
+                                            >
+                                                Load Override
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h3 className="font-semibold text-green-800 text-sm">Status</h3>
+                                        {chartLoadStatus === 'loaded' && equivalenceChart && (
+                                            <div className="flex items-center gap-1 text-green-700">
+                                                <CheckCircle className="w-3 h-3" />
+                                                <span className="text-xs">Loaded</span>
+                                            </div>
+                                        )}
+                                        {chartLoadStatus === 'loading' && (
+                                            <div className="flex items-center gap-1 text-green-700">
+                                                <div className="w-3 h-3 border border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                                                <span className="text-xs">Loading</span>
+                                            </div>
+                                        )}
+                                        {chartLoadStatus === 'error' && (
+                                            <div className="flex items-center gap-1 text-red-700">
+                                                <AlertCircle className="w-3 h-3" />
+                                                <span className="text-xs">Error</span>
                                             </div>
                                         )}
                                     </div>
-                                </div>
-
-                                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                    <h3 className="font-semibold text-green-800 mb-2">Chart Status</h3>
-                                    {chartLoadStatus === 'loading' && (
-                                        <div className="flex items-center gap-2 text-green-700">
-                                            <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div>
-                                            Processing chart...
-                                        </div>
-                                    )}
+                                    
                                     {chartLoadStatus === 'loaded' && equivalenceChart && (
-                                        <div>
-                                            <div className="flex items-center gap-2 text-green-700 mb-2">
-                                                <CheckCircle />
-                                                {equivalenceChart.chart_name}
+                                        <div className="grid grid-cols-2 gap-3 text-xs text-green-600">
+                                            <div className="text-center p-2 bg-white rounded">
+                                                <div className="font-bold text-lg text-green-800">{equivalenceChart.symbols?.length || 0}</div>
+                                                <div>symbols</div>
                                             </div>
-                                            <div className="text-sm text-green-600 mb-3">
-                                                <div><strong>{equivalenceChart.symbols?.length || 0}</strong> symbols loaded</div>
-                                                <div><strong>{Object.keys(loadedSymbolImages).length}</strong> images loaded</div>
+                                            <div className="text-center p-2 bg-white rounded">
+                                                <div className="font-bold text-lg text-green-800">{Object.keys(loadedSymbolImages).length}</div>
+                                                <div>images</div>
                                             </div>
-                                            <div className="max-h-24 overflow-y-auto space-y-1">
-                                                {equivalenceChart.categories?.map((category) => (
-                                                    <div key={category} className="text-xs bg-white rounded px-2 py-1">
-                                                        <strong>{category}:</strong> {equivalenceChart.symbols.filter(s => s.category === category).length} symbols
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {chartLoadStatus === 'error' && (
-                                        <div className="flex items-center gap-2 text-red-700">
-                                            <AlertCircle />
-                                            Error loading chart - check JSON format
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                    <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2 text-sm">
                                         <Settings />
-                                        Settings
+                                        Detection Settings
                                     </h3>
-                                    <div className="space-y-3">
+                                    <div className="space-y-2">
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                                                Sensitivity: {processingSettings.detectionSensitivity}
-                                            </label>
+                                            <div className="flex justify-between text-xs">
+                                                <span>Sensitivity</span>
+                                                <span>{processingSettings.detectionSensitivity}</span>
+                                            </div>
                                             <input
                                                 type="range"
                                                 min="0.3"
@@ -964,13 +992,14 @@
                                                     ...prev,
                                                     detectionSensitivity: parseFloat(e.target.value)
                                                 }))}
-                                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                                className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                                                Contrast: {processingSettings.contrastThreshold}
-                                            </label>
+                                            <div className="flex justify-between text-xs">
+                                                <span>Contrast</span>
+                                                <span>{processingSettings.contrastThreshold}</span>
+                                            </div>
                                             <input
                                                 type="range"
                                                 min="50"
@@ -980,7 +1009,7 @@
                                                     ...prev,
                                                     contrastThreshold: parseInt(e.target.value)
                                                 }))}
-                                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                                className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                                             />
                                         </div>
                                         <div className="flex items-center gap-2">
@@ -992,6 +1021,7 @@
                                                     ...prev,
                                                     variantMatching: e.target.checked
                                                 }))}
+                                                className="w-3 h-3"
                                             />
                                             <label htmlFor="variantMatching" className="text-xs text-gray-700">
                                                 Include variants
@@ -1102,8 +1132,50 @@
                                         <h3 className="font-semibold text-green-800 mb-3">
                                             Detection Results ({recognitionResults.length} matches found)
                                         </h3>
+                                        
+                                        {/* Inscription Sentence Display */}
+                                        <div className="mb-4 p-4 bg-white rounded-lg border">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h4 className="font-semibold text-gray-800">Reconstructed Inscription:</h4>
+                                                <button
+                                                    onClick={() => setWordBoundaries(new Set())}
+                                                    className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600"
+                                                >
+                                                    Clear Boundaries
+                                                </button>
+                                            </div>
+                                            <div className="text-lg font-mono">
+                                                {/* Latin transliteration */}
+                                                <div className="mb-2">
+                                                    <span className="text-sm text-gray-600 mr-2">Latin:</span>
+                                                    <span className="text-blue-800">
+                                                        {formatInscriptionWithBoundaries(recognitionResults)}
+                                                    </span>
+                                                </div>
+                                                
+                                                {/* Arabic script if available */}
+                                                {recognitionResults.some(r => r.symbol.arabic) && (
+                                                    <div className="mb-2" dir="rtl">
+                                                        <span className="text-sm text-gray-600 ml-2">Arabic:</span>
+                                                        <span className="text-lg text-green-800">
+                                                            {formatArabicWithBoundaries(recognitionResults)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                
+                                                {/* Confidence summary */}
+                                                <div className="text-xs text-gray-500">
+                                                    Average confidence: {(recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length * 100).toFixed(0)}% 
+                                                    | Reading direction: Left → Right
+                                                    {wordBoundaries.size > 0 && ` | ${wordBoundaries.size} word boundaries`}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
                                         <div className="space-y-3 max-h-64 overflow-y-auto">
-                                            {recognitionResults.map((result, index) => (
+                                            {recognitionResults
+                                                .sort((a, b) => a.position.x - b.position.x) // Sort by position for reading order
+                                                .map((result, index) => (
                                                 <div key={index} className="bg-white rounded-lg p-3 shadow-sm border-l-4" 
                                                      style={{borderColor: result.confidence > 0.8 ? '#10b981' : result.confidence > 0.7 ? '#f59e0b' : '#ef4444'}}>
                                                     <div className="flex justify-between items-start mb-2">
@@ -1112,6 +1184,9 @@
                                                                 <ImageIcon />
                                                                 <span className="text-lg">{result.symbol.name}</span>
                                                                 {result.symbol.arabic && <span className="text-lg">({result.symbol.arabic})</span>}
+                                                                <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                                                                    #{index + 1}
+                                                                </span>
                                                             </p>
                                                             <p className="text-sm text-gray-600">{result.symbol.description}</p>
                                                             <p className="text-xs text-gray-500 mt-1">
@@ -1122,15 +1197,28 @@
                                                             </p>
                                                         </div>
                                                         <div className="text-right ml-3">
-                                                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                                                result.confidence > 0.8 
-                                                                    ? 'bg-green-100 text-green-800' 
-                                                                    : result.confidence > 0.7
-                                                                        ? 'bg-yellow-100 text-yellow-800'
-                                                                        : 'bg-red-100 text-red-800'
-                                                            }`}>
-                                                                {(result.confidence * 100).toFixed(0)}%
-                                                            </span>
+                                                            <div className="flex flex-col gap-2">
+                                                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                                                    result.confidence > 0.8 
+                                                                        ? 'bg-green-100 text-green-800' 
+                                                                        : result.confidence > 0.7
+                                                                            ? 'bg-yellow-100 text-yellow-800'
+                                                                            : 'bg-red-100 text-red-800'
+                                                                }`}>
+                                                                    {(result.confidence * 100).toFixed(0)}%
+                                                                </span>
+                                                                <button
+                                                                    onClick={() => toggleWordBoundary(index)}
+                                                                    className={`text-xs px-2 py-1 rounded transition-colors ${
+                                                                        wordBoundaries.has(index)
+                                                                            ? 'bg-purple-500 text-white'
+                                                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                                    }`}
+                                                                    title={wordBoundaries.has(index) ? "Remove word boundary" : "Add word boundary before this symbol"}
+                                                                >
+                                                                    {wordBoundaries.has(index) ? '| Word' : '+ Word'}
+                                                                </button>
+                                                            </div>
                                                             <div className="text-xs text-gray-500 mt-1">
                                                                 Scale: {(result.matchDetails.scale * 100).toFixed(0)}%
                                                             </div>
