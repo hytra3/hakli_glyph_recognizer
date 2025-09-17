@@ -1148,14 +1148,15 @@
                                 <div>
                                     <h3 className="font-semibold text-gray-800 mb-3">Analysis Workspace</h3>
                                     
-                                    <div className="relative bg-gray-100 rounded-lg overflow-hidden min-h-80 flex items-center justify-center border-2 border-gray-200">
+                                    <div className="relative bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200" style={{minHeight: '500px'}}>
                                         {uploadedImage ? (
-                                            <div className="relative max-w-full max-h-96">
+                                            <div className="relative w-full h-full flex items-center justify-center p-4">
                                                 <img
                                                     ref={imageRef}
                                                     src={uploadedImage}
                                                     alt="Hakli inscription"
-                                                    className="max-w-full max-h-96 object-contain"
+                                                    className="max-w-full max-h-full object-contain"
+                                                    style={{maxHeight: '480px', width: 'auto'}}
                                                     onLoad={() => {
                                                         if (recognitionResults.length > 0) {
                                                             setTimeout(drawDetectionResults, 100);
@@ -1164,11 +1165,9 @@
                                                 />
                                                 <canvas
                                                     ref={canvasRef}
-                                                    className="absolute top-0 left-0 pointer-events-none"
+                                                    className="absolute top-4 left-4 pointer-events-none"
                                                     style={{ 
-                                                        display: recognitionResults.length > 0 ? 'block' : 'none',
-                                                        maxWidth: '100%',
-                                                        maxHeight: '100%'
+                                                        display: recognitionResults.length > 0 ? 'block' : 'none'
                                                     }}
                                                 />
                                             </div>
@@ -1336,48 +1335,20 @@
                         <canvas ref={analysisCanvasRef} style={{ display: 'none' }} />
 
                         <div className="mt-6 bg-gray-50 rounded-lg p-6">
-                            <h3 className="font-semibold text-gray-800 mb-4">Setup Instructions</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <h3 className="font-semibold text-gray-800 mb-4">Multi-Image Recognition Technology</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
                                 <div>
-                                    <h4 className="font-medium text-gray-800 mb-2">Setting Up GitHub Auto-Load:</h4>
-                                    <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-                                        <li>Upload your <code className="bg-gray-200 px-1">Hakli_symbols.JSON</code> to GitHub</li>
-                                        <li>Get the raw file URL (click Raw button)</li>
-                                        <li>Replace the URL in the HTML code (line ~167)</li>
-                                        <li>Save and deploy - it will auto-load your chart!</li>
-                                        <li>Update JSON anytime by pushing to GitHub</li>
-                                    </ol>
+                                    <h4 className="font-medium text-gray-800 mb-2">Template Matching</h4>
+                                    <p>Uses normalized cross-correlation to compare inscription images against your symbol templates at multiple scales.</p>
                                 </div>
                                 <div>
-                                    <h4 className="font-medium text-gray-800 mb-2">Using Your JSON:</h4>
-                                    <div className="text-sm text-gray-600">
-                                        <p className="mb-2">Click "Copy Sample JSON Format" to see the structure:</p>
-                                        <ul className="list-disc list-inside space-y-1">
-                                            <li><code className="bg-gray-200 px-1">symbols</code> array with your data</li>
-                                            <li><code className="bg-gray-200 px-1">images</code> with public URLs</li>
-                                            <li><code className="bg-gray-200 px-1">arabic</code> characters</li>
-                                            <li><code className="bg-gray-200 px-1">description</code> for each symbol</li>
-                                        </ul>
-                                    </div>
+                                    <h4 className="font-medium text-gray-800 mb-2">Multi-Image Analysis</h4>
+                                    <p>Matches against primary images, variants, and real examples to handle different carving styles and conditions.</p>
                                 </div>
-                            </div>
-                            
-                            <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                                <h4 className="font-semibold text-blue-800 mb-2">Multi-Image Recognition:</h4>
-                                <p className="text-sm text-blue-700">
-                                    This tool matches against <strong>primary images</strong> (highest confidence), 
-                                    <strong>variants</strong> (different styles), and <strong>examples</strong> (real inscriptions) 
-                                    to provide robust symbol recognition even with weathered or damaged inscriptions.
-                                </p>
-                            </div>
-                            
-                            <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                                <h4 className="font-semibold text-green-800 mb-2">✓ Real Template Matching:</h4>
-                                <p className="text-sm text-green-700">
-                                    This tool now uses <strong>actual computer vision</strong> to match your uploaded images 
-                                    against symbol templates. It performs <strong>normalized cross-correlation</strong> at multiple 
-                                    scales to find symbols in inscriptions, with fallback simulation for symbols without loaded images.
-                                </p>
+                                <div>
+                                    <h4 className="font-medium text-gray-800 mb-2">Inscription Reconstruction</h4>
+                                    <p>Automatically orders detected symbols and allows manual word boundary insertion for readable transcriptions.</p>
+                                </div>
                             </div>
                         </div>
                     </div>
