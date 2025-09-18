@@ -205,11 +205,17 @@
                 }
             }, []);
 
-            // Template matching function
+            // Template matching function with better error handling
             const templateMatchIsolated = useCallback((imageElement, templateImg) => {
                 if (!isOpenCVReady || !templateImg) return null;
 
                 try {
+                    // Validate image dimensions
+                    if (templateImg.width === 0 || templateImg.height === 0) {
+                        console.warn('Template image has invalid dimensions');
+                        return null;
+                    }
+
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     canvas.width = imageElement.naturalWidth;
@@ -225,25 +231,42 @@
                     templateCtx.drawImage(templateImg, 0, 0);
                     const templateMat = cv.imread(templateCanvas);
 
+                    // Check if template is smaller than image
+                    if (templateMat.rows > imageMat.rows || templateMat.cols > imageMat.cols) {
+                        console.warn('Template larger than source image, skipping');
+                        imageMat.delete();
+                        templateMat.delete();
+                        return null;
+                    }
+
                     const result = new cv.Mat();
                     cv.matchTemplate(imageMat, templateMat, result, cv.TM_CCOEFF_NORMED);
                     
                     const minMaxLoc = cv.minMaxLoc(result);
                     const confidence = minMaxLoc.maxVal;
+                    const location = minMaxLoc.maxLoc;
 
                     imageMat.delete();
                     templateMat.delete();
                     result.delete();
 
-                    return confidence;
+                    return {
+                        confidence: confidence,
+                        position: {
+                            x: location.x,
+                            y: location.y,
+                            width: templateImg.width,
+                            height: templateImg.height
+                        }
+                    };
 
                 } catch (error) {
-                    console.error('Template matching error:', error);
-                    return 0;
+                    console.error('Template matching error:', error.message || error);
+                    return null;
                 }
             }, [isOpenCVReady]);
 
-            // Simple symbol detection
+            // Improved symbol detection with position filtering
             const detectSymbols = useCallback(async () => {
                 if (!uploadedImage || !equivalenceChart || !imageRef.current) {
                     console.log('Missing requirements for detection');
@@ -255,21 +278,24 @@
                 console.log(`📊 Available symbols: ${equivalenceChart.symbols.length}`);
                 console.log(`🖼️ Available images: ${Object.keys(loadedSymbolImages).length}`);
                 
-                const detectionResults = [];
+                const allMatches = [];
                 
                 for (const symbol of equivalenceChart.symbols) {
+                    // Check primary image
                     const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
                     if (primaryImg) {
-                        const confidence = templateMatchIsolated(imageRef.current, primaryImg);
+                        const match = templateMatchIsolated(imageRef.current, primaryImg);
                         
-                        console.log(`${symbol.name} (primary): ${confidence ? confidence.toFixed(4) : '0.0000'} ${confidence > processingSettings.detectionSensitivity ? '✅' : '❌'}`);
-                        
-                        if (confidence > processingSettings.detectionSensitivity) {
-                            detectionResults.push({
+                        if (match && match.confidence > processingSettings.detectionSensitivity) {
+                            console.log(`${symbol.name} (primary): ${match.confidence.toFixed(4)} ✅`);
+                            allMatches.push({
                                 symbol: symbol,
-                                confidence: confidence,
+                                confidence: match.confidence,
+                                position: match.position,
                                 matchType: 'primary'
                             });
+                        } else {
+                            console.log(`${symbol.name} (primary): ${match ? match.confidence.toFixed(4) : '0.0000'} ❌`);
                         }
                     }
                     
@@ -278,26 +304,52 @@
                         symbol.images.variants.forEach((variantPath, index) => {
                             const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
                             if (variantImg) {
-                                const confidence = templateMatchIsolated(imageRef.current, variantImg);
+                                const match = templateMatchIsolated(imageRef.current, variantImg);
                                 const threshold = processingSettings.detectionSensitivity * 0.9;
                                 
-                                console.log(`${symbol.name} (variant ${index + 1}): ${confidence ? confidence.toFixed(4) : '0.0000'} ${confidence > threshold ? '✅' : '❌'}`);
-                                
-                                if (confidence > threshold) {
-                                    detectionResults.push({
+                                if (match && match.confidence > threshold) {
+                                    console.log(`${symbol.name} (variant ${index + 1}): ${match.confidence.toFixed(4)} ✅`);
+                                    allMatches.push({
                                         symbol: symbol,
-                                        confidence: confidence * 0.9,
+                                        confidence: match.confidence * 0.9,
+                                        position: match.position,
                                         matchType: 'variant',
                                         variantIndex: index
                                     });
+                                } else {
+                                    console.log(`${symbol.name} (variant ${index + 1}): ${match ? match.confidence.toFixed(4) : '0.0000'} ❌`);
                                 }
                             }
                         });
                     }
                 }
                 
-                console.log(`✅ Detection complete: ${detectionResults.length} symbols matched`);
-                setRecognitionResults(detectionResults);
+                // Filter overlapping matches - keep highest confidence
+                const filteredMatches = [];
+                const overlapThreshold = 30; // pixels
+                
+                allMatches.sort((a, b) => b.confidence - a.confidence);
+                
+                for (const match of allMatches) {
+                    let isOverlapping = false;
+                    
+                    for (const existing of filteredMatches) {
+                        const dx = Math.abs(match.position.x - existing.position.x);
+                        const dy = Math.abs(match.position.y - existing.position.y);
+                        
+                        if (dx < overlapThreshold && dy < overlapThreshold) {
+                            isOverlapping = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!isOverlapping) {
+                        filteredMatches.push(match);
+                    }
+                }
+                
+                console.log(`✅ Detection complete: ${allMatches.length} total matches, ${filteredMatches.length} after filtering`);
+                setRecognitionResults(filteredMatches);
                 setIsProcessing(false);
             }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, templateMatchIsolated, isOpenCVReady]);
 
