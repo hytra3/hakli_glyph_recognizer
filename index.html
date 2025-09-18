@@ -53,7 +53,11 @@
             const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
             const [isOpenCVReady, setIsOpenCVReady] = useState(false);
             const [wordBoundaries, setWordBoundaries] = useState(new Set());
+            const [isolatedSymbolsDebug, setIsolatedSymbolsDebug] = useState([]);
             const [processingSettings, setProcessingSettings] = useState({
+                contrastThreshold: 127,
+                minSymbolSize: 15,
+                maxSymbolSize: 200,
                 detectionSensitivity: 0.4,
                 variantMatching: true
             });
@@ -190,7 +194,106 @@
                 return imageCache;
             }, [convertToGitHubUrl]);
 
-            // Load chart from GitHub
+            // Symbol isolation using OpenCV contour detection (from v71)
+            const isolateSymbols = useCallback((imageElement) => {
+                if (!isOpenCVReady || !imageElement) {
+                    console.warn('OpenCV not ready or no image');
+                    return [];
+                }
+
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = imageElement.naturalWidth;
+                    canvas.height = imageElement.naturalHeight;
+                    ctx.drawImage(imageElement, 0, 0);
+
+                    const src = cv.imread(canvas);
+                    const gray = new cv.Mat();
+                    const binary = new cv.Mat();
+                    const morphKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+                    const contours = new cv.MatVector();
+                    const hierarchy = new cv.Mat();
+
+                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                    cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+                    cv.morphologyEx(binary, binary, cv.MORPH_CLOSE, morphKernel);
+                    cv.morphologyEx(binary, binary, cv.MORPH_OPEN, morphKernel);
+                    cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                    const isolatedSymbols = [];
+                    const minArea = processingSettings.minSymbolSize * processingSettings.minSymbolSize;
+                    const maxArea = processingSettings.maxSymbolSize * processingSettings.maxSymbolSize;
+
+                    for (let i = 0; i < contours.size(); i++) {
+                        const contour = contours.get(i);
+                        const boundingRect = cv.boundingRect(contour);
+                        const area = cv.contourArea(contour);
+
+                        if (area > minArea && area < maxArea) {
+                            const aspectRatio = boundingRect.width / boundingRect.height;
+                            
+                            if (aspectRatio > 0.2 && aspectRatio < 5.0) {
+                                const padding = 5;
+                                const x = Math.max(0, boundingRect.x - padding);
+                                const y = Math.max(0, boundingRect.y - padding);
+                                const width = Math.min(src.cols - x, boundingRect.width + 2 * padding);
+                                const height = Math.min(src.rows - y, boundingRect.height + 2 * padding);
+
+                                isolatedSymbols.push({
+                                    x: x,
+                                    y: y,
+                                    width: width,
+                                    height: height,
+                                    area: area,
+                                    contour: contour.clone()
+                                });
+                            }
+                        }
+                        contour.delete();
+                    }
+
+                    src.delete();
+                    gray.delete();
+                    binary.delete();
+                    morphKernel.delete();
+                    contours.delete();
+                    hierarchy.delete();
+
+                    isolatedSymbols.sort((a, b) => a.x - b.x);
+                    console.log(`🔍 Isolated ${isolatedSymbols.length} potential symbols`);
+                    
+                    // Create debug images of isolated symbols
+                    const debugSymbols = isolatedSymbols.map((symbol, index) => {
+                        const debugCanvas = document.createElement('canvas');
+                        const debugCtx = debugCanvas.getContext('2d');
+                        debugCanvas.width = symbol.width;
+                        debugCanvas.height = symbol.height;
+                        
+                        debugCtx.drawImage(
+                            canvas, 
+                            symbol.x, symbol.y, symbol.width, symbol.height,
+                            0, 0, symbol.width, symbol.height
+                        );
+                        
+                        return {
+                            id: index,
+                            dataUrl: debugCanvas.toDataURL(),
+                            bounds: symbol,
+                            area: symbol.area
+                        };
+                    });
+                    
+                    // Store debug info
+                    setIsolatedSymbolsDebug(debugSymbols);
+                    
+                    return isolatedSymbols;
+
+                } catch (error) {
+                    console.error('Error in symbol isolation:', error);
+                    return [];
+                }
+            }, [isOpenCVReady, processingSettings]);
             const loadChart = useCallback(() => {
                 const loadChartInternal = async () => {
                     setChartLoadStatus('loading');
@@ -253,8 +356,8 @@
                 }
             }, []);
 
-            // Template matching function with better error handling
-            const templateMatchIsolated = useCallback((imageElement, templateImg) => {
+            // Template matching function for isolated symbols
+            const templateMatchIsolated = useCallback((isolatedSymbol, templateImg) => {
                 if (!isOpenCVReady || !templateImg) return null;
 
                 try {
@@ -264,14 +367,18 @@
                         return null;
                     }
 
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    canvas.width = imageElement.naturalWidth;
-                    canvas.height = imageElement.naturalHeight;
-                    ctx.drawImage(imageElement, 0, 0);
-
-                    const imageMat = cv.imread(canvas);
+                    const symbolCanvas = document.createElement('canvas');
+                    const symbolCtx = symbolCanvas.getContext('2d');
+                    symbolCanvas.width = isolatedSymbol.width;
+                    symbolCanvas.height = isolatedSymbol.height;
                     
+                    symbolCtx.drawImage(
+                        imageRef.current,
+                        isolatedSymbol.x, isolatedSymbol.y, isolatedSymbol.width, isolatedSymbol.height,
+                        0, 0, isolatedSymbol.width, isolatedSymbol.height
+                    );
+
+                    const symbolMat = cv.imread(symbolCanvas);
                     const templateCanvas = document.createElement('canvas');
                     const templateCtx = templateCanvas.getContext('2d');
                     templateCanvas.width = templateImg.width;
@@ -279,32 +386,35 @@
                     templateCtx.drawImage(templateImg, 0, 0);
                     const templateMat = cv.imread(templateCanvas);
 
-                    // Check if template is smaller than image
-                    if (templateMat.rows > imageMat.rows || templateMat.cols > imageMat.cols) {
-                        console.warn('Template larger than source image, skipping');
-                        imageMat.delete();
-                        templateMat.delete();
-                        return null;
-                    }
-
                     const result = new cv.Mat();
-                    cv.matchTemplate(imageMat, templateMat, result, cv.TM_CCOEFF_NORMED);
+                    const resizedTemplate = new cv.Mat();
+                    const symbolSize = new cv.Size(isolatedSymbol.width, isolatedSymbol.height);
+                    cv.resize(templateMat, resizedTemplate, symbolSize);
+
+                    const symbolGray = new cv.Mat();
+                    const templateGray = new cv.Mat();
+                    cv.cvtColor(symbolMat, symbolGray, cv.COLOR_RGBA2GRAY);
+                    cv.cvtColor(resizedTemplate, templateGray, cv.COLOR_RGBA2GRAY);
+
+                    cv.matchTemplate(symbolGray, templateGray, result, cv.TM_CCOEFF_NORMED);
                     
                     const minMaxLoc = cv.minMaxLoc(result);
                     const confidence = minMaxLoc.maxVal;
-                    const location = minMaxLoc.maxLoc;
 
-                    imageMat.delete();
+                    symbolMat.delete();
                     templateMat.delete();
+                    resizedTemplate.delete();
+                    symbolGray.delete();
+                    templateGray.delete();
                     result.delete();
 
                     return {
                         confidence: confidence,
                         position: {
-                            x: location.x,
-                            y: location.y,
-                            width: templateImg.width,
-                            height: templateImg.height
+                            x: isolatedSymbol.x,
+                            y: isolatedSymbol.y,
+                            width: isolatedSymbol.width,
+                            height: isolatedSymbol.height
                         }
                     };
 
@@ -314,7 +424,7 @@
                 }
             }, [isOpenCVReady]);
 
-            // Improved symbol detection with position filtering
+            // Enhanced symbol detection with isolation (from v71)
             const detectSymbols = useCallback(async () => {
                 if (!uploadedImage || !equivalenceChart || !imageRef.current) {
                     console.log('Missing requirements for detection');
@@ -322,84 +432,109 @@
                 }
                 
                 setIsProcessing(true);
-                console.log('🔍 Starting symbol detection...');
-                console.log(`📊 Available symbols: ${equivalenceChart.symbols.length}`);
-                console.log(`🖼️ Available images: ${Object.keys(loadedSymbolImages).length}`);
                 
-                const allMatches = [];
+                await new Promise(resolve => setTimeout(resolve, 500));
                 
-                for (const symbol of equivalenceChart.symbols) {
-                    // Check primary image
-                    const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
-                    if (primaryImg) {
-                        const match = templateMatchIsolated(imageRef.current, primaryImg);
+                console.log('🔍 Starting symbol isolation...');
+                const isolatedSymbols = isolateSymbols(imageRef.current);
+                
+                if (isolatedSymbols.length === 0) {
+                    console.warn('No symbols isolated');
+                    setIsProcessing(false);
+                    return;
+                }
+
+                console.log(`📊 Found ${isolatedSymbols.length} isolated symbols, now matching...`);
+                console.log(`🖼️ Available symbol images: ${Object.keys(loadedSymbolImages).length}`);
+                
+                const detectionResults = [];
+                let matchAttempts = 0;
+                let successfulMatches = 0;
+                
+                for (let i = 0; i < isolatedSymbols.length; i++) {
+                    const isolatedSymbol = isolatedSymbols[i];
+                    let bestMatch = null;
+                    
+                    console.log(`🔍 Testing isolated symbol #${i + 1} (${isolatedSymbol.width}x${isolatedSymbol.height}, area: ${isolatedSymbol.area.toFixed(0)})`);
+                    
+                    for (const symbol of equivalenceChart.symbols) {
+                        const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
+                        if (primaryImg) {
+                            matchAttempts++;
+                            const match = templateMatchIsolated(isolatedSymbol, primaryImg);
+                            const confidence = match ? match.confidence : 0;
+                            
+                            if (match && confidence > processingSettings.detectionSensitivity) {
+                                console.log(`${symbol.name} (primary): ${confidence.toFixed(4)} ✅`);
+                                if (!bestMatch || confidence > bestMatch.confidence) {
+                                    bestMatch = {
+                                        ...match,
+                                        symbol: symbol,
+                                        matchType: 'primary',
+                                        confidence: confidence
+                                    };
+                                }
+                            }
+                        }
                         
-                        if (match && match.confidence > processingSettings.detectionSensitivity) {
-                            console.log(`${symbol.name} (primary): ${match.confidence.toFixed(4)} ✅`);
-                            allMatches.push({
-                                symbol: symbol,
-                                confidence: match.confidence,
-                                position: match.position,
-                                matchType: 'primary'
+                        if (processingSettings.variantMatching && symbol.images.variants) {
+                            symbol.images.variants.forEach((variantPath, index) => {
+                                const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
+                                if (variantImg) {
+                                    matchAttempts++;
+                                    const match = templateMatchIsolated(isolatedSymbol, variantImg);
+                                    const confidence = match ? match.confidence : 0;
+                                    const threshold = processingSettings.detectionSensitivity * 0.9;
+                                    
+                                    if (match && confidence > threshold) {
+                                        console.log(`${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)} ✅`);
+                                        const weightedConfidence = confidence * 0.9;
+                                        if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                            bestMatch = {
+                                                ...match,
+                                                symbol: symbol,
+                                                matchType: 'variant',
+                                                variantIndex: index,
+                                                confidence: weightedConfidence
+                                            };
+                                        }
+                                    }
+                                }
                             });
-                        } else {
-                            console.log(`${symbol.name} (primary): ${match ? match.confidence.toFixed(4) : '0.0000'} ❌`);
                         }
                     }
                     
-                    // Check variants if enabled
-                    if (processingSettings.variantMatching && symbol.images.variants) {
-                        symbol.images.variants.forEach((variantPath, index) => {
-                            const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
-                            if (variantImg) {
-                                const match = templateMatchIsolated(imageRef.current, variantImg);
-                                const threshold = processingSettings.detectionSensitivity * 0.9;
-                                
-                                if (match && match.confidence > threshold) {
-                                    console.log(`${symbol.name} (variant ${index + 1}): ${match.confidence.toFixed(4)} ✅`);
-                                    allMatches.push({
-                                        symbol: symbol,
-                                        confidence: match.confidence * 0.9,
-                                        position: match.position,
-                                        matchType: 'variant',
-                                        variantIndex: index
-                                    });
-                                } else {
-                                    console.log(`${symbol.name} (variant ${index + 1}): ${match ? match.confidence.toFixed(4) : '0.0000'} ❌`);
-                                }
-                            }
+                    if (bestMatch) {
+                        successfulMatches++;
+                        detectionResults.push({
+                            symbol: bestMatch.symbol,
+                            confidence: Math.min(0.95, bestMatch.confidence),
+                            position: bestMatch.position,
+                            matchDetails: {
+                                type: bestMatch.matchType,
+                                variantIndex: bestMatch.variantIndex,
+                                scale: 1.0,
+                                isolatedIndex: i
+                            },
+                            matchType: bestMatch.matchType,
+                            variantIndex: bestMatch.variantIndex
                         });
                     }
                 }
                 
-                // Filter overlapping matches - keep highest confidence
-                const filteredMatches = [];
-                const overlapThreshold = 30; // pixels
-                
-                allMatches.sort((a, b) => b.confidence - a.confidence);
-                
-                for (const match of allMatches) {
-                    let isOverlapping = false;
-                    
-                    for (const existing of filteredMatches) {
-                        const dx = Math.abs(match.position.x - existing.position.x);
-                        const dy = Math.abs(match.position.y - existing.position.y);
-                        
-                        if (dx < overlapThreshold && dy < overlapThreshold) {
-                            isOverlapping = true;
-                            break;
-                        }
+                // Clean up contours
+                isolatedSymbols.forEach(symbol => {
+                    if (symbol.contour) {
+                        symbol.contour.delete();
                     }
-                    
-                    if (!isOverlapping) {
-                        filteredMatches.push(match);
-                    }
-                }
+                });
                 
-                console.log(`✅ Detection complete: ${allMatches.length} total matches, ${filteredMatches.length} after filtering`);
-                setRecognitionResults(filteredMatches);
+                console.log(`✅ Detection complete: ${detectionResults.length} symbols matched out of ${isolatedSymbols.length} isolated`);
+                console.log(`📊 Total match attempts: ${matchAttempts}, Successful matches: ${successfulMatches}`);
+                
+                setRecognitionResults(detectionResults);
                 setIsProcessing(false);
-            }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, templateMatchIsolated, isOpenCVReady]);
+            }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, isolateSymbols, templateMatchIsolated, isOpenCVReady]);
 
             // Draw simplified detection results on canvas overlay
             const drawDetectionResults = useCallback(() => {
@@ -757,7 +892,34 @@
                                             </div>
                                         </div>
 
-                                        {/* Debug: Show Template Matching Regions */}
+                                        {/* Isolated Symbols Debug */}
+                                {isolatedSymbolsDebug.length > 0 && (
+                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-yellow-800 mb-3">Isolated Symbols ({isolatedSymbolsDebug.length} found)</h4>
+                                        <div className="text-sm text-yellow-700 mb-3">
+                                            These symbols were isolated using OpenCV contour detection before template matching:
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-3 max-h-40 overflow-y-auto">
+                                            {isolatedSymbolsDebug.map((debugSymbol) => (
+                                                <div key={debugSymbol.id} className="bg-white rounded p-2 border">
+                                                    <img 
+                                                        src={debugSymbol.dataUrl} 
+                                                        alt={`Isolated #${debugSymbol.id + 1}`}
+                                                        className="w-full h-auto border rounded mb-1"
+                                                        style={{minHeight: '30px', maxHeight: '60px', objectFit: 'contain'}}
+                                                    />
+                                                    <div className="text-xs text-center text-gray-600">
+                                                        #{debugSymbol.id + 1}
+                                                        <br />
+                                                        {debugSymbol.bounds.width}×{debugSymbol.bounds.height}
+                                                        <br />
+                                                        Area: {debugSymbol.area.toFixed(0)}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                                 {recognitionResults.length > 0 && (
                                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                                         <h4 className="font-semibold text-yellow-800 mb-3">Template Matching Debug</h4>
