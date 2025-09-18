@@ -38,7 +38,7 @@
     },
     {
       "id": 12,
-      "name": "h-dot",
+      "name": "ḥ",
       "arabic": "ه",
            "images": 
         {
@@ -106,7 +106,7 @@
     },
     {
       "id": 16,
-      "name": "s-2",
+      "name": "s²",
       "arabic": "x",
            "images": 
         {
@@ -174,7 +174,7 @@
     },
     {
       "id": 20,
-      "name": "s-1",
+      "name": "s¹",
       "arabic": "x",
            "images": 
         {
@@ -225,7 +225,7 @@
     },
     {
       "id": 23,
-      "name": "h-breve",
+      "name": "ḫ",
       "arabic": "x",
            "images": 
         {
@@ -292,7 +292,7 @@
     },
     {
       "id": 27,
-      "name": "d-dot",
+      "name": "ḍ",
       "arabic": "x",
            "images": 
         {
@@ -343,7 +343,7 @@
     },
     {
       "id": 30,
-      "name": "g-dot",
+      "name": "ġ",
       "arabic": "x",
            "images": 
         {
@@ -360,7 +360,7 @@
     },
     {
       "id": 31,
-      "name": "t-dot",
+      "name": "ṭ",
       "arabic": "x",
            "images": 
         {
@@ -377,7 +377,7 @@
     },
     {
       "id": 32,
-      "name": "d-bar",
+      "name": "ḏ",
       "arabic": "x",
            "images": 
         {
@@ -411,7 +411,7 @@
     },
     {
       "id": 34,
-      "name": "t-bar",
+      "name": "ṯ",
       "arabic": "x",
            "images": 
         {
@@ -428,7 +428,7 @@
     },
     {
       "id": 37,
-      "name": "z-dot",
+      "name": "ẓ)",
       "arabic": "x",
            "images": 
         {
