@@ -620,12 +620,15 @@
                             console.log(`   ${symbol.name} (primary): ${confidence.toFixed(4)} ${confidence > processingSettings.detectionSensitivity ? '✅' : '❌'}`);
                             
                             if (match && confidence > processingSettings.detectionSensitivity) {
-                                if (!bestMatch || confidence > bestMatch.confidence) {
+                                const weightedConfidence = confidence * (symbol.confidence_weights?.primary || 1.0);
+                                console.log(`      -> Primary match found! Raw: ${confidence.toFixed(4)}, Weighted: ${weightedConfidence.toFixed(4)}`);
+                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                    console.log(`      -> Setting as bestMatch (previous: ${bestMatch ? bestMatch.confidence.toFixed(4) : 'none'})`);
                                     bestMatch = {
                                         ...match,
                                         symbol: symbol,
                                         matchType: 'primary',
-                                        confidence: confidence * (symbol.confidence_weights?.primary || 1.0)
+                                        confidence: weightedConfidence
                                     };
                                 }
                             }
@@ -647,7 +650,9 @@
                                     
                                     if (match && confidence > threshold) {
                                         const weightedConfidence = confidence * (symbol.confidence_weights?.variants || 0.9);
+                                        console.log(`      -> Variant match found! Raw: ${confidence.toFixed(4)}, Weighted: ${weightedConfidence.toFixed(4)}`);
                                         if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                            console.log(`      -> Setting as bestMatch (previous: ${bestMatch ? bestMatch.confidence.toFixed(4) : 'none'})`);
                                             bestMatch = {
                                                 ...match,
                                                 symbol: symbol,
@@ -675,7 +680,9 @@
                                     
                                     if (match && confidence > threshold) {
                                         const weightedConfidence = confidence * (symbol.confidence_weights?.examples || 0.7);
+                                        console.log(`      -> Example match found! Raw: ${confidence.toFixed(4)}, Weighted: ${weightedConfidence.toFixed(4)}`);
                                         if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                            console.log(`      -> Setting as bestMatch (previous: ${bestMatch ? bestMatch.confidence.toFixed(4) : 'none'})`);
                                             bestMatch = {
                                                 ...match,
                                                 symbol: symbol,
