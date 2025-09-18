@@ -52,6 +52,7 @@
             const [chartLoadStatus, setChartLoadStatus] = useState('ready');
             const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
             const [isOpenCVReady, setIsOpenCVReady] = useState(false);
+            const [wordBoundaries, setWordBoundaries] = useState(new Set());
             const [processingSettings, setProcessingSettings] = useState({
                 detectionSensitivity: 0.4,
                 variantMatching: true
@@ -60,64 +61,51 @@
             const canvasRef = useRef(null);
             const imageRef = useRef(null);
 
-            // Draw simplified detection results on canvas overlay
-            const drawDetectionResults = useCallback(() => {
-                if (!canvasRef.current || !imageRef.current || recognitionResults.length === 0) return;
+            // Format inscription with word boundaries
+            const formatInscriptionWithBoundaries = (results) => {
+                const sortedResults = results.sort((a, b) => a.position.x - b.position.x);
+                const parts = [];
                 
-                const canvas = canvasRef.current;
-                const ctx = canvas.getContext('2d');
-                const img = imageRef.current;
-                
-                if (img.offsetWidth === 0 || img.offsetHeight === 0) {
-                    setTimeout(drawDetectionResults, 100);
-                    return;
-                }
-                
-                canvas.width = img.offsetWidth;
-                canvas.height = img.offsetHeight;
-                
-                canvas.style.width = img.offsetWidth + 'px';
-                canvas.style.height = img.offsetHeight + 'px';
-                canvas.style.left = '0px';
-                canvas.style.top = '0px';
-                
-                const scaleX = img.offsetWidth / img.naturalWidth;
-                const scaleY = img.offsetHeight / img.naturalHeight;
-                
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                recognitionResults.forEach((result, index) => {
-                    const { position, confidence, matchType } = result;
-                    
-                    const x = position.x * scaleX;
-                    const y = position.y * scaleY;
-                    const width = position.width * scaleX;
-                    const height = position.height * scaleY;
-                    
-                    // Simple color coding: Primary = solid, Variant = dashed
-                    let color = '#10b981'; // green for primary
-                    if (matchType === 'variant') {
-                        ctx.setLineDash([4, 4]); // dashed line for variants
-                        color = '#8b5cf6'; // purple for variants
-                    } else {
-                        ctx.setLineDash([]);
+                sortedResults.forEach((result, index) => {
+                    if (index === 0 || wordBoundaries.has(index)) {
+                        if (parts.length > 0) parts.push(' | ');
                     }
-                    
-                    // Draw simple bounding box only
-                    ctx.strokeStyle = color;
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(x, y, width, height);
-                    ctx.setLineDash([]);
+                    parts.push(result.symbol.name);
+                    if (index < sortedResults.length - 1 && !wordBoundaries.has(index + 1)) {
+                        parts.push('-');
+                    }
                 });
-            }, [recognitionResults]);
+                
+                return parts.join('');
+            };
 
-            // Trigger drawing when results change
-            useEffect(() => {
-                if (uploadedImage && recognitionResults.length > 0) {
-                    const timer = setTimeout(drawDetectionResults, 200);
-                    return () => clearTimeout(timer);
-                }
-            }, [uploadedImage, recognitionResults, drawDetectionResults]);
+            // Format Arabic with word boundaries
+            const formatArabicWithBoundaries = (results) => {
+                const sortedResults = results.sort((a, b) => a.position.x - b.position.x);
+                const parts = [];
+                
+                sortedResults.forEach((result, index) => {
+                    if (index === 0 || wordBoundaries.has(index)) {
+                        if (parts.length > 0) parts.push(' ');
+                    }
+                    parts.push(result.symbol.arabic || result.symbol.name);
+                });
+                
+                return parts.join('');
+            };
+
+            // Toggle word boundary before a symbol
+            const toggleWordBoundary = (symbolIndex) => {
+                setWordBoundaries(prev => {
+                    const newBoundaries = new Set(prev);
+                    if (newBoundaries.has(symbolIndex)) {
+                        newBoundaries.delete(symbolIndex);
+                    } else {
+                        newBoundaries.add(symbolIndex);
+                    }
+                    return newBoundaries;
+                });
+            };
 
             // Check if OpenCV is ready
             useEffect(() => {
@@ -250,7 +238,7 @@
             // Auto-load chart on startup
             useEffect(() => {
                 loadChart();
-            }, []);
+            }, [loadChart]);
 
             // Handle image upload
             const handleImageUpload = useCallback((event) => {
@@ -412,6 +400,65 @@
                 setRecognitionResults(filteredMatches);
                 setIsProcessing(false);
             }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, templateMatchIsolated, isOpenCVReady]);
+
+            // Draw simplified detection results on canvas overlay
+            const drawDetectionResults = useCallback(() => {
+                if (!canvasRef.current || !imageRef.current || recognitionResults.length === 0) return;
+                
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const img = imageRef.current;
+                
+                if (img.offsetWidth === 0 || img.offsetHeight === 0) {
+                    setTimeout(drawDetectionResults, 100);
+                    return;
+                }
+                
+                canvas.width = img.offsetWidth;
+                canvas.height = img.offsetHeight;
+                
+                canvas.style.width = img.offsetWidth + 'px';
+                canvas.style.height = img.offsetHeight + 'px';
+                canvas.style.left = '0px';
+                canvas.style.top = '0px';
+                
+                const scaleX = img.offsetWidth / img.naturalWidth;
+                const scaleY = img.offsetHeight / img.naturalHeight;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                recognitionResults.forEach((result, index) => {
+                    const { position, matchType } = result;
+                    
+                    const x = position.x * scaleX;
+                    const y = position.y * scaleY;
+                    const width = position.width * scaleX;
+                    const height = position.height * scaleY;
+                    
+                    // Simple color coding: Primary = solid, Variant = dashed
+                    let color = '#10b981'; // green for primary
+                    if (matchType === 'variant') {
+                        ctx.setLineDash([4, 4]); // dashed line for variants
+                        color = '#8b5cf6'; // purple for variants
+                    } else {
+                        ctx.setLineDash([]);
+                    }
+                    
+                    // Draw simple bounding box only
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x, y, width, height);
+                    ctx.setLineDash([]);
+                });
+            }, [recognitionResults]);
+
+            // Trigger drawing when results change
+            useEffect(() => {
+                if (uploadedImage && recognitionResults.length > 0) {
+                    const timer = setTimeout(drawDetectionResults, 200);
+                    return () => clearTimeout(timer);
+                }
+            }, [uploadedImage, recognitionResults, drawDetectionResults]);
 
             return (
                 <div className="max-w-6xl mx-auto p-4 bg-gray-50 min-h-screen">
