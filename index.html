@@ -613,7 +613,7 @@
                         const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
                         if (primaryImg) {
                             matchAttempts++;
-                            const match = templateMatchIsolated(isolatedSymbol, primaryImg, 0); // Remove threshold to see all scores
+                            const match = templateMatchIsolated(isolatedSymbol, primaryImg, 0);
                             const confidence = match ? match.confidence : 0;
                             allConfidences.push({symbol: symbol.name, type: 'primary', confidence: confidence});
                             
@@ -645,14 +645,17 @@
                                     
                                     console.log(`   ${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)} ${confidence > threshold ? '✅' : '❌'}`);
                                     
-                                    if (match && confidence > threshold && (!bestMatch || confidence > bestMatch.confidence)) {
-                                        bestMatch = {
-                                            ...match,
-                                            symbol: symbol,
-                                            matchType: 'variant',
-                                            variantIndex: index,
-                                            confidence: confidence * (symbol.confidence_weights?.variants || 0.9)
-                                        };
+                                    if (match && confidence > threshold) {
+                                        const weightedConfidence = confidence * (symbol.confidence_weights?.variants || 0.9);
+                                        if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                            bestMatch = {
+                                                ...match,
+                                                symbol: symbol,
+                                                matchType: 'variant',
+                                                variantIndex: index,
+                                                confidence: weightedConfidence
+                                            };
+                                        }
                                     }
                                 }
                             });
@@ -670,14 +673,17 @@
                                     
                                     console.log(`   ${symbol.name} (example ${index + 1}): ${confidence.toFixed(4)} ${confidence > threshold ? '✅' : '❌'}`);
                                     
-                                    if (match && confidence > threshold && (!bestMatch || confidence > bestMatch.confidence)) {
-                                        bestMatch = {
-                                            ...match,
-                                            symbol: symbol,
-                                            matchType: 'example',
-                                            exampleIndex: index,
-                                            confidence: confidence * (symbol.confidence_weights?.examples || 0.7)
-                                        };
+                                    if (match && confidence > threshold) {
+                                        const weightedConfidence = confidence * (symbol.confidence_weights?.examples || 0.7);
+                                        if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                            bestMatch = {
+                                                ...match,
+                                                symbol: symbol,
+                                                matchType: 'example',
+                                                exampleIndex: index,
+                                                confidence: weightedConfidence
+                                            };
+                                        }
                                     }
                                 }
                             });
