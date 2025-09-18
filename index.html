@@ -595,6 +595,7 @@
                 }
 
                 console.log(`📊 Found ${isolatedSymbols.length} isolated symbols, now matching...`);
+                console.log(`🖼️ Available symbol images: ${Object.keys(loadedSymbolImages).length}`);
                 
                 const detectionResults = [];
                 let matchAttempts = 0;
@@ -603,24 +604,32 @@
                 for (let i = 0; i < isolatedSymbols.length; i++) {
                     const isolatedSymbol = isolatedSymbols[i];
                     let bestMatch = null;
-                    console.log(`🔍 Testing isolated symbol #${i + 1} (${isolatedSymbol.width}x${isolatedSymbol.height})`);
+                    let allConfidences = [];
+                    
+                    console.log(`\n🔍 === Testing isolated symbol #${i + 1} (${isolatedSymbol.width}x${isolatedSymbol.height}, area: ${isolatedSymbol.area.toFixed(0)}) ===`);
                     
                     for (const symbol of equivalenceChart.symbols) {
                         const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
                         if (primaryImg) {
                             matchAttempts++;
-                            const match = templateMatchIsolated(isolatedSymbol, primaryImg, processingSettings.detectionSensitivity);
-                            if (match) {
-                                console.log(`✅ Match found: ${symbol.name} with confidence ${match.confidence.toFixed(3)}`);
-                                if (!bestMatch || match.confidence > bestMatch.confidence) {
+                            const match = templateMatchIsolated(isolatedSymbol, primaryImg, 0); // Remove threshold to see all scores
+                            const confidence = match ? match.confidence : 0;
+                            allConfidences.push({symbol: symbol.name, type: 'primary', confidence: confidence});
+                            
+                            console.log(`   ${symbol.name} (primary): ${confidence.toFixed(4)} ${confidence > processingSettings.detectionSensitivity ? '✅' : '❌'}`);
+                            
+                            if (match && confidence > processingSettings.detectionSensitivity) {
+                                if (!bestMatch || confidence > bestMatch.confidence) {
                                     bestMatch = {
                                         ...match,
                                         symbol: symbol,
                                         matchType: 'primary',
-                                        confidence: match.confidence * (symbol.confidence_weights?.primary || 1.0)
+                                        confidence: confidence * (symbol.confidence_weights?.primary || 1.0)
                                     };
                                 }
                             }
+                        } else {
+                            console.log(`   ${symbol.name} (primary): NO IMAGE LOADED`);
                         }
                         
                         if (processingSettings.variantMatching && symbol.images.variants) {
@@ -628,14 +637,20 @@
                                 const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
                                 if (variantImg) {
                                     matchAttempts++;
-                                    const match = templateMatchIsolated(isolatedSymbol, variantImg, processingSettings.detectionSensitivity * 0.9);
-                                    if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
+                                    const match = templateMatchIsolated(isolatedSymbol, variantImg, 0);
+                                    const confidence = match ? match.confidence : 0;
+                                    const threshold = processingSettings.detectionSensitivity * 0.9;
+                                    allConfidences.push({symbol: symbol.name, type: `variant_${index}`, confidence: confidence});
+                                    
+                                    console.log(`   ${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)} ${confidence > threshold ? '✅' : '❌'}`);
+                                    
+                                    if (match && confidence > threshold && (!bestMatch || confidence > bestMatch.confidence)) {
                                         bestMatch = {
                                             ...match,
                                             symbol: symbol,
                                             matchType: 'variant',
                                             variantIndex: index,
-                                            confidence: match.confidence * (symbol.confidence_weights?.variants || 0.9)
+                                            confidence: confidence * (symbol.confidence_weights?.variants || 0.9)
                                         };
                                     }
                                 }
@@ -647,14 +662,20 @@
                                 const exampleImg = loadedSymbolImages[`${symbol.id}_example_${index}`];
                                 if (exampleImg) {
                                     matchAttempts++;
-                                    const match = templateMatchIsolated(isolatedSymbol, exampleImg, processingSettings.detectionSensitivity * 0.8);
-                                    if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
+                                    const match = templateMatchIsolated(isolatedSymbol, exampleImg, 0);
+                                    const confidence = match ? match.confidence : 0;
+                                    const threshold = processingSettings.detectionSensitivity * 0.8;
+                                    allConfidences.push({symbol: symbol.name, type: `example_${index}`, confidence: confidence});
+                                    
+                                    console.log(`   ${symbol.name} (example ${index + 1}): ${confidence.toFixed(4)} ${confidence > threshold ? '✅' : '❌'}`);
+                                    
+                                    if (match && confidence > threshold && (!bestMatch || confidence > bestMatch.confidence)) {
                                         bestMatch = {
                                             ...match,
                                             symbol: symbol,
                                             matchType: 'example',
                                             exampleIndex: index,
-                                            confidence: match.confidence * (symbol.confidence_weights?.examples || 0.7)
+                                            confidence: confidence * (symbol.confidence_weights?.examples || 0.7)
                                         };
                                     }
                                 }
@@ -662,8 +683,17 @@
                         }
                     }
                     
-                    if (bestMatch && bestMatch.confidence > processingSettings.detectionSensitivity * 0.7) {
+                    // Show top 5 confidence scores for this isolated symbol
+                    const topConfidences = allConfidences.sort((a, b) => b.confidence - a.confidence).slice(0, 5);
+                    console.log(`   🏆 Top matches for symbol #${i + 1}:`);
+                    topConfidences.forEach((conf, idx) => {
+                        console.log(`     ${idx + 1}. ${conf.symbol} (${conf.type}): ${conf.confidence.toFixed(4)}`);
+                    });
+                    
+                    const finalThreshold = processingSettings.detectionSensitivity * 0.7;
+                    if (bestMatch && bestMatch.confidence > finalThreshold) {
                         successfulMatches++;
+                        console.log(`   ✅ ACCEPTED: ${bestMatch.symbol.name} (${bestMatch.matchType}) with confidence ${bestMatch.confidence.toFixed(4)}`);
                         detectionResults.push({
                             symbol: bestMatch.symbol,
                             confidence: Math.min(0.95, bestMatch.confidence),
@@ -678,7 +708,8 @@
                             characteristics: `${bestMatch.matchType} match (${bestMatch.symbol.name}) - isolated symbol #${i + 1}`
                         });
                     } else {
-                        console.log(`❌ No match found for isolated symbol #${i + 1}`);
+                        const bestScore = bestMatch ? bestMatch.confidence.toFixed(4) : '0.0000';
+                        console.log(`   ❌ REJECTED: Best confidence ${bestScore} < threshold ${finalThreshold.toFixed(4)}`);
                     }
                 }
                 
@@ -688,8 +719,9 @@
                     }
                 });
                 
-                console.log(`✅ Detection complete: ${detectionResults.length} symbols matched out of ${isolatedSymbols.length} isolated`);
+                console.log(`\n✅ Detection complete: ${detectionResults.length} symbols matched out of ${isolatedSymbols.length} isolated`);
                 console.log(`📊 Total match attempts: ${matchAttempts}, Successful matches: ${successfulMatches}`);
+                console.log(`🎯 Detection sensitivity: ${processingSettings.detectionSensitivity}, Final threshold: ${(processingSettings.detectionSensitivity * 0.7).toFixed(3)}`);
                 
                 setRecognitionResults(detectionResults);
                 setIsProcessing(false);
