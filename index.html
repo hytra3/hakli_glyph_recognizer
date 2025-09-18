@@ -409,31 +409,72 @@
                 const ctx = canvas.getContext('2d');
                 const img = imageRef.current;
                 
-                if (img.offsetWidth === 0 || img.offsetHeight === 0) {
+                // Wait for image to be fully loaded and rendered
+                if (img.naturalWidth === 0 || img.naturalHeight === 0 || img.offsetWidth === 0 || img.offsetHeight === 0) {
                     setTimeout(drawDetectionResults, 100);
                     return;
                 }
+
+                // Get the actual displayed image dimensions and position
+                const imgRect = img.getBoundingClientRect();
+                const containerRect = img.parentElement.getBoundingClientRect();
                 
-                canvas.width = img.offsetWidth;
-                canvas.height = img.offsetHeight;
+                // Calculate the actual displayed size of the image (respecting aspect ratio)
+                const imgAspectRatio = img.naturalWidth / img.naturalHeight;
+                const containerAspectRatio = img.offsetWidth / img.offsetHeight;
                 
-                canvas.style.width = img.offsetWidth + 'px';
-                canvas.style.height = img.offsetHeight + 'px';
-                canvas.style.left = '0px';
-                canvas.style.top = '0px';
+                let displayWidth, displayHeight, offsetX, offsetY;
                 
-                const scaleX = img.offsetWidth / img.naturalWidth;
-                const scaleY = img.offsetHeight / img.naturalHeight;
+                if (imgAspectRatio > containerAspectRatio) {
+                    // Image is wider - constrained by width
+                    displayWidth = img.offsetWidth;
+                    displayHeight = img.offsetWidth / imgAspectRatio;
+                    offsetX = 0;
+                    offsetY = (img.offsetHeight - displayHeight) / 2;
+                } else {
+                    // Image is taller - constrained by height
+                    displayWidth = img.offsetHeight * imgAspectRatio;
+                    displayHeight = img.offsetHeight;
+                    offsetX = (img.offsetWidth - displayWidth) / 2;
+                    offsetY = 0;
+                }
+                
+                // Set canvas size to match the actual image display area
+                canvas.width = displayWidth;
+                canvas.height = displayHeight;
+                
+                canvas.style.width = displayWidth + 'px';
+                canvas.style.height = displayHeight + 'px';
+                canvas.style.left = offsetX + 'px';
+                canvas.style.top = offsetY + 'px';
+                
+                // Calculate scaling factors from natural to display size
+                const scaleX = displayWidth / img.naturalWidth;
+                const scaleY = displayHeight / img.naturalHeight;
                 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
+                console.log('Drawing detection boxes:', {
+                    naturalSize: `${img.naturalWidth}x${img.naturalHeight}`,
+                    displaySize: `${displayWidth}x${displayHeight}`,
+                    scale: `${scaleX.toFixed(3)}x${scaleY.toFixed(3)}`,
+                    offset: `${offsetX},${offsetY}`,
+                    results: recognitionResults.length
+                });
+                
                 recognitionResults.forEach((result, index) => {
-                    const { position, matchType } = result;
+                    const { position, matchType, symbol } = result;
                     
+                    // Scale coordinates from natural image size to display size
                     const x = position.x * scaleX;
                     const y = position.y * scaleY;
                     const width = position.width * scaleX;
                     const height = position.height * scaleY;
+                    
+                    console.log(`Symbol ${index + 1} (${result.symbol.name}):`, {
+                        original: `${position.x},${position.y} ${position.width}x${position.height}`,
+                        scaled: `${x.toFixed(1)},${y.toFixed(1)} ${width.toFixed(1)}x${height.toFixed(1)}`
+                    });
                     
                     // Simple color coding: Primary = solid, Variant = dashed
                     let color = '#10b981'; // green for primary
@@ -444,11 +485,31 @@
                         ctx.setLineDash([]);
                     }
                     
-                    // Draw simple bounding box only
+                    // Draw simple bounding box
                     ctx.strokeStyle = color;
                     ctx.lineWidth = 2;
                     ctx.strokeRect(x, y, width, height);
                     ctx.setLineDash([]);
+                    
+                    // Add character label
+                    const character = symbol.arabic || symbol.name;
+                    const labelText = character.length > 3 ? symbol.name : character;
+                    
+                    ctx.font = 'bold 14px Arial';
+                    const textWidth = ctx.measureText(labelText).width + 8;
+                    const textHeight = 18;
+                    
+                    // Position label above the box (or below if too close to top)
+                    const labelX = x;
+                    const labelY = y - textHeight > 0 ? y - 2 : y + height + textHeight;
+                    
+                    // Draw label background
+                    ctx.fillStyle = color;
+                    ctx.fillRect(labelX, labelY - textHeight + 2, textWidth, textHeight);
+                    
+                    // Draw label text
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(labelText, labelX + 4, labelY - 4);
                 });
             }, [recognitionResults]);
 
@@ -637,7 +698,51 @@
                                             </div>
                                         </div>
 
-                                        {/* Visual Legend */}
+                                        {/* Detection Feedback */}
+                                        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                                            <h4 className="font-medium text-blue-800 mb-2 text-sm">Detection Summary:</h4>
+                                            <div className="grid grid-cols-2 gap-3 text-xs">
+                                                <div>
+                                                    <span className="text-blue-700">Symbols Found:</span> {recognitionResults.length}
+                                                </div>
+                                                <div>
+                                                    <span className="text-blue-700">Avg Confidence:</span> {(recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length * 100).toFixed(0)}%
+                                                </div>
+                                                <div>
+                                                    <span className="text-blue-700">High Confidence:</span> {recognitionResults.filter(r => r.confidence > 0.7).length} symbols
+                                                </div>
+                                                <div>
+                                                    <span className="text-blue-700">Match Types:</span> {recognitionResults.filter(r => r.matchType === 'primary').length}P / {recognitionResults.filter(r => r.matchType === 'variant').length}V
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Quality Assessment */}
+                                            <div className="mt-2 pt-2 border-t border-blue-200">
+                                                <div className="text-xs">
+                                                    <span className="text-blue-700">Quality Assessment:</span>
+                                                    <span className={`ml-2 px-2 py-1 rounded ${
+                                                        recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length > 0.7
+                                                            ? 'bg-green-100 text-green-800'
+                                                            : recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length > 0.5
+                                                                ? 'bg-yellow-100 text-yellow-800'
+                                                                : 'bg-red-100 text-red-800'
+                                                    }`}>
+                                                        {recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length > 0.7
+                                                            ? 'High Quality'
+                                                            : recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length > 0.5
+                                                                ? 'Medium Quality'
+                                                                : 'Low Quality'}
+                                                    </span>
+                                                </div>
+                                                
+                                                {/* Detection Tips */}
+                                                {recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length < 0.6 && (
+                                                    <div className="mt-2 text-xs text-gray-600">
+                                                        💡 Try adjusting sensitivity or check image quality for better results
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                         <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                                             <h4 className="font-medium text-gray-800 mb-2 text-sm">Visual Legend:</h4>
                                             <div className="flex gap-4 text-xs">
@@ -654,47 +759,71 @@
 
                                         {/* Individual Results */}
                                         <div className="space-y-2">
-                                            <h4 className="font-medium text-gray-800">Individual Matches:</h4>
+                                            <div className="flex justify-between items-center">
+                                                <h4 className="font-medium text-gray-800">Individual Matches:</h4>
+                                                <div className="text-xs text-gray-600">
+                                                    Sorted by position (left → right)
+                                                </div>
+                                            </div>
                                             {recognitionResults
                                                 .sort((a, b) => a.position.x - b.position.x)
                                                 .map((result, index) => (
-                                                <div key={index} className="bg-white rounded p-3 flex justify-between items-center">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                                            #{index + 1}
-                                                        </span>
-                                                        <div>
-                                                            <span className="font-medium">{result.symbol.name}</span>
-                                                            {result.symbol.arabic && (
-                                                                <span className="text-lg mr-2">({result.symbol.arabic})</span>
-                                                            )}
-                                                            <span className="text-sm text-gray-500 ml-2">
-                                                                ({result.matchType}
-                                                                {result.variantIndex !== undefined && ` v${result.variantIndex + 1}`})
+                                                <div key={index} className={`bg-white rounded p-3 border-l-4 ${
+                                                    result.confidence > 0.7 ? 'border-green-500' : 
+                                                    result.confidence > 0.5 ? 'border-yellow-500' : 'border-red-500'
+                                                }`}>
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                                                #{index + 1}
                                                             </span>
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-medium">{result.symbol.name}</span>
+                                                                    {result.symbol.arabic && (
+                                                                        <span className="text-lg">({result.symbol.arabic})</span>
+                                                                    )}
+                                                                    <span className={`text-xs px-2 py-1 rounded ${
+                                                                        result.matchType === 'primary' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'
+                                                                    }`}>
+                                                                        {result.matchType}{result.variantIndex !== undefined && ` v${result.variantIndex + 1}`}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-xs text-gray-500 mt-1">
+                                                                    Position: ({result.position.x}, {result.position.y}) • 
+                                                                    Size: {result.position.width}×{result.position.height}px
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => toggleWordBoundary(index)}
-                                                            className={`text-xs px-2 py-1 rounded transition-colors ${
-                                                                wordBoundaries.has(index)
-                                                                    ? 'bg-purple-500 text-white'
-                                                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                                            }`}
-                                                            title={wordBoundaries.has(index) ? "Remove word boundary" : "Add word boundary before this symbol"}
-                                                        >
-                                                            {wordBoundaries.has(index) ? '| Word' : '+ Word'}
-                                                        </button>
-                                                        <span className={`px-2 py-1 rounded text-sm font-medium ${
-                                                            result.confidence > 0.7 
-                                                                ? 'bg-green-100 text-green-800' 
-                                                                : result.confidence > 0.5
-                                                                    ? 'bg-yellow-100 text-yellow-800'
-                                                                    : 'bg-red-100 text-red-800'
-                                                        }`}>
-                                                            {(result.confidence * 100).toFixed(0)}%
-                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => toggleWordBoundary(index)}
+                                                                className={`text-xs px-2 py-1 rounded transition-colors ${
+                                                                    wordBoundaries.has(index)
+                                                                        ? 'bg-purple-500 text-white'
+                                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                                }`}
+                                                                title={wordBoundaries.has(index) ? "Remove word boundary" : "Add word boundary before this symbol"}
+                                                            >
+                                                                {wordBoundaries.has(index) ? '| Word' : '+ Word'}
+                                                            </button>
+                                                            <div className="text-right">
+                                                                <div className={`px-2 py-1 rounded text-sm font-medium ${
+                                                                    result.confidence > 0.7 
+                                                                        ? 'bg-green-100 text-green-800' 
+                                                                        : result.confidence > 0.5
+                                                                            ? 'bg-yellow-100 text-yellow-800'
+                                                                            : 'bg-red-100 text-red-800'
+                                                                }`}>
+                                                                    {(result.confidence * 100).toFixed(0)}%
+                                                                </div>
+                                                                <div className="text-xs text-gray-500 mt-1">
+                                                                    {result.confidence > 0.8 ? 'Excellent' :
+                                                                     result.confidence > 0.6 ? 'Good' :
+                                                                     result.confidence > 0.4 ? 'Fair' : 'Poor'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}
