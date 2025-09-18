@@ -512,8 +512,8 @@
                 }
             }, [isOpenCVReady, processingSettings]);
 
-            // Enhanced template matching with isolated symbols
-            const templateMatchIsolated = useCallback((isolatedSymbol, templateImg, threshold = 0.7) => {
+            // Enhanced template matching with isolated symbols - always return confidence
+            const templateMatchIsolated = useCallback((isolatedSymbol, templateImg, threshold = 0.0) => {
                 if (!isOpenCVReady || !templateImg) return null;
 
                 try {
@@ -558,7 +558,8 @@
                     templateGray.delete();
                     result.delete();
 
-                    return confidence > threshold ? {
+                    // Always return the result with confidence, let caller decide on threshold
+                    return {
                         confidence: confidence,
                         position: {
                             x: isolatedSymbol.x,
@@ -566,7 +567,7 @@
                             width: isolatedSymbol.width,
                             height: isolatedSymbol.height
                         }
-                    } : null;
+                    };
 
                 } catch (error) {
                     console.error('Template matching error:', error);
