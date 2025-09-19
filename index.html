@@ -116,10 +116,10 @@
             useEffect(() => {
                 const checkOpenCV = () => {
                     if (typeof cv !== 'undefined' && cv.Mat) {
-                        console.log('✅ OpenCV.js loaded successfully');
+                        console.log('OpenCV.js loaded successfully');
                         setIsOpenCVReady(true);
                     } else {
-                        console.log('⏳ Waiting for OpenCV.js...');
+                        console.log('Waiting for OpenCV.js...');
                         setTimeout(checkOpenCV, 100);
                     }
                 };
@@ -195,7 +195,7 @@
                 return imageCache;
             }, [convertToGitHubUrl]);
 
-            // Symbol isolation using OpenCV contour detection (from v71)
+            // Symbol isolation using OpenCV contour detection
             const isolateSymbols = useCallback((imageElement) => {
                 if (!isOpenCVReady || !imageElement) {
                     console.warn('OpenCV not ready or no image');
@@ -262,7 +262,7 @@
                     hierarchy.delete();
 
                     isolatedSymbols.sort((a, b) => a.x - b.x);
-                    console.log(`🔍 Isolated ${isolatedSymbols.length} potential symbols`);
+                    console.log(`Isolated ${isolatedSymbols.length} potential symbols`);
                     
                     // Create debug images of isolated symbols
                     const debugSymbols = isolatedSymbols.map((symbol, index) => {
@@ -285,9 +285,7 @@
                         };
                     });
                     
-                    // Store debug info
                     setIsolatedSymbolsDebug(debugSymbols);
-                    
                     return isolatedSymbols;
 
                 } catch (error) {
@@ -303,7 +301,7 @@
                     const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
                     
                     try {
-                        console.log('📡 Fetching JSON from:', githubJsonUrl);
+                        console.log('Fetching JSON from:', githubJsonUrl);
                         const response = await fetch(githubJsonUrl);
                         
                         if (!response.ok) {
@@ -311,7 +309,7 @@
                         }
                         
                         const chartData = await response.json();
-                        console.log('✅ JSON loaded successfully');
+                        console.log('JSON loaded successfully');
                         
                         const processedChart = {
                             symbols: chartData.symbols.map(symbol => ({
@@ -326,13 +324,13 @@
                         setEquivalenceChart(processedChart);
                         setChartLoadStatus('loaded');
                         
-                        console.log('🖼️ Loading symbol images...');
+                        console.log('Loading symbol images...');
                         const imageCache = await loadSymbolImages(processedChart.symbols);
-                        console.log('✅ Image loading complete. Loaded count:', Object.keys(imageCache).length);
+                        console.log('Image loading complete. Loaded count:', Object.keys(imageCache).length);
                         setLoadedSymbolImages(imageCache);
                         
                     } catch (error) {
-                        console.error('❌ Error loading chart from GitHub:', error);
+                        console.error('Error loading chart from GitHub:', error);
                         setChartLoadStatus('error');
                     }
                 };
@@ -363,7 +361,6 @@
                 if (!isOpenCVReady || !templateImg) return null;
 
                 try {
-                    // Validate image dimensions
                     if (templateImg.width === 0 || templateImg.height === 0) {
                         console.warn('Template image has invalid dimensions');
                         return null;
@@ -426,7 +423,7 @@
                 }
             }, [isOpenCVReady]);
 
-            // Enhanced symbol detection with isolation (from v71)
+            // Enhanced symbol detection with isolation
             const detectSymbols = useCallback(async () => {
                 if (!uploadedImage || !equivalenceChart || !imageRef.current) {
                     console.log('Missing requirements for detection');
@@ -437,7 +434,7 @@
                 
                 await new Promise(resolve => setTimeout(resolve, 500));
                 
-                console.log('🔍 Starting symbol isolation...');
+                console.log('Starting symbol isolation...');
                 const isolatedSymbols = isolateSymbols(imageRef.current);
                 
                 if (isolatedSymbols.length === 0) {
@@ -446,8 +443,8 @@
                     return;
                 }
 
-                console.log(`📊 Found ${isolatedSymbols.length} isolated symbols, now matching...`);
-                console.log(`🖼️ Available symbol images: ${Object.keys(loadedSymbolImages).length}`);
+                console.log(`Found ${isolatedSymbols.length} isolated symbols, now matching...`);
+                console.log(`Available symbol images: ${Object.keys(loadedSymbolImages).length}`);
                 
                 const detectionResults = [];
                 let matchAttempts = 0;
@@ -457,7 +454,7 @@
                     const isolatedSymbol = isolatedSymbols[i];
                     let bestMatch = null;
                     
-                    console.log(`🔍 Testing isolated symbol #${i + 1} (${isolatedSymbol.width}x${isolatedSymbol.height}, area: ${isolatedSymbol.area.toFixed(0)})`);
+                    console.log(`Testing isolated symbol #${i + 1} (${isolatedSymbol.width}x${isolatedSymbol.height}, area: ${isolatedSymbol.area.toFixed(0)})`);
                     
                     for (const symbol of equivalenceChart.symbols) {
                         const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
@@ -467,7 +464,7 @@
                             const confidence = match ? match.confidence : 0;
                             
                             if (match && confidence > processingSettings.detectionSensitivity) {
-                                console.log(`${symbol.name} (primary): ${confidence.toFixed(4)} ✅`);
+                                console.log(`${symbol.name} (primary): ${confidence.toFixed(4)}`);
                                 if (!bestMatch || confidence > bestMatch.confidence) {
                                     bestMatch = {
                                         ...match,
@@ -489,7 +486,7 @@
                                     const threshold = processingSettings.detectionSensitivity * 0.9;
                                     
                                     if (match && confidence > threshold) {
-                                        console.log(`${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)} ✅`);
+                                        console.log(`${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)}`);
                                         const weightedConfidence = confidence * 0.9;
                                         if (!bestMatch || weightedConfidence > bestMatch.confidence) {
                                             bestMatch = {
@@ -531,16 +528,18 @@
                     }
                 });
                 
-                console.log(`✅ Detection complete: ${detectionResults.length} symbols matched out of ${isolatedSymbols.length} isolated`);
-                console.log(`📊 Total match attempts: ${matchAttempts}, Successful matches: ${successfulMatches}`);
+                console.log(`Detection complete: ${detectionResults.length} symbols matched out of ${isolatedSymbols.length} isolated`);
+                console.log(`Total match attempts: ${matchAttempts}, Successful matches: ${successfulMatches}`);
                 
                 setRecognitionResults(detectionResults);
                 setIsProcessing(false);
             }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, isolateSymbols, templateMatchIsolated, isOpenCVReady]);
 
-            // Fixed detection results drawing with proper alignment
+            // FIXED: Detection results drawing with proper alignment
             const drawDetectionResults = useCallback(() => {
-                if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) return;
+                if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) {
+                    return;
+                }
                 
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext('2d');
@@ -553,31 +552,31 @@
                     return;
                 }
 
-                // Get the actual position and size of the image within its container
+                // Get the bounding rectangles to calculate precise positioning
                 const containerRect = container.getBoundingClientRect();
                 const imgRect = img.getBoundingClientRect();
                 
-                // Calculate the offset of the image within its container
+                // Calculate the actual offset of the image within its container
                 const offsetX = imgRect.left - containerRect.left;
                 const offsetY = imgRect.top - containerRect.top;
                 
-                // Set canvas size to match the container
+                // Set canvas size to exactly match the container
                 canvas.width = container.offsetWidth;
                 canvas.height = container.offsetHeight;
                 canvas.style.width = container.offsetWidth + 'px';
                 canvas.style.height = container.offsetHeight + 'px';
                 
-                // Position canvas to exactly overlay the container
+                // Position canvas to overlay the container perfectly
                 canvas.style.left = '0px';
                 canvas.style.top = '0px';
                 
-                // Calculate scaling factors from natural image size to displayed image size
+                // Calculate scaling factors from natural image size to displayed size
                 const scaleX = img.offsetWidth / img.naturalWidth;
                 const scaleY = img.offsetHeight / img.naturalHeight;
                 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
-                console.log('🎯 Drawing detection boxes with improved alignment:', {
+                console.log('Drawing detection boxes with corrected alignment:', {
                     imageNatural: `${img.naturalWidth}x${img.naturalHeight}`,
                     imageDisplay: `${img.offsetWidth}x${img.offsetHeight}`,
                     containerSize: `${container.offsetWidth}x${container.offsetHeight}`,
@@ -589,34 +588,34 @@
                 recognitionResults.forEach((result, index) => {
                     const { position, matchType, symbol } = result;
                     
-                    // Scale coordinates from natural image size to display size, then add image offset
+                    // Apply scaling and offset transformations
                     const x = (position.x * scaleX) + offsetX;
                     const y = (position.y * scaleY) + offsetY;
                     const width = position.width * scaleX;
                     const height = position.height * scaleY;
                     
-                    console.log(`📍 Symbol ${index + 1} (${result.symbol.name}):`, {
-                        originalCoords: `${position.x},${position.y} ${position.width}x${position.height}`,
-                        scaledCoords: `${(position.x * scaleX).toFixed(1)},${(position.y * scaleY).toFixed(1)} ${(position.width * scaleX).toFixed(1)}x${(position.height * scaleY).toFixed(1)}`,
-                        finalCoords: `${x.toFixed(1)},${y.toFixed(1)} ${width.toFixed(1)}x${height.toFixed(1)}`
+                    console.log(`Symbol ${index + 1} (${result.symbol.name}):`, {
+                        originalPos: `${position.x},${position.y} ${position.width}x${position.height}`,
+                        scaledPos: `${(position.x * scaleX).toFixed(1)},${(position.y * scaleY).toFixed(1)} ${(position.width * scaleX).toFixed(1)}x${(position.height * scaleY).toFixed(1)}`,
+                        finalPos: `${x.toFixed(1)},${y.toFixed(1)} ${width.toFixed(1)}x${height.toFixed(1)}`
                     });
                     
-                    // Color coding and line style for match types
+                    // Style based on match type
                     let color = '#10b981'; // green for primary
                     if (matchType === 'variant') {
-                        ctx.setLineDash([4, 4]); // dashed line for variants
+                        ctx.setLineDash([4, 4]); // dashed for variants
                         color = '#8b5cf6'; // purple for variants
                     } else {
                         ctx.setLineDash([]);
                     }
                     
-                    // Draw bounding box
+                    // Draw the bounding box
                     ctx.strokeStyle = color;
                     ctx.lineWidth = 2;
                     ctx.strokeRect(x, y, width, height);
                     ctx.setLineDash([]);
                     
-                    // Add character label with better positioning
+                    // Add label
                     const character = symbol.arabic || symbol.name;
                     const labelText = character.length > 3 ? symbol.name : character;
                     
@@ -625,7 +624,7 @@
                     const textWidth = textMetrics.width + 8;
                     const textHeight = 18;
                     
-                    // Position label above the box (or below if too close to top)
+                    // Position label above box (or below if near top)
                     const labelX = x;
                     const labelY = y - textHeight > 0 ? y - 2 : y + height + textHeight;
                     
@@ -637,18 +636,17 @@
                     ctx.fillStyle = 'white';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(labelText, labelX + 4, labelY - textHeight/2 + 2);
-                    ctx.textBaseline = 'alphabetic'; // reset to default
+                    ctx.textBaseline = 'alphabetic';
                     
-                    // Optional: Draw confidence indicator
+                    // Add confidence indicator
                     const confidenceText = `${(result.confidence * 100).toFixed(0)}%`;
                     ctx.font = '10px Arial';
                     const confWidth = ctx.measureText(confidenceText).width + 4;
                     
-                    // Position confidence at bottom-right of box
                     const confX = x + width - confWidth;
                     const confY = y + height - 2;
                     
-                    if (confY > textHeight) { // Only show if there's space
+                    if (confY > textHeight) {
                         ctx.fillStyle = 'rgba(0,0,0,0.7)';
                         ctx.fillRect(confX, confY - 12, confWidth, 14);
                         ctx.fillStyle = 'white';
@@ -656,11 +654,10 @@
                     }
                 });
                 
-                // Reset font
                 ctx.font = 'bold 14px Arial';
             }, [recognitionResults]);
 
-            // Trigger drawing when results change or image loads
+            // Trigger drawing when results change
             useEffect(() => {
                 if (uploadedImage && recognitionResults.length > 0) {
                     const timer = setTimeout(drawDetectionResults, 300);
@@ -668,7 +665,7 @@
                 }
             }, [uploadedImage, recognitionResults, drawDetectionResults]);
 
-            // Also redraw when window resizes
+            // Redraw on window resize
             useEffect(() => {
                 const handleResize = () => {
                     if (recognitionResults.length > 0) {
@@ -688,3 +685,257 @@
                             Hakli Symbol Recognizer
                             <span className="text-sm font-normal text-gray-500 ml-2">based on Ahmad Al-Jallad (2025), The Decipherment of the Dhofari Script</span>
                         </h1>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                    <h3 className="font-semibold text-blue-800 mb-2">Chart Status</h3>
+                                    <button
+                                        onClick={loadChart}
+                                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                        disabled={chartLoadStatus === 'loading'}
+                                    >
+                                        {chartLoadStatus === 'loading' ? 'Loading...' : 'Reload Chart'}
+                                    </button>
+                                    
+                                    {equivalenceChart && (
+                                        <div className="mt-3 text-sm text-green-600">
+                                            Loaded {equivalenceChart.symbols?.length || 0} symbols, {Object.keys(loadedSymbolImages).length} images
+                                        </div>
+                                    )}
+                                    
+                                    {!isOpenCVReady && (
+                                        <div className="mt-3 text-sm text-orange-600">
+                                            Loading OpenCV.js...
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                    <h3 className="font-semibold text-gray-800 mb-2">Detection Settings</h3>
+                                    <div className="space-y-2">
+                                        <div>
+                                            <label className="text-sm">Sensitivity: {processingSettings.detectionSensitivity}</label>
+                                            <input
+                                                type="range"
+                                                min="0.1"
+                                                max="0.9"
+                                                step="0.1"
+                                                value={processingSettings.detectionSensitivity}
+                                                onChange={(e) => setProcessingSettings(prev => ({
+                                                    ...prev,
+                                                    detectionSensitivity: parseFloat(e.target.value)
+                                                }))}
+                                                className="w-full"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                id="variantMatching"
+                                                checked={processingSettings.variantMatching}
+                                                onChange={(e) => setProcessingSettings(prev => ({
+                                                    ...prev,
+                                                    variantMatching: e.target.checked
+                                                }))}
+                                            />
+                                            <label htmlFor="variantMatching" className="text-sm">Include variants</label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <label className="block text-sm font-medium">Upload Inscription Image</label>
+                                    <div className="flex items-center justify-center w-full">
+                                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                                            <div className="flex flex-col items-center justify-center pt-3 pb-3">
+                                                <Upload />
+                                                <p className="text-xs text-gray-500 mt-1">Click to upload</p>
+                                            </div>
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                accept="image/*"
+                                                onChange={handleImageUpload}
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={detectSymbols}
+                                    disabled={!uploadedImage || !equivalenceChart || isProcessing || !isOpenCVReady}
+                                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2"
+                                >
+                                    {isProcessing ? (
+                                        <>
+                                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Zap />
+                                            Detect Symbols
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <h3 className="font-semibold text-gray-800">Analysis</h3>
+                                
+                                <div 
+                                    ref={imageContainerRef}
+                                    className="relative bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200" 
+                                    style={{minHeight: '400px'}}
+                                >
+                                    {uploadedImage ? (
+                                        <div className="relative p-4">
+                                            <img
+                                                ref={imageRef}
+                                                src={uploadedImage}
+                                                alt="Hakli inscription"
+                                                className="max-w-full h-auto block mx-auto"
+                                                onLoad={() => {
+                                                    if (recognitionResults.length > 0) {
+                                                        setTimeout(drawDetectionResults, 100);
+                                                    }
+                                                }}
+                                            />
+                                            <canvas
+                                                ref={canvasRef}
+                                                className="absolute pointer-events-none"
+                                                style={{ 
+                                                    display: recognitionResults.length > 0 ? 'block' : 'none',
+                                                    left: '0px',
+                                                    top: '0px'
+                                                }}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="text-center text-gray-500 p-8">
+                                            <Camera />
+                                            <p className="text-lg font-medium mb-2 mt-4">Upload Image</p>
+                                            <p className="text-sm">Upload an inscription to analyze</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {recognitionResults.length > 0 && (
+                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                        <h3 className="font-semibold text-green-800 mb-3">
+                                            Detection Results ({recognitionResults.length} matches found)
+                                        </h3>
+                                        
+                                        <div className="mb-4 p-4 bg-white rounded-lg border">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h4 className="font-semibold text-gray-800">Reconstructed Inscription:</h4>
+                                                <button
+                                                    onClick={() => setWordBoundaries(new Set())}
+                                                    className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600"
+                                                >
+                                                    Clear Boundaries
+                                                </button>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div>
+                                                    <span className="text-sm text-gray-600 mr-2">Latin:</span>
+                                                    <span className="text-lg font-mono text-blue-800">
+                                                        {formatInscriptionWithBoundaries(recognitionResults)}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div dir="rtl">
+                                                    <span className="text-sm text-gray-600 ml-2">Arabic:</span>
+                                                    <span className="text-lg text-green-800">
+                                                        {formatArabicWithBoundaries(recognitionResults)}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="text-xs text-gray-500">
+                                                    Average confidence: {(recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length * 100).toFixed(0)}%
+                                                    | Reading direction: Left to Right
+                                                    | {recognitionResults.length} symbols detected
+                                                    {wordBoundaries.size > 0 && ` | ${wordBoundaries.size} word boundaries`}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <h4 className="font-medium text-gray-800">Individual Matches:</h4>
+                                                <div className="text-xs text-gray-600">
+                                                    Sorted by position (left to right)
+                                                </div>
+                                            </div>
+                                            {recognitionResults
+                                                .sort((a, b) => a.position.x - b.position.x)
+                                                .map((result, index) => (
+                                                <div key={index} className={`bg-white rounded p-3 border-l-4 ${
+                                                    result.confidence > 0.7 ? 'border-green-500' : 
+                                                    result.confidence > 0.5 ? 'border-yellow-500' : 'border-red-500'
+                                                }`}>
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                                                #{index + 1}
+                                                            </span>
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-medium">{result.symbol.name}</span>
+                                                                    {result.symbol.arabic && (
+                                                                        <span className="text-lg">({result.symbol.arabic})</span>
+                                                                    )}
+                                                                    <span className={`text-xs px-2 py-1 rounded ${
+                                                                        result.matchType === 'primary' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'
+                                                                    }`}>
+                                                                        {result.matchType}{result.variantIndex !== undefined && ` v${result.variantIndex + 1}`}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-xs text-gray-500 mt-1">
+                                                                    Position: ({result.position.x}, {result.position.y}) Size: {result.position.width}x{result.position.height}px
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => toggleWordBoundary(index)}
+                                                                className={`text-xs px-2 py-1 rounded transition-colors ${
+                                                                    wordBoundaries.has(index)
+                                                                        ? 'bg-purple-500 text-white'
+                                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                                }`}
+                                                                title={wordBoundaries.has(index) ? "Remove word boundary" : "Add word boundary before this symbol"}
+                                                            >
+                                                                {wordBoundaries.has(index) ? '| Word' : '+ Word'}
+                                                            </button>
+                                                            <div className="text-right">
+                                                                <div className={`px-2 py-1 rounded text-sm font-medium ${
+                                                                    result.confidence > 0.7 
+                                                                        ? 'bg-green-100 text-green-800' 
+                                                                        : result.confidence > 0.5
+                                                                            ? 'bg-yellow-100 text-yellow-800'
+                                                                            : 'bg-red-100 text-red-800'
+                                                                }`}>
+                                                                    {(result.confidence * 100).toFixed(0)}%
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<HakliSymbolRecognizer />);
+    </script>
+</body>
+</html>
