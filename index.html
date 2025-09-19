@@ -64,6 +64,7 @@
             
             const canvasRef = useRef(null);
             const imageRef = useRef(null);
+            const imageContainerRef = useRef(null);
 
             // Format inscription with word boundaries
             const formatInscriptionWithBoundaries = (results) => {
@@ -294,6 +295,7 @@
                     return [];
                 }
             }, [isOpenCVReady, processingSettings]);
+
             const loadChart = useCallback(() => {
                 const loadChartInternal = async () => {
                     setChartLoadStatus('loading');
@@ -536,13 +538,14 @@
                 setIsProcessing(false);
             }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, isolateSymbols, templateMatchIsolated, isOpenCVReady]);
 
-            // Draw simplified detection results on canvas overlay
+            // Fixed detection results drawing with proper alignment
             const drawDetectionResults = useCallback(() => {
-                if (!canvasRef.current || !imageRef.current || recognitionResults.length === 0) return;
+                if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) return;
                 
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext('2d');
                 const img = imageRef.current;
+                const container = imageContainerRef.current;
                 
                 // Wait for image to be fully loaded and rendered
                 if (img.naturalWidth === 0 || img.naturalHeight === 0 || img.offsetWidth === 0 || img.offsetHeight === 0) {
@@ -550,24 +553,35 @@
                     return;
                 }
 
-                // Simple approach: match canvas exactly to image dimensions and position
-                canvas.width = img.offsetWidth;
-                canvas.height = img.offsetHeight;
+                // Get the actual position and size of the image within its container
+                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
                 
-                canvas.style.width = img.offsetWidth + 'px';
-                canvas.style.height = img.offsetHeight + 'px';
+                // Calculate the offset of the image within its container
+                const offsetX = imgRect.left - containerRect.left;
+                const offsetY = imgRect.top - containerRect.top;
+                
+                // Set canvas size to match the container
+                canvas.width = container.offsetWidth;
+                canvas.height = container.offsetHeight;
+                canvas.style.width = container.offsetWidth + 'px';
+                canvas.style.height = container.offsetHeight + 'px';
+                
+                // Position canvas to exactly overlay the container
                 canvas.style.left = '0px';
                 canvas.style.top = '0px';
                 
-                // Calculate scaling factors from natural to display size
+                // Calculate scaling factors from natural image size to displayed image size
                 const scaleX = img.offsetWidth / img.naturalWidth;
                 const scaleY = img.offsetHeight / img.naturalHeight;
                 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
-                console.log('Drawing detection boxes:', {
-                    naturalSize: `${img.naturalWidth}x${img.naturalHeight}`,
-                    displaySize: `${img.offsetWidth}x${img.offsetHeight}`,
+                console.log('🎯 Drawing detection boxes with improved alignment:', {
+                    imageNatural: `${img.naturalWidth}x${img.naturalHeight}`,
+                    imageDisplay: `${img.offsetWidth}x${img.offsetHeight}`,
+                    containerSize: `${container.offsetWidth}x${container.offsetHeight}`,
+                    imageOffset: `${offsetX.toFixed(1)}, ${offsetY.toFixed(1)}`,
                     scale: `${scaleX.toFixed(3)}x${scaleY.toFixed(3)}`,
                     results: recognitionResults.length
                 });
@@ -575,18 +589,19 @@
                 recognitionResults.forEach((result, index) => {
                     const { position, matchType, symbol } = result;
                     
-                    // Scale coordinates from natural image size to display size
-                    const x = position.x * scaleX;
-                    const y = position.y * scaleY;
+                    // Scale coordinates from natural image size to display size, then add image offset
+                    const x = (position.x * scaleX) + offsetX;
+                    const y = (position.y * scaleY) + offsetY;
                     const width = position.width * scaleX;
                     const height = position.height * scaleY;
                     
-                    console.log(`Symbol ${index + 1} (${result.symbol.name}):`, {
-                        original: `${position.x},${position.y} ${position.width}x${position.height}`,
-                        scaled: `${x.toFixed(1)},${y.toFixed(1)} ${width.toFixed(1)}x${height.toFixed(1)}`
+                    console.log(`📍 Symbol ${index + 1} (${result.symbol.name}):`, {
+                        originalCoords: `${position.x},${position.y} ${position.width}x${position.height}`,
+                        scaledCoords: `${(position.x * scaleX).toFixed(1)},${(position.y * scaleY).toFixed(1)} ${(position.width * scaleX).toFixed(1)}x${(position.height * scaleY).toFixed(1)}`,
+                        finalCoords: `${x.toFixed(1)},${y.toFixed(1)} ${width.toFixed(1)}x${height.toFixed(1)}`
                     });
                     
-                    // Simple color coding: Primary = solid, Variant = dashed
+                    // Color coding and line style for match types
                     let color = '#10b981'; // green for primary
                     if (matchType === 'variant') {
                         ctx.setLineDash([4, 4]); // dashed line for variants
@@ -595,18 +610,19 @@
                         ctx.setLineDash([]);
                     }
                     
-                    // Draw simple bounding box
+                    // Draw bounding box
                     ctx.strokeStyle = color;
                     ctx.lineWidth = 2;
                     ctx.strokeRect(x, y, width, height);
                     ctx.setLineDash([]);
                     
-                    // Add character label
+                    // Add character label with better positioning
                     const character = symbol.arabic || symbol.name;
                     const labelText = character.length > 3 ? symbol.name : character;
                     
                     ctx.font = 'bold 14px Arial';
-                    const textWidth = ctx.measureText(labelText).width + 8;
+                    const textMetrics = ctx.measureText(labelText);
+                    const textWidth = textMetrics.width + 8;
                     const textHeight = 18;
                     
                     // Position label above the box (or below if too close to top)
@@ -619,17 +635,50 @@
                     
                     // Draw label text
                     ctx.fillStyle = 'white';
-                    ctx.fillText(labelText, labelX + 4, labelY - 4);
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(labelText, labelX + 4, labelY - textHeight/2 + 2);
+                    ctx.textBaseline = 'alphabetic'; // reset to default
+                    
+                    // Optional: Draw confidence indicator
+                    const confidenceText = `${(result.confidence * 100).toFixed(0)}%`;
+                    ctx.font = '10px Arial';
+                    const confWidth = ctx.measureText(confidenceText).width + 4;
+                    
+                    // Position confidence at bottom-right of box
+                    const confX = x + width - confWidth;
+                    const confY = y + height - 2;
+                    
+                    if (confY > textHeight) { // Only show if there's space
+                        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                        ctx.fillRect(confX, confY - 12, confWidth, 14);
+                        ctx.fillStyle = 'white';
+                        ctx.fillText(confidenceText, confX + 2, confY - 2);
+                    }
                 });
+                
+                // Reset font
+                ctx.font = 'bold 14px Arial';
             }, [recognitionResults]);
 
-            // Trigger drawing when results change
+            // Trigger drawing when results change or image loads
             useEffect(() => {
                 if (uploadedImage && recognitionResults.length > 0) {
-                    const timer = setTimeout(drawDetectionResults, 200);
+                    const timer = setTimeout(drawDetectionResults, 300);
                     return () => clearTimeout(timer);
                 }
             }, [uploadedImage, recognitionResults, drawDetectionResults]);
+
+            // Also redraw when window resizes
+            useEffect(() => {
+                const handleResize = () => {
+                    if (recognitionResults.length > 0) {
+                        setTimeout(drawDetectionResults, 100);
+                    }
+                };
+                
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, [recognitionResults, drawDetectionResults]);
 
             return (
                 <div className="max-w-6xl mx-auto p-4 bg-gray-50 min-h-screen">
@@ -639,394 +688,3 @@
                             Hakli Symbol Recognizer
                             <span className="text-sm font-normal text-gray-500 ml-2">based on Ahmad Al-Jallad (2025), The Decipherment of the Dhofari Script</span>
                         </h1>
-                        
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Controls */}
-                            <div className="space-y-4">
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                    <h3 className="font-semibold text-blue-800 mb-2">Chart Status</h3>
-                                    <button
-                                        onClick={loadChart}
-                                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                                        disabled={chartLoadStatus === 'loading'}
-                                    >
-                                        {chartLoadStatus === 'loading' ? 'Loading...' : 'Reload Chart'}
-                                    </button>
-                                    
-                                    {equivalenceChart && (
-                                        <div className="mt-3 text-sm text-green-600">
-                                            ✅ Loaded {equivalenceChart.symbols?.length || 0} symbols, {Object.keys(loadedSymbolImages).length} images
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                    <h3 className="font-semibold text-gray-800 mb-2">Detection Settings</h3>
-                                    <div className="space-y-2">
-                                        <div>
-                                            <label className="text-sm">Sensitivity: {processingSettings.detectionSensitivity}</label>
-                                            <input
-                                                type="range"
-                                                min="0.1"
-                                                max="0.9"
-                                                step="0.1"
-                                                value={processingSettings.detectionSensitivity}
-                                                onChange={(e) => setProcessingSettings(prev => ({
-                                                    ...prev,
-                                                    detectionSensitivity: parseFloat(e.target.value)
-                                                }))}
-                                                className="w-full"
-                                            />
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="checkbox"
-                                                id="variantMatching"
-                                                checked={processingSettings.variantMatching}
-                                                onChange={(e) => setProcessingSettings(prev => ({
-                                                    ...prev,
-                                                    variantMatching: e.target.checked
-                                                }))}
-                                            />
-                                            <label htmlFor="variantMatching" className="text-sm">Include variants</label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <label className="block text-sm font-medium">Upload Inscription Image</label>
-                                    <div className="flex items-center justify-center w-full">
-                                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                                            <div className="flex flex-col items-center justify-center pt-3 pb-3">
-                                                <Upload />
-                                                <p className="text-xs text-gray-500 mt-1">Click to upload</p>
-                                            </div>
-                                            <input
-                                                type="file"
-                                                className="hidden"
-                                                accept="image/*"
-                                                onChange={handleImageUpload}
-                                            />
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={detectSymbols}
-                                    disabled={!uploadedImage || !equivalenceChart || isProcessing || !isOpenCVReady}
-                                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2"
-                                >
-                                    {isProcessing ? (
-                                        <>
-                                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                            Processing...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Zap />
-                                            Detect Symbols
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-
-                            {/* Image Display */}
-                            <div className="space-y-4">
-                                <h3 className="font-semibold text-gray-800">Analysis</h3>
-                                
-                                <div className="relative bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200" style={{minHeight: '400px'}}>
-                                    {uploadedImage ? (
-                                        <div className="relative p-4">
-                                            <img
-                                                ref={imageRef}
-                                                src={uploadedImage}
-                                                alt="Hakli inscription"
-                                                className="max-w-full h-auto"
-                                                onLoad={() => {
-                                                    if (recognitionResults.length > 0) {
-                                                        setTimeout(drawDetectionResults, 100);
-                                                    }
-                                                }}
-                                            />
-                                            <canvas
-                                                ref={canvasRef}
-                                                className="absolute pointer-events-none"
-                                                style={{ 
-                                                    display: recognitionResults.length > 0 ? 'block' : 'none',
-                                                    left: '16px',
-                                                    top: '16px'
-                                                }}
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div className="text-center text-gray-500 p-8">
-                                            <Camera />
-                                            <p className="text-lg font-medium mb-2 mt-4">Upload Image</p>
-                                            <p className="text-sm">Upload an inscription to analyze</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {recognitionResults.length > 0 && (
-                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                        <h3 className="font-semibold text-green-800 mb-3">
-                                            Detection Results ({recognitionResults.length} matches found)
-                                        </h3>
-                                        
-                                        {/* Reconstructed Inscription */}
-                                        <div className="mb-4 p-4 bg-white rounded-lg border">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <h4 className="font-semibold text-gray-800">Reconstructed Inscription:</h4>
-                                                <button
-                                                    onClick={() => setWordBoundaries(new Set())}
-                                                    className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600"
-                                                >
-                                                    Clear Boundaries
-                                                </button>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <div>
-                                                    <span className="text-sm text-gray-600 mr-2">Latin:</span>
-                                                    <span className="text-lg font-mono text-blue-800">
-                                                        {formatInscriptionWithBoundaries(recognitionResults)}
-                                                    </span>
-                                                </div>
-                                                
-                                                <div dir="rtl">
-                                                    <span className="text-sm text-gray-600 ml-2">Arabic:</span>
-                                                    <span className="text-lg text-green-800">
-                                                        {formatArabicWithBoundaries(recognitionResults)}
-                                                    </span>
-                                                </div>
-                                                
-                                                <div className="text-xs text-gray-500">
-                                                    Average confidence: {(recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length * 100).toFixed(0)}%
-                                                    | Reading direction: Left → Right
-                                                    | {recognitionResults.length} symbols detected
-                                                    {wordBoundaries.size > 0 && ` | ${wordBoundaries.size} word boundaries`}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Detection Feedback */}
-                                        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                                            <h4 className="font-medium text-blue-800 mb-2 text-sm">Detection Summary:</h4>
-                                            <div className="grid grid-cols-2 gap-3 text-xs">
-                                                <div>
-                                                    <span className="text-blue-700">Symbols Found:</span> {recognitionResults.length}
-                                                </div>
-                                                <div>
-                                                    <span className="text-blue-700">Avg Confidence:</span> {(recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length * 100).toFixed(0)}%
-                                                </div>
-                                                <div>
-                                                    <span className="text-blue-700">High Confidence:</span> {recognitionResults.filter(r => r.confidence > 0.7).length} symbols
-                                                </div>
-                                                <div>
-                                                    <span className="text-blue-700">Match Types:</span> {recognitionResults.filter(r => r.matchType === 'primary').length}P / {recognitionResults.filter(r => r.matchType === 'variant').length}V
-                                                </div>
-                                            </div>
-                                            
-                                            {/* Quality Assessment */}
-                                            <div className="mt-2 pt-2 border-t border-blue-200">
-                                                <div className="text-xs">
-                                                    <span className="text-blue-700">Quality Assessment:</span>
-                                                    <span className={`ml-2 px-2 py-1 rounded ${
-                                                        recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length > 0.7
-                                                            ? 'bg-green-100 text-green-800'
-                                                            : recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length > 0.5
-                                                                ? 'bg-yellow-100 text-yellow-800'
-                                                                : 'bg-red-100 text-red-800'
-                                                    }`}>
-                                                        {recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length > 0.7
-                                                            ? 'High Quality'
-                                                            : recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length > 0.5
-                                                                ? 'Medium Quality'
-                                                                : 'Low Quality'}
-                                                    </span>
-                                                </div>
-                                                
-                                                {/* Detection Tips */}
-                                                {recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length < 0.6 && (
-                                                    <div className="mt-2 text-xs text-gray-600">
-                                                        💡 Try adjusting sensitivity or check image quality for better results
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                                            <h4 className="font-medium text-gray-800 mb-2 text-sm">Visual Legend:</h4>
-                                            <div className="flex gap-4 text-xs">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-4 h-3 border-2 border-green-500"></div>
-                                                    <span>Primary Match</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-4 h-3 border-2 border-purple-500 border-dashed"></div>
-                                                    <span>Variant Match</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Isolated Symbols Debug */}
-                                {isolatedSymbolsDebug.length > 0 && (
-                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-yellow-800 mb-3">Isolated Symbols ({isolatedSymbolsDebug.length} found)</h4>
-                                        <div className="text-sm text-yellow-700 mb-3">
-                                            These symbols were isolated using OpenCV contour detection before template matching:
-                                        </div>
-                                        <div className="grid grid-cols-4 gap-3 max-h-40 overflow-y-auto">
-                                            {isolatedSymbolsDebug.map((debugSymbol) => (
-                                                <div key={debugSymbol.id} className="bg-white rounded p-2 border">
-                                                    <img 
-                                                        src={debugSymbol.dataUrl} 
-                                                        alt={`Isolated #${debugSymbol.id + 1}`}
-                                                        className="w-full h-auto border rounded mb-1"
-                                                        style={{minHeight: '30px', maxHeight: '60px', objectFit: 'contain'}}
-                                                    />
-                                                    <div className="text-xs text-center text-gray-600">
-                                                        #{debugSymbol.id + 1}
-                                                        <br />
-                                                        {debugSymbol.bounds.width}×{debugSymbol.bounds.height}
-                                                        <br />
-                                                        Area: {debugSymbol.area.toFixed(0)}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                {recognitionResults.length > 0 && (
-                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-yellow-800 mb-3">Template Matching Debug</h4>
-                                        <div className="text-sm text-yellow-700 mb-3">
-                                            These show the exact regions used for template matching:
-                                        </div>
-                                        <div className="grid grid-cols-4 gap-3 max-h-60 overflow-y-auto">
-                                            {recognitionResults.map((result, index) => {
-                                                // Create a debug canvas showing the matched region
-                                                const debugCanvas = document.createElement('canvas');
-                                                const debugCtx = debugCanvas.getContext('2d');
-                                                debugCanvas.width = result.position.width;
-                                                debugCanvas.height = result.position.height;
-                                                
-                                                // Draw the region from the source image
-                                                if (imageRef.current) {
-                                                    debugCtx.drawImage(
-                                                        imageRef.current,
-                                                        result.position.x, result.position.y, result.position.width, result.position.height,
-                                                        0, 0, result.position.width, result.position.height
-                                                    );
-                                                }
-                                                
-                                                const debugDataUrl = debugCanvas.toDataURL();
-                                                
-                                                return (
-                                                    <div key={index} className="bg-white rounded p-2 border">
-                                                        <img 
-                                                            src={debugDataUrl} 
-                                                            alt={`Match #${index + 1}: ${result.symbol.name}`}
-                                                            className="w-full h-auto border rounded mb-1"
-                                                            style={{minHeight: '40px', maxHeight: '80px', objectFit: 'contain'}}
-                                                        />
-                                                        <div className="text-xs text-center">
-                                                            <div className="font-medium">{result.symbol.name}</div>
-                                                            <div className="text-gray-600">
-                                                                {(result.confidence * 100).toFixed(0)}% • {result.matchType}
-                                                            </div>
-                                                            <div className="text-gray-500">
-                                                                {result.position.width}×{result.position.height}px
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                        <div className="text-xs text-gray-600 mt-2">
-                                            If these regions don't contain clear symbols, the template matching algorithm is working on the wrong areas.
-                                        </div>
-                                    </div>
-                                )}
-                                        <div className="space-y-2">
-                                            <div className="flex justify-between items-center">
-                                                <h4 className="font-medium text-gray-800">Individual Matches:</h4>
-                                                <div className="text-xs text-gray-600">
-                                                    Sorted by position (left → right)
-                                                </div>
-                                            </div>
-                                            {recognitionResults
-                                                .sort((a, b) => a.position.x - b.position.x)
-                                                .map((result, index) => (
-                                                <div key={index} className={`bg-white rounded p-3 border-l-4 ${
-                                                    result.confidence > 0.7 ? 'border-green-500' : 
-                                                    result.confidence > 0.5 ? 'border-yellow-500' : 'border-red-500'
-                                                }`}>
-                                                    <div className="flex justify-between items-center">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                                                #{index + 1}
-                                                            </span>
-                                                            <div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-medium">{result.symbol.name}</span>
-                                                                    {result.symbol.arabic && (
-                                                                        <span className="text-lg">({result.symbol.arabic})</span>
-                                                                    )}
-                                                                    <span className={`text-xs px-2 py-1 rounded ${
-                                                                        result.matchType === 'primary' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'
-                                                                    }`}>
-                                                                        {result.matchType}{result.variantIndex !== undefined && ` v${result.variantIndex + 1}`}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="text-xs text-gray-500 mt-1">
-                                                                    Position: ({result.position.x}, {result.position.y}) • 
-                                                                    Size: {result.position.width}×{result.position.height}px
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <button
-                                                                onClick={() => toggleWordBoundary(index)}
-                                                                className={`text-xs px-2 py-1 rounded transition-colors ${
-                                                                    wordBoundaries.has(index)
-                                                                        ? 'bg-purple-500 text-white'
-                                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                                                }`}
-                                                                title={wordBoundaries.has(index) ? "Remove word boundary" : "Add word boundary before this symbol"}
-                                                            >
-                                                                {wordBoundaries.has(index) ? '| Word' : '+ Word'}
-                                                            </button>
-                                                            <div className="text-right">
-                                                                <div className={`px-2 py-1 rounded text-sm font-medium ${
-                                                                    result.confidence > 0.7 
-                                                                        ? 'bg-green-100 text-green-800' 
-                                                                        : result.confidence > 0.5
-                                                                            ? 'bg-yellow-100 text-yellow-800'
-                                                                            : 'bg-red-100 text-red-800'
-                                                                }`}>
-                                                                    {(result.confidence * 100).toFixed(0)}%
-                                                                </div>
-                                                                <div className="text-xs text-gray-500 mt-1">
-                                                                    {result.confidence > 0.8 ? 'Excellent' :
-                                                                     result.confidence > 0.6 ? 'Good' :
-                                                                     result.confidence > 0.4 ? 'Fair' : 'Poor'}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<HakliSymbolRecognizer />);
-    </script>
-</body>
-</html>
