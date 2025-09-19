@@ -550,50 +550,25 @@
                     return;
                 }
 
-                // Get the actual displayed image dimensions and position
-                const imgRect = img.getBoundingClientRect();
-                const containerRect = img.parentElement.getBoundingClientRect();
+                // Simple approach: match canvas exactly to image dimensions and position
+                canvas.width = img.offsetWidth;
+                canvas.height = img.offsetHeight;
                 
-                // Calculate the actual displayed size of the image (respecting aspect ratio)
-                const imgAspectRatio = img.naturalWidth / img.naturalHeight;
-                const containerAspectRatio = img.offsetWidth / img.offsetHeight;
-                
-                let displayWidth, displayHeight, offsetX, offsetY;
-                
-                if (imgAspectRatio > containerAspectRatio) {
-                    // Image is wider - constrained by width
-                    displayWidth = img.offsetWidth;
-                    displayHeight = img.offsetWidth / imgAspectRatio;
-                    offsetX = 0;
-                    offsetY = (img.offsetHeight - displayHeight) / 2;
-                } else {
-                    // Image is taller - constrained by height
-                    displayWidth = img.offsetHeight * imgAspectRatio;
-                    displayHeight = img.offsetHeight;
-                    offsetX = (img.offsetWidth - displayWidth) / 2;
-                    offsetY = 0;
-                }
-                
-                // Set canvas size to match the actual image display area
-                canvas.width = displayWidth;
-                canvas.height = displayHeight;
-                
-                canvas.style.width = displayWidth + 'px';
-                canvas.style.height = displayHeight + 'px';
-                canvas.style.left = offsetX + 'px';
-                canvas.style.top = offsetY + 'px';
+                canvas.style.width = img.offsetWidth + 'px';
+                canvas.style.height = img.offsetHeight + 'px';
+                canvas.style.left = '0px';
+                canvas.style.top = '0px';
                 
                 // Calculate scaling factors from natural to display size
-                const scaleX = displayWidth / img.naturalWidth;
-                const scaleY = displayHeight / img.naturalHeight;
+                const scaleX = img.offsetWidth / img.naturalWidth;
+                const scaleY = img.offsetHeight / img.naturalHeight;
                 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
                 console.log('Drawing detection boxes:', {
                     naturalSize: `${img.naturalWidth}x${img.naturalHeight}`,
-                    displaySize: `${displayWidth}x${displayHeight}`,
+                    displaySize: `${img.offsetWidth}x${img.offsetHeight}`,
                     scale: `${scaleX.toFixed(3)}x${scaleY.toFixed(3)}`,
-                    offset: `${offsetX},${offsetY}`,
                     results: recognitionResults.length
                 });
                 
