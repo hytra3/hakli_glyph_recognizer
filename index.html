@@ -535,7 +535,25 @@
                 setIsProcessing(false);
             }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, isolateSymbols, templateMatchIsolated, isOpenCVReady]);
 
-            // FIXED: Detection results drawing with proper alignment
+            // Delete a specific detection result
+            const deleteDetection = useCallback((indexToDelete) => {
+                setRecognitionResults(prev => prev.filter((_, index) => index !== indexToDelete));
+                // Also remove any word boundaries that referenced deleted items
+                setWordBoundaries(prev => {
+                    const newBoundaries = new Set();
+                    prev.forEach(boundaryIndex => {
+                        if (boundaryIndex < indexToDelete) {
+                            newBoundaries.add(boundaryIndex);
+                        } else if (boundaryIndex > indexToDelete) {
+                            newBoundaries.add(boundaryIndex - 1);
+                        }
+                        // Skip the boundary if it equals indexToDelete
+                    });
+                    return newBoundaries;
+                });
+            }, []);
+
+            // FIXED: Detection results drawing with proper alignment and inside labels
             const drawDetectionResults = useCallback(() => {
                 if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) {
                     return;
@@ -615,47 +633,102 @@
                     ctx.strokeRect(x, y, width, height);
                     ctx.setLineDash([]);
                     
-                    // Add label
+                    // Add Arabic character inside the box (centered)
                     const character = symbol.arabic || symbol.name;
-                    const labelText = character.length > 3 ? symbol.name : character;
+                    const labelText = character.length > 3 ? symbol.name.charAt(0) : character;
                     
-                    ctx.font = 'bold 14px Arial';
-                    const textMetrics = ctx.measureText(labelText);
-                    const textWidth = textMetrics.width + 8;
-                    const textHeight = 18;
-                    
-                    // Position label above box (or below if near top)
-                    const labelX = x;
-                    const labelY = y - textHeight > 0 ? y - 2 : y + height + textHeight;
-                    
-                    // Draw label background
+                    ctx.font = 'bold 16px Arial';
                     ctx.fillStyle = color;
-                    ctx.fillRect(labelX, labelY - textHeight + 2, textWidth, textHeight);
-                    
-                    // Draw label text
-                    ctx.fillStyle = 'white';
+                    ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(labelText, labelX + 4, labelY - textHeight/2 + 2);
-                    ctx.textBaseline = 'alphabetic';
                     
-                    // Add confidence indicator
+                    // Center the text in the box
+                    const centerX = x + width / 2;
+                    const centerY = y + height / 2;
+                    
+                    // Draw text with slight background for visibility
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 3;
+                    ctx.strokeText(labelText, centerX, centerY);
+                    ctx.fillText(labelText, centerX, centerY);
+                    
+                    // Add small delete button (X) in top-right corner
+                    const deleteSize = 12;
+                    const deleteX = x + width - deleteSize - 2;
+                    const deleteY = y + 2;
+                    
+                    // Draw delete button background
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+                    ctx.fillRect(deleteX, deleteY, deleteSize, deleteSize);
+                    
+                    // Draw X
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(deleteX + 2, deleteY + 2);
+                    ctx.lineTo(deleteX + deleteSize - 2, deleteY + deleteSize - 2);
+                    ctx.moveTo(deleteX + deleteSize - 2, deleteY + 2);
+                    ctx.lineTo(deleteX + 2, deleteY + deleteSize - 2);
+                    ctx.stroke();
+                    
+                    // Add confidence indicator in bottom-left corner
                     const confidenceText = `${(result.confidence * 100).toFixed(0)}%`;
                     ctx.font = '10px Arial';
-                    const confWidth = ctx.measureText(confidenceText).width + 4;
-                    
-                    const confX = x + width - confWidth;
-                    const confY = y + height - 2;
-                    
-                    if (confY > textHeight) {
-                        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                        ctx.fillRect(confX, confY - 12, confWidth, 14);
-                        ctx.fillStyle = 'white';
-                        ctx.fillText(confidenceText, confX + 2, confY - 2);
-                    }
+                    ctx.textAlign = 'left';
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(x + 2, y + height - 14, ctx.measureText(confidenceText).width + 4, 12);
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(confidenceText, x + 4, y + height - 4);
                 });
                 
+                // Reset text alignment
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'alphabetic';
                 ctx.font = 'bold 14px Arial';
             }, [recognitionResults]);
+
+            // Handle canvas clicks for delete functionality
+            const handleCanvasClick = useCallback((event) => {
+                if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) {
+                    return;
+                }
+                
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const clickX = event.clientX - rect.left;
+                const clickY = event.clientY - rect.top;
+                
+                const img = imageRef.current;
+                const container = imageContainerRef.current;
+                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
+                
+                const offsetX = imgRect.left - containerRect.left;
+                const offsetY = imgRect.top - containerRect.top;
+                const scaleX = img.offsetWidth / img.naturalWidth;
+                const scaleY = img.offsetHeight / img.naturalHeight;
+                
+                // Check if click was on any delete button
+                for (let index = 0; index < recognitionResults.length; index++) {
+                    const result = recognitionResults[index];
+                    const { position } = result;
+                    
+                    const x = (position.x * scaleX) + offsetX;
+                    const y = (position.y * scaleY) + offsetY;
+                    const width = position.width * scaleX;
+                    
+                    const deleteSize = 12;
+                    const deleteX = x + width - deleteSize - 2;
+                    const deleteY = y + 2;
+                    
+                    // Check if click is within delete button bounds
+                    if (clickX >= deleteX && clickX <= deleteX + deleteSize && 
+                        clickY >= deleteY && clickY <= deleteY + deleteSize) {
+                        deleteDetection(index);
+                        return;
+                    }
+                }
+            }, [recognitionResults, deleteDetection]);
 
             // Trigger drawing when results change
             useEffect(() => {
@@ -804,12 +877,13 @@
                                             />
                                             <canvas
                                                 ref={canvasRef}
-                                                className="absolute pointer-events-none"
+                                                className="absolute cursor-pointer"
                                                 style={{ 
                                                     display: recognitionResults.length > 0 ? 'block' : 'none',
                                                     left: '0px',
                                                     top: '0px'
                                                 }}
+                                                onClick={handleCanvasClick}
                                             />
                                         </div>
                                     ) : (
