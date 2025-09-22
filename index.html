@@ -717,6 +717,12 @@
                 setCorrectionTarget(null);
                 setCorrectionSymbolId('');
                 setCorrectionConfidence(0.9);
+                setShowSymbolDropdown(false);
+                
+                // Force a re-render of the results
+                setTimeout(() => {
+                    console.log('Updated recognition results:', recognitionResults.length, 'items');
+                }, 100);
             }, [recognitionResults, equivalenceChart, recordAction]);
 
             const addAsTemplate = useCallback(async (detectionIndex) => {
@@ -1150,8 +1156,13 @@
 
                 let bestMatch = null;
                 let matchAttempts = 0;
+                
+                console.log(`Manual selection testing ${equivalenceChart?.symbols?.length || 0} symbols...`);
 
-                // Run template matching on manual selection
+                // Run template matching on manual selection with lower threshold
+                const manualThreshold = processingSettings.detectionSensitivity * 0.5; // Lower threshold for manual selections
+                console.log(`Using manual threshold: ${manualThreshold}`);
+
                 for (const symbol of equivalenceChart.symbols) {
                     const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
                     if (primaryImg) {
@@ -1159,8 +1170,10 @@
                         const match = templateMatchIsolated(manualSymbol, primaryImg);
                         const confidence = match ? match.confidence : 0;
                         
-                        if (match && confidence > processingSettings.detectionSensitivity) {
-                            console.log(`Manual: ${symbol.name} (primary): ${confidence.toFixed(4)}`);
+                        console.log(`Manual test: ${symbol.name} (primary): ${confidence.toFixed(4)} vs threshold ${manualThreshold.toFixed(3)}`);
+                        
+                        if (match && confidence > manualThreshold) {
+                            console.log(`Manual match found: ${symbol.name} (primary): ${confidence.toFixed(4)} ✓`);
                             if (!bestMatch || confidence > bestMatch.confidence) {
                                 bestMatch = {
                                     ...match,
@@ -1180,10 +1193,12 @@
                                 matchAttempts++;
                                 const match = templateMatchIsolated(manualSymbol, variantImg);
                                 const confidence = match ? match.confidence : 0;
-                                const threshold = processingSettings.detectionSensitivity * 0.9;
+                                const variantThreshold = manualThreshold * 0.9;
                                 
-                                if (match && confidence > threshold) {
-                                    console.log(`Manual: ${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)}`);
+                                console.log(`Manual test: ${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)} vs threshold ${variantThreshold.toFixed(3)}`);
+                                
+                                if (match && confidence > variantThreshold) {
+                                    console.log(`Manual variant match found: ${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)} ✓`);
                                     const weightedConfidence = confidence * 0.9;
                                     if (!bestMatch || weightedConfidence > bestMatch.confidence) {
                                         bestMatch = {
@@ -1200,7 +1215,11 @@
                     }
                 }
 
+                console.log(`Manual selection: ${matchAttempts} template tests completed`);
+
                 if (bestMatch) {
+                    console.log(`Best manual match: ${bestMatch.symbol.name} with confidence ${bestMatch.confidence.toFixed(4)}`);
+                    
                     // Add manual detection to results
                     const manualDetection = {
                         symbol: bestMatch.symbol,
@@ -1232,9 +1251,12 @@
 
                     setRecognitionResults(prev => [...prev, manualDetection]);
                     console.log(`Manual detection added: ${bestMatch.symbol.name} (${(bestMatch.confidence * 100).toFixed(0)}%)`);
+                    
+                    alert(`Manual selection successful: ${bestMatch.symbol.name} (${(bestMatch.confidence * 100).toFixed(0)}% confidence)`);
                 } else {
                     console.log('Manual selection: No match found above threshold');
-                    // Could optionally add an "unknown" detection here
+                    console.log(`Threshold was: ${manualThreshold}, best confidence found: ${/* need to track this */}`);
+                    alert('Manual selection: No symbol match found above threshold. Try adjusting the sensitivity or selecting a clearer region.');
                 }
 
                 // Reset manual selection mode
