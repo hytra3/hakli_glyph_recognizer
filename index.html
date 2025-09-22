@@ -545,6 +545,10 @@
             const [validations, setValidations] = useState({});
             const [showCorrectionModal, setShowCorrectionModal] = useState(false);
             const [correctionTarget, setCorrectionTarget] = useState(null);
+            const [correctionSymbolId, setCorrectionSymbolId] = useState('');
+            const [correctionConfidence, setCorrectionConfidence] = useState(0.9);
+            const [actionHistory, setActionHistory] = useState([]);
+            const [maxHistorySize] = useState(20);
 
             // Toggle detection active state
             const toggleDetectionActive = useCallback((index) => {
@@ -627,6 +631,12 @@
 
             // Validation and correction functions
             const validateDetection = useCallback((detectionIndex, isCorrect) => {
+                recordAction('validation', {
+                    detectionIndex: detectionIndex,
+                    isCorrect: isCorrect,
+                    detectionData: recognitionResults[detectionIndex]
+                });
+
                 setValidations(prev => ({
                     ...prev,
                     [detectionIndex]: {
@@ -637,21 +647,40 @@
                 }));
                 
                 console.log(`Detection ${detectionIndex + 1} marked as ${isCorrect ? 'correct' : 'incorrect'}`);
-            }, [recognitionResults]);
+            }, [recognitionResults, recordAction]);
 
             const openCorrectionModal = useCallback((detectionIndex) => {
                 setCorrectionTarget(detectionIndex);
+                setCorrectionSymbolId('');
+                setCorrectionConfidence(0.9);
                 setShowCorrectionModal(true);
             }, []);
 
-            const submitCorrection = useCallback((detectionIndex, correctSymbolId, confidence = 1.0) => {
+            const submitCorrection = useCallback((detectionIndex, correctSymbolId, confidence = 0.9) => {
+                console.log('Submitting correction:', { detectionIndex, correctSymbolId, confidence });
+                
                 const correctSymbol = equivalenceChart?.symbols.find(s => s.id === correctSymbolId);
-                if (!correctSymbol) return;
+                if (!correctSymbol) {
+                    console.error('Correct symbol not found:', correctSymbolId);
+                    return;
+                }
+
+                console.log('Found correct symbol:', correctSymbol);
+
+                const originalDetection = recognitionResults[detectionIndex];
+
+                // Record action for undo
+                recordAction('correction', {
+                    detectionIndex: detectionIndex,
+                    originalDetection: originalDetection,
+                    correctedSymbol: correctSymbol,
+                    userConfidence: confidence
+                });
 
                 setCorrections(prev => ({
                     ...prev,
                     [detectionIndex]: {
-                        originalDetection: recognitionResults[detectionIndex],
+                        originalDetection: originalDetection,
                         correctedSymbol: correctSymbol,
                         userConfidence: confidence,
                         timestamp: new Date().toISOString()
@@ -681,7 +710,9 @@
                 console.log(`Detection ${detectionIndex + 1} corrected to: ${correctSymbol.name}`);
                 setShowCorrectionModal(false);
                 setCorrectionTarget(null);
-            }, [recognitionResults, equivalenceChart]);
+                setCorrectionSymbolId('');
+                setCorrectionConfidence(0.9);
+            }, [recognitionResults, equivalenceChart, recordAction]);
 
             const addAsTemplate = useCallback(async (detectionIndex) => {
                 const detection = recognitionResults[detectionIndex];
@@ -770,8 +801,112 @@
                 console.log('Learning data exported:', learningData);
             }, [corrections, validations]);
 
+            // Action history and undo system
+            const recordAction = useCallback((actionType, actionData) => {
+                const action = {
+                    type: actionType,
+                    data: actionData,
+                    timestamp: new Date().toISOString(),
+                    id: Date.now()
+                };
+
+                setActionHistory(prev => {
+                    const newHistory = [...prev, action];
+                    // Keep only the last maxHistorySize actions
+                    return newHistory.slice(-maxHistorySize);
+                });
+
+                console.log('Action recorded:', action);
+            }, [maxHistorySize]);
+
+            const undoLastAction = useCallback(() => {
+                if (actionHistory.length === 0) return;
+
+                const lastAction = actionHistory[actionHistory.length - 1];
+                console.log('Undoing action:', lastAction);
+
+                switch (lastAction.type) {
+                    case 'delete_detection':
+                        // Restore deleted detection
+                        setRecognitionResults(prev => {
+                            const newResults = [...prev];
+                            newResults.splice(lastAction.data.index, 0, lastAction.data.detection);
+                            return newResults;
+                        });
+                        break;
+
+                    case 'combine_detections':
+                        // Restore original detections, remove combined one
+                        setRecognitionResults(prev => {
+                            const withoutCombined = prev.filter((_, index) => index !== lastAction.data.combinedIndex);
+                            return [...withoutCombined, ...lastAction.data.originalDetections];
+                        });
+                        break;
+
+                    case 'manual_detection':
+                        // Remove manual detection
+                        setRecognitionResults(prev => prev.filter((_, index) => index !== lastAction.data.detectionIndex));
+                        break;
+
+                    case 'correction':
+                        // Restore original detection
+                        setRecognitionResults(prev => 
+                            prev.map((result, index) => {
+                                if (index === lastAction.data.detectionIndex) {
+                                    return lastAction.data.originalDetection;
+                                }
+                                return result;
+                            })
+                        );
+                        // Remove from corrections
+                        setCorrections(prev => {
+                            const newCorrections = { ...prev };
+                            delete newCorrections[lastAction.data.detectionIndex];
+                            return newCorrections;
+                        });
+                        break;
+
+                    case 'validation':
+                        // Remove validation
+                        setValidations(prev => {
+                            const newValidations = { ...prev };
+                            delete newValidations[lastAction.data.detectionIndex];
+                            return newValidations;
+                        });
+                        break;
+
+                    case 'reanalysis':
+                        // Restore original combined detection
+                        setRecognitionResults(prev => 
+                            prev.map((result, index) => {
+                                if (index === lastAction.data.detectionIndex) {
+                                    return lastAction.data.originalDetection;
+                                }
+                                return result;
+                            })
+                        );
+                        break;
+
+                    default:
+                        console.warn('Unknown action type for undo:', lastAction.type);
+                        return;
+                }
+
+                // Remove the action from history
+                setActionHistory(prev => prev.slice(0, -1));
+                console.log('Action undone:', lastAction.type);
+            }, [actionHistory]);
+
             // Delete a specific detection result
             const deleteDetection = useCallback((indexToDelete) => {
+                const detectionToDelete = recognitionResults[indexToDelete];
+                
+                // Record action for undo
+                recordAction('delete_detection', {
+                    index: indexToDelete,
+                    detection: detectionToDelete
+                });
+
                 setRecognitionResults(prev => prev.filter((_, index) => index !== indexToDelete));
                 
                 // Remove from active selections
@@ -799,7 +934,7 @@
                     });
                     return newBoundaries;
                 });
-            }, []);
+            }, [recognitionResults, recordAction]);
 
             // Re-analyze a combined symbol using template matching
             const reanalyzeCombinedSymbol = useCallback(async (combinedIndex) => {
@@ -902,8 +1037,10 @@
                 const activeIndices = Array.from(activeDetections).sort((a, b) => a - b);
                 if (activeIndices.length < 2) return;
 
-                // Find bounding box that encompasses all selected detections
+                // Store original detections for undo
                 const selectedResults = activeIndices.map(i => recognitionResults[i]);
+
+                // Find bounding box that encompasses all selected detections
                 const minX = Math.min(...selectedResults.map(r => r.position.x));
                 const minY = Math.min(...selectedResults.map(r => r.position.y));
                 const maxX = Math.max(...selectedResults.map(r => r.position.x + r.position.width));
@@ -929,16 +1066,24 @@
                 };
 
                 // Remove individual detections and add combined one
-                setRecognitionResults(prev => {
-                    const newResults = prev.filter((_, index) => !activeIndices.includes(index));
-                    newResults.push(combinedResult);
-                    return newResults;
+                const newResults = recognitionResults.filter((_, index) => !activeIndices.includes(index));
+                const combinedIndex = newResults.length; // Index where combined detection will be added
+                newResults.push(combinedResult);
+
+                // Record action for undo
+                recordAction('combine_detections', {
+                    originalDetections: selectedResults,
+                    combinedResult: combinedResult,
+                    combinedIndex: combinedIndex,
+                    originalIndices: activeIndices
                 });
+
+                setRecognitionResults(newResults);
 
                 // Clear active selections
                 setActiveDetections(new Set());
                 setCombineMode(false);
-            }, [activeDetections, recognitionResults]);
+            }, [activeDetections, recognitionResults, recordAction]);
 
             // Manual selection functions
             const startManualSelection = useCallback(() => {
@@ -1071,6 +1216,15 @@
                         variantIndex: bestMatch.variantIndex
                     };
 
+                    const newIndex = recognitionResults.length;
+
+                    // Record action for undo
+                    recordAction('manual_detection', {
+                        detectionIndex: newIndex,
+                        detection: manualDetection,
+                        selectionBounds: { startPoint, endPoint }
+                    });
+
                     setRecognitionResults(prev => [...prev, manualDetection]);
                     console.log(`Manual detection added: ${bestMatch.symbol.name} (${(bestMatch.confidence * 100).toFixed(0)}%)`);
                 } else {
@@ -1083,7 +1237,7 @@
                 setIsDrawing(false);
                 setDrawStart(null);
                 setDrawCurrent(null);
-            }, [equivalenceChart, loadedSymbolImages, processingSettings, templateMatchIsolated]);
+            }, [equivalenceChart, loadedSymbolImages, processingSettings, templateMatchIsolated, recognitionResults, recordAction]);
 
             // ENHANCED: Detection results drawing with active selection system
             const drawDetectionResults = useCallback(() => {
@@ -1822,9 +1976,9 @@
                                         Select correct symbol:
                                     </label>
                                     <select 
-                                        id="correctionSelect"
+                                        value={correctionSymbolId}
+                                        onChange={(e) => setCorrectionSymbolId(e.target.value)}
                                         className="w-full border border-gray-300 rounded px-3 py-2"
-                                        defaultValue=""
                                     >
                                         <option value="">Choose correct symbol...</option>
                                         {equivalenceChart?.symbols.map(symbol => (
@@ -1840,33 +1994,29 @@
                                     </label>
                                     <input
                                         type="range"
-                                        id="correctionConfidence"
                                         min="0.5"
                                         max="1.0"
                                         step="0.1"
-                                        defaultValue="0.9"
+                                        value={correctionConfidence}
+                                        onChange={(e) => setCorrectionConfidence(parseFloat(e.target.value))}
                                         className="w-full"
-                                        onChange={(e) => {
-                                            const valueElement = document.getElementById('confidenceValue');
-                                            if (valueElement) {
-                                                valueElement.textContent = Math.round(e.target.value * 100) + '%';
-                                            }
-                                        }}
                                     />
                                     <div className="text-xs text-gray-500 mt-1">
-                                        Current: <span id="confidenceValue">90%</span>
+                                        Current: {Math.round(correctionConfidence * 100)}%
                                     </div>
                                 </div>
                                 <div className="flex gap-3">
                                     <button
                                         onClick={() => {
-                                            const select = document.getElementById('correctionSelect');
-                                            const confidence = document.getElementById('correctionConfidence');
-                                            if (select.value) {
-                                                submitCorrection(correctionTarget, select.value, parseFloat(confidence.value));
+                                            console.log('Submit button clicked:', { correctionSymbolId, correctionConfidence });
+                                            if (correctionSymbolId) {
+                                                submitCorrection(correctionTarget, correctionSymbolId, correctionConfidence);
+                                            } else {
+                                                alert('Please select a correct symbol');
                                             }
                                         }}
                                         className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                        disabled={!correctionSymbolId}
                                     >
                                         Submit Correction
                                     </button>
@@ -1874,6 +2024,8 @@
                                         onClick={() => {
                                             setShowCorrectionModal(false);
                                             setCorrectionTarget(null);
+                                            setCorrectionSymbolId('');
+                                            setCorrectionConfidence(0.9);
                                         }}
                                         className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
                                     >
