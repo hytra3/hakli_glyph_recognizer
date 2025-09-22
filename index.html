@@ -555,6 +555,72 @@
                 });
             }, []);
 
+            // Clear all active selections
+            const clearActiveSelections = useCallback(() => {
+                setActiveDetections(new Set());
+                setCombineMode(false);
+            }, []);
+
+            // Mouse event handlers for manual selection
+            const handleMouseDown = useCallback((event) => {
+                if (!manualSelectionMode) return;
+                
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const startPoint = {
+                    x: event.clientX - rect.left,
+                    y: event.clientY - rect.top
+                };
+                
+                setIsDrawing(true);
+                setDrawStart(startPoint);
+                setDrawCurrent(startPoint);
+                event.preventDefault();
+            }, [manualSelectionMode]);
+
+            const handleMouseMove = useCallback((event) => {
+                if (!manualSelectionMode || !isDrawing || !drawStart) return;
+                
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const currentPoint = {
+                    x: event.clientX - rect.left,
+                    y: event.clientY - rect.top
+                };
+                
+                setDrawCurrent(currentPoint);
+                event.preventDefault();
+            }, [manualSelectionMode, isDrawing, drawStart]);
+
+            const handleMouseUp = useCallback((event) => {
+                if (!manualSelectionMode || !isDrawing || !drawStart) return;
+                
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const endPoint = {
+                    x: event.clientX - rect.left,
+                    y: event.clientY - rect.top
+                };
+                
+                // Only create detection if we've dragged a reasonable distance
+                const distance = Math.sqrt(
+                    Math.pow(endPoint.x - drawStart.x, 2) + 
+                    Math.pow(endPoint.y - drawStart.y, 2)
+                );
+                
+                if (distance > 10) {
+                    createManualDetection(drawStart, endPoint);
+                } else {
+                    // Reset if drag was too small
+                    setManualSelectionMode(false);
+                    setIsDrawing(false);
+                    setDrawStart(null);
+                    setDrawCurrent(null);
+                }
+                
+                event.preventDefault();
+            }, [manualSelectionMode, isDrawing, drawStart, createManualDetection]);
+
             // Delete a specific detection result
             const deleteDetection = useCallback((indexToDelete) => {
                 setRecognitionResults(prev => prev.filter((_, index) => index !== indexToDelete));
