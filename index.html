@@ -535,9 +535,39 @@
                 setIsProcessing(false);
             }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, isolateSymbols, templateMatchIsolated, isOpenCVReady]);
 
+            const [activeDetections, setActiveDetections] = useState(new Set());
+            const [combineMode, setCombineMode] = useState(false);
+
+            // Toggle detection active state
+            const toggleDetectionActive = useCallback((index) => {
+                setActiveDetections(prev => {
+                    const newActive = new Set(prev);
+                    if (newActive.has(index)) {
+                        newActive.delete(index);
+                    } else {
+                        newActive.add(index);
+                    }
+                    return newActive;
+                });
+            }, []);
+
             // Delete a specific detection result
             const deleteDetection = useCallback((indexToDelete) => {
                 setRecognitionResults(prev => prev.filter((_, index) => index !== indexToDelete));
+                
+                // Remove from active selections
+                setActiveDetections(prev => {
+                    const newActive = new Set();
+                    prev.forEach(activeIndex => {
+                        if (activeIndex < indexToDelete) {
+                            newActive.add(activeIndex);
+                        } else if (activeIndex > indexToDelete) {
+                            newActive.add(activeIndex - 1);
+                        }
+                    });
+                    return newActive;
+                });
+                
                 // Also remove any word boundaries that referenced deleted items
                 setWordBoundaries(prev => {
                     const newBoundaries = new Set();
@@ -547,13 +577,61 @@
                         } else if (boundaryIndex > indexToDelete) {
                             newBoundaries.add(boundaryIndex - 1);
                         }
-                        // Skip the boundary if it equals indexToDelete
                     });
                     return newBoundaries;
                 });
             }, []);
 
-            // FIXED: Detection results drawing with proper alignment and inside labels
+            // Combine selected detections
+            const combineDetections = useCallback(() => {
+                const activeIndices = Array.from(activeDetections).sort((a, b) => a - b);
+                if (activeIndices.length < 2) return;
+
+                // Find bounding box that encompasses all selected detections
+                const selectedResults = activeIndices.map(i => recognitionResults[i]);
+                const minX = Math.min(...selectedResults.map(r => r.position.x));
+                const minY = Math.min(...selectedResults.map(r => r.position.y));
+                const maxX = Math.max(...selectedResults.map(r => r.position.x + r.position.width));
+                const maxY = Math.max(...selectedResults.map(r => r.position.y + r.position.height));
+
+                // Create combined detection using the first selected as base
+                const baseResult = selectedResults[0];
+                const combinedResult = {
+                    ...baseResult,
+                    position: {
+                        x: minX,
+                        y: minY,
+                        width: maxX - minX,
+                        height: maxY - minY
+                    },
+                    symbol: {
+                        ...baseResult.symbol,
+                        name: selectedResults.map(r => r.symbol.name).join('+'),
+                        arabic: selectedResults.map(r => r.symbol.arabic || r.symbol.name).join('')
+                    },
+                    confidence: selectedResults.reduce((sum, r) => sum + r.confidence, 0) / selectedResults.length,
+                    matchType: 'combined'
+                };
+
+                // Remove individual detections and add combined one
+                setRecognitionResults(prev => {
+                    const newResults = prev.filter((_, index) => !activeIndices.includes(index));
+                    newResults.push(combinedResult);
+                    return newResults;
+                });
+
+                // Clear active selections
+                setActiveDetections(new Set());
+                setCombineMode(false);
+            }, [activeDetections, recognitionResults]);
+
+            // Clear all active selections
+            const clearActiveSelections = useCallback(() => {
+                setActiveDetections(new Set());
+                setCombineMode(false);
+            }, []);
+
+            // ENHANCED: Detection results drawing with active selection system
             const drawDetectionResults = useCallback(() => {
                 if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) {
                     return;
@@ -594,17 +672,19 @@
                 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
-                console.log('Drawing detection boxes with corrected alignment:', {
+                console.log('Drawing detection boxes with active selection system:', {
                     imageNatural: `${img.naturalWidth}x${img.naturalHeight}`,
                     imageDisplay: `${img.offsetWidth}x${img.offsetHeight}`,
                     containerSize: `${container.offsetWidth}x${container.offsetHeight}`,
                     imageOffset: `${offsetX.toFixed(1)}, ${offsetY.toFixed(1)}`,
                     scale: `${scaleX.toFixed(3)}x${scaleY.toFixed(3)}`,
-                    results: recognitionResults.length
+                    results: recognitionResults.length,
+                    active: activeDetections.size
                 });
                 
                 recognitionResults.forEach((result, index) => {
                     const { position, matchType, symbol } = result;
+                    const isActive = activeDetections.has(index);
                     
                     // Apply scaling and offset transformations
                     const x = (position.x * scaleX) + offsetX;
@@ -612,26 +692,39 @@
                     const width = position.width * scaleX;
                     const height = position.height * scaleY;
                     
-                    console.log(`Symbol ${index + 1} (${result.symbol.name}):`, {
-                        originalPos: `${position.x},${position.y} ${position.width}x${position.height}`,
-                        scaledPos: `${(position.x * scaleX).toFixed(1)},${(position.y * scaleY).toFixed(1)} ${(position.width * scaleX).toFixed(1)}x${(position.height * scaleY).toFixed(1)}`,
-                        finalPos: `${x.toFixed(1)},${y.toFixed(1)} ${width.toFixed(1)}x${height.toFixed(1)}`
-                    });
-                    
-                    // Style based on match type
+                    // Style based on match type and active state
                     let color = '#10b981'; // green for primary
+                    let lineWidth = 2;
+                    
                     if (matchType === 'variant') {
-                        ctx.setLineDash([4, 4]); // dashed for variants
+                        ctx.setLineDash([4, 4]);
                         color = '#8b5cf6'; // purple for variants
+                    } else if (matchType === 'combined') {
+                        color = '#f59e0b'; // amber for combined
                     } else {
                         ctx.setLineDash([]);
                     }
                     
-                    // Draw the bounding box
+                    // Active state styling
+                    if (isActive) {
+                        lineWidth = 3;
+                        // Add pulsing effect with double border
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 5;
+                        ctx.strokeRect(x - 1, y - 1, width + 2, height + 2);
+                    }
+                    
+                    // Draw the main bounding box
                     ctx.strokeStyle = color;
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = lineWidth;
                     ctx.strokeRect(x, y, width, height);
                     ctx.setLineDash([]);
+                    
+                    // Add semi-transparent fill for active boxes
+                    if (isActive) {
+                        ctx.fillStyle = color + '20';
+                        ctx.fillRect(x, y, width, height);
+                    }
                     
                     // Add Arabic character inside the box (centered)
                     const character = symbol.arabic || symbol.name;
@@ -652,31 +745,44 @@
                     ctx.strokeText(labelText, centerX, centerY);
                     ctx.fillText(labelText, centerX, centerY);
                     
-                    // Add small delete button (X) in top-right corner
-                    const deleteSize = 12;
-                    const deleteX = x + width - deleteSize - 2;
-                    const deleteY = y + 2;
-                    
-                    // Draw delete button background
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
-                    ctx.fillRect(deleteX, deleteY, deleteSize, deleteSize);
-                    
-                    // Draw X
-                    ctx.strokeStyle = 'white';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(deleteX + 2, deleteY + 2);
-                    ctx.lineTo(deleteX + deleteSize - 2, deleteY + deleteSize - 2);
-                    ctx.moveTo(deleteX + deleteSize - 2, deleteY + 2);
-                    ctx.lineTo(deleteX + 2, deleteY + deleteSize - 2);
-                    ctx.stroke();
+                    // Show action buttons only for active boxes
+                    if (isActive) {
+                        const buttonSize = 16;
+                        const buttonSpacing = 18;
+                        let buttonX = x + width + 5;
+                        const buttonY = y;
+                        
+                        // Delete button
+                        ctx.fillStyle = 'rgba(239, 68, 68, 0.9)'; // red
+                        ctx.fillRect(buttonX, buttonY, buttonSize, buttonSize);
+                        ctx.strokeStyle = 'white';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(buttonX + 3, buttonY + 3);
+                        ctx.lineTo(buttonX + buttonSize - 3, buttonY + buttonSize - 3);
+                        ctx.moveTo(buttonX + buttonSize - 3, buttonY + 3);
+                        ctx.lineTo(buttonX + 3, buttonY + buttonSize - 3);
+                        ctx.stroke();
+                        
+                        // Combine button (only show if multiple active or in combine mode)
+                        if (activeDetections.size > 1 || combineMode) {
+                            buttonX += buttonSpacing;
+                            ctx.fillStyle = 'rgba(59, 130, 246, 0.9)'; // blue
+                            ctx.fillRect(buttonX, buttonY, buttonSize, buttonSize);
+                            ctx.fillStyle = 'white';
+                            ctx.font = 'bold 12px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('+', buttonX + buttonSize/2, buttonY + buttonSize/2 + 1);
+                        }
+                    }
                     
                     // Add confidence indicator in bottom-left corner
                     const confidenceText = `${(result.confidence * 100).toFixed(0)}%`;
                     ctx.font = '10px Arial';
                     ctx.textAlign = 'left';
                     ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                    ctx.fillRect(x + 2, y + height - 14, ctx.measureText(confidenceText).width + 4, 12);
+                    const confTextWidth = ctx.measureText(confidenceText).width + 4;
+                    ctx.fillRect(x + 2, y + height - 14, confTextWidth, 12);
                     ctx.fillStyle = 'white';
                     ctx.fillText(confidenceText, x + 4, y + height - 4);
                 });
@@ -685,9 +791,9 @@
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'alphabetic';
                 ctx.font = 'bold 14px Arial';
-            }, [recognitionResults]);
+            }, [recognitionResults, activeDetections, combineMode]);
 
-            // Handle canvas clicks for delete functionality
+            // Handle canvas clicks for active selection and actions
             const handleCanvasClick = useCallback((event) => {
                 if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) {
                     return;
@@ -708,8 +814,10 @@
                 const scaleX = img.offsetWidth / img.naturalWidth;
                 const scaleY = img.offsetHeight / img.naturalHeight;
                 
-                // Check if click was on any delete button
+                // Check clicks on action buttons first (for active detections)
                 for (let index = 0; index < recognitionResults.length; index++) {
+                    if (!activeDetections.has(index)) continue;
+                    
                     const result = recognitionResults[index];
                     const { position } = result;
                     
@@ -717,18 +825,52 @@
                     const y = (position.y * scaleY) + offsetY;
                     const width = position.width * scaleX;
                     
-                    const deleteSize = 12;
-                    const deleteX = x + width - deleteSize - 2;
-                    const deleteY = y + 2;
+                    const buttonSize = 16;
+                    const buttonSpacing = 18;
+                    let buttonX = x + width + 5;
+                    const buttonY = y;
                     
-                    // Check if click is within delete button bounds
-                    if (clickX >= deleteX && clickX <= deleteX + deleteSize && 
-                        clickY >= deleteY && clickY <= deleteY + deleteSize) {
+                    // Delete button
+                    if (clickX >= buttonX && clickX <= buttonX + buttonSize && 
+                        clickY >= buttonY && clickY <= buttonY + buttonSize) {
                         deleteDetection(index);
                         return;
                     }
+                    
+                    // Combine button (if available)
+                    if (activeDetections.size > 1 || combineMode) {
+                        buttonX += buttonSpacing;
+                        if (clickX >= buttonX && clickX <= buttonX + buttonSize && 
+                            clickY >= buttonY && clickY <= buttonY + buttonSize) {
+                            if (activeDetections.size > 1) {
+                                combineDetections();
+                            }
+                            return;
+                        }
+                    }
                 }
-            }, [recognitionResults, deleteDetection]);
+                
+                // Check clicks on detection boxes to toggle active state
+                for (let index = 0; index < recognitionResults.length; index++) {
+                    const result = recognitionResults[index];
+                    const { position } = result;
+                    
+                    const x = (position.x * scaleX) + offsetX;
+                    const y = (position.y * scaleY) + offsetY;
+                    const width = position.width * scaleX;
+                    const height = position.height * scaleY;
+                    
+                    // Check if click is within detection box bounds
+                    if (clickX >= x && clickX <= x + width && 
+                        clickY >= y && clickY <= y + height) {
+                        toggleDetectionActive(index);
+                        return;
+                    }
+                }
+                
+                // Click outside any detection - clear selections
+                clearActiveSelections();
+            }, [recognitionResults, activeDetections, combineMode, deleteDetection, combineDetections, toggleDetectionActive, clearActiveSelections]);
 
             // Trigger drawing when results change
             useEffect(() => {
