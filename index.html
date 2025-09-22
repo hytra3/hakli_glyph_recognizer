@@ -1063,8 +1063,10 @@
                 ctx.font = 'bold 14px Arial';
             }, [recognitionResults, activeDetections, combineMode, manualSelectionMode, isDrawing, drawStart, drawCurrent]);
 
-            // Handle canvas clicks for active selection and actions
+            // Handle canvas clicks for active selection and actions (only when NOT in manual mode)
             const handleCanvasClick = useCallback((event) => {
+                if (manualSelectionMode) return; // Don't handle clicks in manual mode
+                
                 if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) {
                     return;
                 }
@@ -1150,15 +1152,22 @@
                 
                 // Click outside any detection - clear selections
                 clearActiveSelections();
-            }, [recognitionResults, activeDetections, combineMode, deleteDetection, combineDetections, toggleDetectionActive, clearActiveSelections, reanalyzeCombinedSymbol]);
+            }, [manualSelectionMode, recognitionResults, activeDetections, combineMode, deleteDetection, combineDetections, toggleDetectionActive, clearActiveSelections, reanalyzeCombinedSymbol]);
 
-            // Trigger drawing when results change
+            // Trigger drawing when results change or manual mode changes
             useEffect(() => {
-                if (uploadedImage && recognitionResults.length > 0) {
+                if (uploadedImage && (recognitionResults.length > 0 || manualSelectionMode)) {
                     const timer = setTimeout(drawDetectionResults, 300);
                     return () => clearTimeout(timer);
                 }
-            }, [uploadedImage, recognitionResults, drawDetectionResults]);
+            }, [uploadedImage, recognitionResults, drawDetectionResults, manualSelectionMode]);
+
+            // Redraw during manual selection
+            useEffect(() => {
+                if (manualSelectionMode && (isDrawing || drawStart || drawCurrent)) {
+                    drawDetectionResults();
+                }
+            }, [manualSelectionMode, isDrawing, drawStart, drawCurrent, drawDetectionResults]);
 
             // Redraw on window resize
             useEffect(() => {
@@ -1336,10 +1345,10 @@
                                                     left: '0px',
                                                     top: '0px'
                                                 }}
-                                                onClick={manualSelectionMode ? undefined : handleCanvasClick}
-                                                onMouseDown={handleMouseDown}
-                                                onMouseMove={handleMouseMove}
-                                                onMouseUp={handleMouseUp}
+                                                onClick={!manualSelectionMode ? handleCanvasClick : undefined}
+                                                onMouseDown={manualSelectionMode ? handleMouseDown : undefined}
+                                                onMouseMove={manualSelectionMode ? handleMouseMove : undefined}
+                                                onMouseUp={manualSelectionMode ? handleMouseUp : undefined}
                                             />
                                         </div>
                                     ) : (
