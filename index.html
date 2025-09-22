@@ -541,6 +541,10 @@
             const [drawStart, setDrawStart] = useState(null);
             const [drawCurrent, setDrawCurrent] = useState(null);
             const [manualSelectionMode, setManualSelectionMode] = useState(false);
+            const [corrections, setCorrections] = useState({});
+            const [validations, setValidations] = useState({});
+            const [showCorrectionModal, setShowCorrectionModal] = useState(false);
+            const [correctionTarget, setCorrectionTarget] = useState(null);
 
             // Toggle detection active state
             const toggleDetectionActive = useCallback((index) => {
@@ -620,6 +624,151 @@
                 
                 event.preventDefault();
             }, [manualSelectionMode, isDrawing, drawStart, createManualDetection]);
+
+            // Validation and correction functions
+            const validateDetection = useCallback((detectionIndex, isCorrect) => {
+                setValidations(prev => ({
+                    ...prev,
+                    [detectionIndex]: {
+                        isCorrect: isCorrect,
+                        timestamp: new Date().toISOString(),
+                        detectionData: recognitionResults[detectionIndex]
+                    }
+                }));
+                
+                console.log(`Detection ${detectionIndex + 1} marked as ${isCorrect ? 'correct' : 'incorrect'}`);
+            }, [recognitionResults]);
+
+            const openCorrectionModal = useCallback((detectionIndex) => {
+                setCorrectionTarget(detectionIndex);
+                setShowCorrectionModal(true);
+            }, []);
+
+            const submitCorrection = useCallback((detectionIndex, correctSymbolId, confidence = 1.0) => {
+                const correctSymbol = equivalenceChart?.symbols.find(s => s.id === correctSymbolId);
+                if (!correctSymbol) return;
+
+                setCorrections(prev => ({
+                    ...prev,
+                    [detectionIndex]: {
+                        originalDetection: recognitionResults[detectionIndex],
+                        correctedSymbol: correctSymbol,
+                        userConfidence: confidence,
+                        timestamp: new Date().toISOString()
+                    }
+                }));
+
+                // Update the detection result with corrected symbol
+                setRecognitionResults(prev => 
+                    prev.map((result, index) => {
+                        if (index === detectionIndex) {
+                            return {
+                                ...result,
+                                symbol: correctSymbol,
+                                confidence: confidence,
+                                matchType: 'corrected',
+                                matchDetails: {
+                                    ...result.matchDetails,
+                                    userCorrected: true,
+                                    originalSymbol: result.symbol
+                                }
+                            };
+                        }
+                        return result;
+                    })
+                );
+
+                console.log(`Detection ${detectionIndex + 1} corrected to: ${correctSymbol.name}`);
+                setShowCorrectionModal(false);
+                setCorrectionTarget(null);
+            }, [recognitionResults, equivalenceChart]);
+
+            const addAsTemplate = useCallback(async (detectionIndex) => {
+                const detection = recognitionResults[detectionIndex];
+                if (!detection || !imageRef.current) return;
+
+                // Extract the detection region as a new template image
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = detection.position.width;
+                canvas.height = detection.position.height;
+                
+                ctx.drawImage(
+                    imageRef.current,
+                    detection.position.x, detection.position.y, detection.position.width, detection.position.height,
+                    0, 0, detection.position.width, detection.position.height
+                );
+
+                const templateDataUrl = canvas.toDataURL();
+                console.log(`Template created for ${detection.symbol.name}:`, templateDataUrl.substring(0, 50) + '...');
+
+                // Here you would normally upload to your GitHub repository
+                // For now, we'll store locally and show in console
+                const templateData = {
+                    symbolId: detection.symbol.id,
+                    symbolName: detection.symbol.name,
+                    imageData: templateDataUrl,
+                    source: 'user_validation',
+                    timestamp: new Date().toISOString(),
+                    position: detection.position,
+                    originalConfidence: detection.confidence
+                };
+
+                // Add to validations as a template contribution
+                setValidations(prev => ({
+                    ...prev,
+                    [`template_${detectionIndex}`]: {
+                        type: 'template_contribution',
+                        templateData: templateData,
+                        timestamp: new Date().toISOString()
+                    }
+                }));
+
+                console.log('Template added to learning database:', templateData);
+                alert(`Template for "${detection.symbol.name}" added to learning database!`);
+            }, [recognitionResults]);
+
+            const exportLearningData = useCallback(() => {
+                const learningData = {
+                    corrections: corrections,
+                    validations: validations,
+                    exportDate: new Date().toISOString(),
+                    totalCorrections: Object.keys(corrections).length,
+                    totalValidations: Object.keys(validations).length,
+                    symbolStats: {}
+                };
+
+                // Calculate statistics
+                Object.values(corrections).forEach(correction => {
+                    const symbolName = correction.correctedSymbol.name;
+                    if (!learningData.symbolStats[symbolName]) {
+                        learningData.symbolStats[symbolName] = { corrections: 0, validations: 0 };
+                    }
+                    learningData.symbolStats[symbolName].corrections++;
+                });
+
+                Object.values(validations).forEach(validation => {
+                    if (validation.detectionData) {
+                        const symbolName = validation.detectionData.symbol.name;
+                        if (!learningData.symbolStats[symbolName]) {
+                            learningData.symbolStats[symbolName] = { corrections: 0, validations: 0 };
+                        }
+                        learningData.symbolStats[symbolName].validations++;
+                    }
+                });
+
+                const blob = new Blob([JSON.stringify(learningData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `hakli_learning_data_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                console.log('Learning data exported:', learningData);
+            }, [corrections, validations]);
 
             // Delete a specific detection result
             const deleteDetection = useCallback((indexToDelete) => {
@@ -1555,10 +1704,12 @@
                                                                     <span className={`text-xs px-2 py-1 rounded ${
                                                                         result.matchType === 'primary' ? 'bg-green-100 text-green-700' : 
                                                                         result.matchType === 'variant' ? 'bg-purple-100 text-purple-700' :
-                                                                        result.matchType === 'combined' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'
+                                                                        result.matchType === 'combined' ? 'bg-amber-100 text-amber-700' :
+                                                                        result.matchType === 'corrected' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
                                                                     }`}>
                                                                         {result.matchType === 'combined' ? 'combined' : 
                                                                          result.matchType === 'variant' ? `variant v${result.variantIndex + 1}` : 
+                                                                         result.matchType === 'corrected' ? 'user corrected' :
                                                                          result.matchType}
                                                                         {result.matchDetails?.reanalyzed && ' (reanalyzed)'}
                                                                         {result.matchDetails?.manual && ' (manual)'}
@@ -1570,6 +1721,52 @@
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-2">
+                                                            {/* Validation Controls */}
+                                                            <div className="flex items-center gap-1 mr-2">
+                                                                {validations[index] ? (
+                                                                    <span className={`text-xs px-2 py-1 rounded ${
+                                                                        validations[index].isCorrect 
+                                                                            ? 'bg-green-100 text-green-700' 
+                                                                            : 'bg-red-100 text-red-700'
+                                                                    }`}>
+                                                                        {validations[index].isCorrect ? 'Validated ✓' : 'Rejected ✗'}
+                                                                    </span>
+                                                                ) : (
+                                                                    <>
+                                                                        <button
+                                                                            onClick={() => validateDetection(index, true)}
+                                                                            className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
+                                                                            title="Mark as correct"
+                                                                        >
+                                                                            ✓
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => validateDetection(index, false)}
+                                                                            className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
+                                                                            title="Mark as incorrect"
+                                                                        >
+                                                                            ✗
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => openCorrectionModal(index)}
+                                                                            className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                                                                            title="Correct this detection"
+                                                                        >
+                                                                            Fix
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Template Addition */}
+                                                            <button
+                                                                onClick={() => addAsTemplate(index)}
+                                                                className="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700"
+                                                                title="Add as template to database"
+                                                            >
+                                                                + Template
+                                                            </button>
+
                                                             <button
                                                                 onClick={() => toggleWordBoundary(index)}
                                                                 className={`text-xs px-2 py-1 rounded transition-colors ${
@@ -1611,6 +1808,81 @@
                             </div>
                         </div>
                     </div>
+
+                    {/* Correction Modal */}
+                    {showCorrectionModal && correctionTarget !== null && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                                <h3 className="text-lg font-semibold mb-4">Correct Detection</h3>
+                                <div className="mb-4">
+                                    <p className="text-sm text-gray-600 mb-2">
+                                        Current detection: <strong>{recognitionResults[correctionTarget]?.symbol.name}</strong>
+                                    </p>
+                                    <label className="block text-sm font-medium mb-2">
+                                        Select correct symbol:
+                                    </label>
+                                    <select 
+                                        id="correctionSelect"
+                                        className="w-full border border-gray-300 rounded px-3 py-2"
+                                        defaultValue=""
+                                    >
+                                        <option value="">Choose correct symbol...</option>
+                                        {equivalenceChart?.symbols.map(symbol => (
+                                            <option key={symbol.id} value={symbol.id}>
+                                                {symbol.name} ({symbol.arabic || 'N/A'})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium mb-2">
+                                        Confidence in correction:
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="correctionConfidence"
+                                        min="0.5"
+                                        max="1.0"
+                                        step="0.1"
+                                        defaultValue="0.9"
+                                        className="w-full"
+                                        onChange={(e) => {
+                                            const valueElement = document.getElementById('confidenceValue');
+                                            if (valueElement) {
+                                                valueElement.textContent = Math.round(e.target.value * 100) + '%';
+                                            }
+                                        }}
+                                    />
+                                    <div className="text-xs text-gray-500 mt-1">
+                                        Current: <span id="confidenceValue">90%</span>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => {
+                                            const select = document.getElementById('correctionSelect');
+                                            const confidence = document.getElementById('correctionConfidence');
+                                            if (select.value) {
+                                                submitCorrection(correctionTarget, select.value, parseFloat(confidence.value));
+                                            }
+                                        }}
+                                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                    >
+                                        Submit Correction
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowCorrectionModal(false);
+                                            setCorrectionTarget(null);
+                                        }}
+                                        className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
