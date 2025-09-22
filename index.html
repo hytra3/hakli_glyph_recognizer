@@ -537,6 +537,10 @@
 
             const [activeDetections, setActiveDetections] = useState(new Set());
             const [combineMode, setCombineMode] = useState(false);
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [drawStart, setDrawStart] = useState(null);
+            const [drawCurrent, setDrawCurrent] = useState(null);
+            const [manualSelectionMode, setManualSelectionMode] = useState(false);
 
             // Toggle detection active state
             const toggleDetectionActive = useCallback((index) => {
@@ -721,11 +725,150 @@
                 setCombineMode(false);
             }, [activeDetections, recognitionResults]);
 
-            // Clear all active selections
-            const clearActiveSelections = useCallback(() => {
+            // Manual selection functions
+            const startManualSelection = useCallback(() => {
+                setManualSelectionMode(true);
                 setActiveDetections(new Set());
-                setCombineMode(false);
+                console.log('Manual selection mode activated');
             }, []);
+
+            const cancelManualSelection = useCallback(() => {
+                setManualSelectionMode(false);
+                setIsDrawing(false);
+                setDrawStart(null);
+                setDrawCurrent(null);
+                console.log('Manual selection mode cancelled');
+            }, []);
+
+            // Create manual detection from drawn rectangle
+            const createManualDetection = useCallback(async (startPoint, endPoint) => {
+                if (!imageRef.current || !equivalenceChart) return;
+
+                const img = imageRef.current;
+                const container = imageContainerRef.current;
+                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
+                
+                const offsetX = imgRect.left - containerRect.left;
+                const offsetY = imgRect.top - containerRect.top;
+                const scaleX = img.offsetWidth / img.naturalWidth;
+                const scaleY = img.offsetHeight / img.naturalHeight;
+
+                // Convert screen coordinates to image coordinates
+                const imageX1 = (startPoint.x - offsetX) / scaleX;
+                const imageY1 = (startPoint.y - offsetY) / scaleY;
+                const imageX2 = (endPoint.x - offsetX) / scaleX;
+                const imageY2 = (endPoint.y - offsetY) / scaleY;
+
+                // Calculate bounding box
+                const x = Math.min(imageX1, imageX2);
+                const y = Math.min(imageY1, imageY2);
+                const width = Math.abs(imageX2 - imageX1);
+                const height = Math.abs(imageY2 - imageY1);
+
+                // Minimum size check
+                if (width < 10 || height < 10) {
+                    console.log('Manual selection too small, ignoring');
+                    return;
+                }
+
+                console.log(`Creating manual selection: ${x.toFixed(0)},${y.toFixed(0)} ${width.toFixed(0)}x${height.toFixed(0)}`);
+
+                // Create isolated symbol object for template matching
+                const manualSymbol = {
+                    x: Math.round(x),
+                    y: Math.round(y),
+                    width: Math.round(width),
+                    height: Math.round(height),
+                    area: width * height
+                };
+
+                let bestMatch = null;
+                let matchAttempts = 0;
+
+                // Run template matching on manual selection
+                for (const symbol of equivalenceChart.symbols) {
+                    const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
+                    if (primaryImg) {
+                        matchAttempts++;
+                        const match = templateMatchIsolated(manualSymbol, primaryImg);
+                        const confidence = match ? match.confidence : 0;
+                        
+                        if (match && confidence > processingSettings.detectionSensitivity) {
+                            console.log(`Manual: ${symbol.name} (primary): ${confidence.toFixed(4)}`);
+                            if (!bestMatch || confidence > bestMatch.confidence) {
+                                bestMatch = {
+                                    ...match,
+                                    symbol: symbol,
+                                    matchType: 'primary',
+                                    confidence: confidence
+                                };
+                            }
+                        }
+                    }
+                    
+                    // Test variants
+                    if (processingSettings.variantMatching && symbol.images.variants) {
+                        symbol.images.variants.forEach((variantPath, index) => {
+                            const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
+                            if (variantImg) {
+                                matchAttempts++;
+                                const match = templateMatchIsolated(manualSymbol, variantImg);
+                                const confidence = match ? match.confidence : 0;
+                                const threshold = processingSettings.detectionSensitivity * 0.9;
+                                
+                                if (match && confidence > threshold) {
+                                    console.log(`Manual: ${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)}`);
+                                    const weightedConfidence = confidence * 0.9;
+                                    if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                        bestMatch = {
+                                            ...match,
+                                            symbol: symbol,
+                                            matchType: 'variant',
+                                            variantIndex: index,
+                                            confidence: weightedConfidence
+                                        };
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+
+                if (bestMatch) {
+                    // Add manual detection to results
+                    const manualDetection = {
+                        symbol: bestMatch.symbol,
+                        confidence: Math.min(0.95, bestMatch.confidence),
+                        position: {
+                            x: manualSymbol.x,
+                            y: manualSymbol.y,
+                            width: manualSymbol.width,
+                            height: manualSymbol.height
+                        },
+                        matchDetails: {
+                            type: bestMatch.matchType,
+                            variantIndex: bestMatch.variantIndex,
+                            scale: 1.0,
+                            manual: true
+                        },
+                        matchType: bestMatch.matchType,
+                        variantIndex: bestMatch.variantIndex
+                    };
+
+                    setRecognitionResults(prev => [...prev, manualDetection]);
+                    console.log(`Manual detection added: ${bestMatch.symbol.name} (${(bestMatch.confidence * 100).toFixed(0)}%)`);
+                } else {
+                    console.log('Manual selection: No match found above threshold');
+                    // Could optionally add an "unknown" detection here
+                }
+
+                // Reset manual selection mode
+                setManualSelectionMode(false);
+                setIsDrawing(false);
+                setDrawStart(null);
+                setDrawCurrent(null);
+            }, [equivalenceChart, loadedSymbolImages, processingSettings, templateMatchIsolated]);
 
             // ENHANCED: Detection results drawing with active selection system
             const drawDetectionResults = useCallback(() => {
@@ -894,11 +1037,31 @@
                     ctx.fillText(confidenceText, x + 4, y + height - 4);
                 });
                 
+                // Draw manual selection rectangle if in drawing mode
+                if (manualSelectionMode && isDrawing && drawStart && drawCurrent) {
+                    const startX = Math.min(drawStart.x, drawCurrent.x);
+                    const startY = Math.min(drawStart.y, drawCurrent.y);
+                    const rectWidth = Math.abs(drawCurrent.x - drawStart.x);
+                    const rectHeight = Math.abs(drawCurrent.y - drawStart.y);
+                    
+                    // Draw selection rectangle
+                    ctx.setLineDash([5, 5]);
+                    ctx.strokeStyle = '#3b82f6'; // blue
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(startX, startY, rectWidth, rectHeight);
+                    
+                    // Add semi-transparent fill
+                    ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+                    ctx.fillRect(startX, startY, rectWidth, rectHeight);
+                    
+                    ctx.setLineDash([]);
+                }
+                
                 // Reset text alignment
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'alphabetic';
                 ctx.font = 'bold 14px Arial';
-            }, [recognitionResults, activeDetections, combineMode]);
+            }, [recognitionResults, activeDetections, combineMode, manualSelectionMode, isDrawing, drawStart, drawCurrent]);
 
             // Handle canvas clicks for active selection and actions
             const handleCanvasClick = useCallback((event) => {
@@ -1111,6 +1274,37 @@
                                         </>
                                     )}
                                 </button>
+
+                                {/* Manual Selection Controls */}
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                                    <h3 className="font-semibold text-amber-800 mb-2">Manual Selection</h3>
+                                    <div className="space-y-2">
+                                        {!manualSelectionMode ? (
+                                            <button
+                                                onClick={startManualSelection}
+                                                disabled={!uploadedImage}
+                                                className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-gray-300 text-white font-medium py-2 px-4 rounded-lg"
+                                            >
+                                                Draw Selection
+                                            </button>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <div className="text-sm text-amber-700 mb-2">
+                                                    Click and drag to select a symbol region
+                                                </div>
+                                                <button
+                                                    onClick={cancelManualSelection}
+                                                    className="w-full bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg"
+                                                >
+                                                    Cancel Selection
+                                                </button>
+                                            </div>
+                                        )}
+                                        <div className="text-xs text-amber-600">
+                                            Use when automatic detection misses symbols or when you need precise control
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="space-y-4">
@@ -1136,13 +1330,16 @@
                                             />
                                             <canvas
                                                 ref={canvasRef}
-                                                className="absolute cursor-pointer"
+                                                className={`absolute ${manualSelectionMode ? 'cursor-crosshair' : 'cursor-pointer'}`}
                                                 style={{ 
-                                                    display: recognitionResults.length > 0 ? 'block' : 'none',
+                                                    display: recognitionResults.length > 0 || manualSelectionMode ? 'block' : 'none',
                                                     left: '0px',
                                                     top: '0px'
                                                 }}
-                                                onClick={handleCanvasClick}
+                                                onClick={manualSelectionMode ? undefined : handleCanvasClick}
+                                                onMouseDown={handleMouseDown}
+                                                onMouseMove={handleMouseMove}
+                                                onMouseUp={handleMouseUp}
                                             />
                                         </div>
                                     ) : (
@@ -1289,6 +1486,7 @@
                                                                          result.matchType === 'variant' ? `variant v${result.variantIndex + 1}` : 
                                                                          result.matchType}
                                                                         {result.matchDetails?.reanalyzed && ' (reanalyzed)'}
+                                                                        {result.matchDetails?.manual && ' (manual)'}
                                                                     </span>
                                                                 </div>
                                                                 <div className="text-xs text-gray-500 mt-1">
