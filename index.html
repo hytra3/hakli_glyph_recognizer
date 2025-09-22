@@ -582,6 +582,102 @@
                 });
             }, []);
 
+            // Re-analyze a combined symbol using template matching
+            const reanalyzeCombinedSymbol = useCallback(async (combinedIndex) => {
+                const combinedResult = recognitionResults[combinedIndex];
+                if (combinedResult.matchType !== 'combined' || !equivalenceChart || !imageRef.current) return;
+
+                console.log('Re-analyzing combined symbol:', combinedResult.symbol.name);
+
+                // Extract the combined region from the image
+                const combinedSymbol = {
+                    x: combinedResult.position.x,
+                    y: combinedResult.position.y,
+                    width: combinedResult.position.width,
+                    height: combinedResult.position.height,
+                    area: combinedResult.position.width * combinedResult.position.height
+                };
+
+                let bestMatch = null;
+                let matchAttempts = 0;
+
+                // Test against all symbols in the database
+                for (const symbol of equivalenceChart.symbols) {
+                    const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
+                    if (primaryImg) {
+                        matchAttempts++;
+                        const match = templateMatchIsolated(combinedSymbol, primaryImg);
+                        const confidence = match ? match.confidence : 0;
+                        
+                        if (match && confidence > processingSettings.detectionSensitivity) {
+                            console.log(`Re-analysis: ${symbol.name} (primary): ${confidence.toFixed(4)}`);
+                            if (!bestMatch || confidence > bestMatch.confidence) {
+                                bestMatch = {
+                                    ...match,
+                                    symbol: symbol,
+                                    matchType: 'primary',
+                                    confidence: confidence
+                                };
+                            }
+                        }
+                    }
+                    
+                    // Test variants if enabled
+                    if (processingSettings.variantMatching && symbol.images.variants) {
+                        symbol.images.variants.forEach((variantPath, index) => {
+                            const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
+                            if (variantImg) {
+                                matchAttempts++;
+                                const match = templateMatchIsolated(combinedSymbol, variantImg);
+                                const confidence = match ? match.confidence : 0;
+                                const threshold = processingSettings.detectionSensitivity * 0.9;
+                                
+                                if (match && confidence > threshold) {
+                                    console.log(`Re-analysis: ${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)}`);
+                                    const weightedConfidence = confidence * 0.9;
+                                    if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                        bestMatch = {
+                                            ...match,
+                                            symbol: symbol,
+                                            matchType: 'variant',
+                                            variantIndex: index,
+                                            confidence: weightedConfidence
+                                        };
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+
+                if (bestMatch) {
+                    // Update the combined symbol with new analysis
+                    setRecognitionResults(prev => 
+                        prev.map((result, index) => {
+                            if (index === combinedIndex) {
+                                return {
+                                    symbol: bestMatch.symbol,
+                                    confidence: Math.min(0.95, bestMatch.confidence),
+                                    position: result.position, // Keep original position
+                                    matchDetails: {
+                                        type: bestMatch.matchType,
+                                        variantIndex: bestMatch.variantIndex,
+                                        scale: 1.0,
+                                        reanalyzed: true
+                                    },
+                                    matchType: bestMatch.matchType,
+                                    variantIndex: bestMatch.variantIndex
+                                };
+                            }
+                            return result;
+                        })
+                    );
+                    console.log(`Re-analysis complete: Found ${bestMatch.symbol.name} with ${(bestMatch.confidence * 100).toFixed(0)}% confidence`);
+                } else {
+                    console.log('Re-analysis: No better match found');
+                }
+            }, [recognitionResults, equivalenceChart, loadedSymbolImages, processingSettings, templateMatchIsolated]);
+
             // Combine selected detections
             const combineDetections = useCallback(() => {
                 const activeIndices = Array.from(activeDetections).sort((a, b) => a - b);
@@ -764,6 +860,17 @@
                         ctx.lineTo(buttonX + 3, buttonY + buttonSize - 3);
                         ctx.stroke();
                         
+                        // Re-analyze button for combined symbols
+                        if (matchType === 'combined') {
+                            buttonX += buttonSpacing;
+                            ctx.fillStyle = 'rgba(16, 185, 129, 0.9)'; // green
+                            ctx.fillRect(buttonX, buttonY, buttonSize, buttonSize);
+                            ctx.fillStyle = 'white';
+                            ctx.font = 'bold 10px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('R', buttonX + buttonSize/2, buttonY + buttonSize/2 + 1);
+                        }
+                        
                         // Combine button (only show if multiple active or in combine mode)
                         if (activeDetections.size > 1 || combineMode) {
                             buttonX += buttonSpacing;
@@ -819,7 +926,7 @@
                     if (!activeDetections.has(index)) continue;
                     
                     const result = recognitionResults[index];
-                    const { position } = result;
+                    const { position, matchType } = result;
                     
                     const x = (position.x * scaleX) + offsetX;
                     const y = (position.y * scaleY) + offsetY;
@@ -835,6 +942,16 @@
                         clickY >= buttonY && clickY <= buttonY + buttonSize) {
                         deleteDetection(index);
                         return;
+                    }
+                    
+                    // Re-analyze button (for combined symbols)
+                    if (matchType === 'combined') {
+                        buttonX += buttonSpacing;
+                        if (clickX >= buttonX && clickX <= buttonX + buttonSize && 
+                            clickY >= buttonY && clickY <= buttonY + buttonSize) {
+                            reanalyzeCombinedSymbol(index);
+                            return;
+                        }
                     }
                     
                     // Combine button (if available)
@@ -870,7 +987,7 @@
                 
                 // Click outside any detection - clear selections
                 clearActiveSelections();
-            }, [recognitionResults, activeDetections, combineMode, deleteDetection, combineDetections, toggleDetectionActive, clearActiveSelections]);
+            }, [recognitionResults, activeDetections, combineMode, deleteDetection, combineDetections, toggleDetectionActive, clearActiveSelections, reanalyzeCombinedSymbol]);
 
             // Trigger drawing when results change
             useEffect(() => {
@@ -1096,6 +1213,67 @@
                                                             <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                                                                 #{index + 1}
                                                             </span>
+                                                            
+                                                            {/* Symbol Image Display */}
+                                                            <div className="flex items-center gap-2">
+                                                                {(() => {
+                                                                    // Create a canvas to show the detected region
+                                                                    const debugCanvas = document.createElement('canvas');
+                                                                    const debugCtx = debugCanvas.getContext('2d');
+                                                                    debugCanvas.width = result.position.width;
+                                                                    debugCanvas.height = result.position.height;
+                                                                    
+                                                                    if (imageRef.current) {
+                                                                        debugCtx.drawImage(
+                                                                            imageRef.current,
+                                                                            result.position.x, result.position.y, result.position.width, result.position.height,
+                                                                            0, 0, result.position.width, result.position.height
+                                                                        );
+                                                                    }
+                                                                    
+                                                                    const debugDataUrl = debugCanvas.toDataURL();
+                                                                    
+                                                                    return (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className="w-12 h-12 bg-gray-100 border rounded flex-shrink-0">
+                                                                                <img 
+                                                                                    src={debugDataUrl}
+                                                                                    alt={`Detected: ${result.symbol.name}`}
+                                                                                    className="w-full h-full object-contain"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="text-sm text-gray-400">→</div>
+                                                                            <div className="w-12 h-12 bg-gray-50 border rounded flex-shrink-0">
+                                                                                {(() => {
+                                                                                    let templateImg = null;
+                                                                                    if (result.matchType === 'primary') {
+                                                                                        templateImg = loadedSymbolImages[`${result.symbol.id}_primary`];
+                                                                                    } else if (result.matchType === 'variant' && result.variantIndex !== undefined) {
+                                                                                        templateImg = loadedSymbolImages[`${result.symbol.id}_variant_${result.variantIndex}`];
+                                                                                    }
+                                                                                    
+                                                                                    if (templateImg) {
+                                                                                        return (
+                                                                                            <img 
+                                                                                                src={templateImg.src}
+                                                                                                alt={`Template: ${result.symbol.name}`}
+                                                                                                className="w-full h-full object-contain"
+                                                                                            />
+                                                                                        );
+                                                                                    } else {
+                                                                                        return (
+                                                                                            <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                                                                                                {result.matchType === 'combined' ? 'COMB' : 'N/A'}
+                                                                                            </div>
+                                                                                        );
+                                                                                    }
+                                                                                })()}
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                            </div>
+                                                            
                                                             <div>
                                                                 <div className="flex items-center gap-2">
                                                                     <span className="font-medium">{result.symbol.name}</span>
@@ -1103,9 +1281,14 @@
                                                                         <span className="text-lg">({result.symbol.arabic})</span>
                                                                     )}
                                                                     <span className={`text-xs px-2 py-1 rounded ${
-                                                                        result.matchType === 'primary' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'
+                                                                        result.matchType === 'primary' ? 'bg-green-100 text-green-700' : 
+                                                                        result.matchType === 'variant' ? 'bg-purple-100 text-purple-700' :
+                                                                        result.matchType === 'combined' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'
                                                                     }`}>
-                                                                        {result.matchType}{result.variantIndex !== undefined && ` v${result.variantIndex + 1}`}
+                                                                        {result.matchType === 'combined' ? 'combined' : 
+                                                                         result.matchType === 'variant' ? `variant v${result.variantIndex + 1}` : 
+                                                                         result.matchType}
+                                                                        {result.matchDetails?.reanalyzed && ' (reanalyzed)'}
                                                                     </span>
                                                                 </div>
                                                                 <div className="text-xs text-gray-500 mt-1">
@@ -1125,6 +1308,15 @@
                                                             >
                                                                 {wordBoundaries.has(index) ? '| Word' : '+ Word'}
                                                             </button>
+                                                            {result.matchType === 'combined' && (
+                                                                <button
+                                                                    onClick={() => reanalyzeCombinedSymbol(index)}
+                                                                    className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
+                                                                    title="Re-analyze this combined symbol"
+                                                                >
+                                                                    Re-analyze
+                                                                </button>
+                                                            )}
                                                             <div className="text-right">
                                                                 <div className={`px-2 py-1 rounded text-sm font-medium ${
                                                                     result.confidence > 0.7 
