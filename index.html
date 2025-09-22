@@ -1255,7 +1255,7 @@
                     alert(`Manual selection successful: ${bestMatch.symbol.name} (${(bestMatch.confidence * 100).toFixed(0)}% confidence)`);
                 } else {
                     console.log('Manual selection: No match found above threshold');
-                    console.log(`Threshold was: ${manualThreshold}, best confidence found: ${/* need to track this */}`);
+                    console.log(`Threshold was: ${manualThreshold}`);
                     alert('Manual selection: No symbol match found above threshold. Try adjusting the sensitivity or selecting a clearer region.');
                 }
 
