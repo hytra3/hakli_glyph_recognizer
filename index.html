@@ -1467,15 +1467,17 @@
                         }
                     }
                     
-                    // Add confidence indicator in bottom-left corner
-                    const confidenceText = `${(result.confidence * 100).toFixed(0)}%`;
-                    ctx.font = '10px Arial';
-                    ctx.textAlign = 'left';
-                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                    const confTextWidth = ctx.measureText(confidenceText).width + 4;
-                    ctx.fillRect(x + 2, y + height - 14, confTextWidth, 12);
-                    ctx.fillStyle = 'white';
-                    ctx.fillText(confidenceText, x + 4, y + height - 4);
+                    // Add confidence indicator in bottom-left corner (only for active boxes)
+                    if (isActive) {
+                        const confidenceText = `${(result.confidence * 100).toFixed(0)}%`;
+                        ctx.font = '10px Arial';
+                        ctx.textAlign = 'left';
+                        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                        const confTextWidth = ctx.measureText(confidenceText).width + 4;
+                        ctx.fillRect(x + 2, y + height - 14, confTextWidth, 12);
+                        ctx.fillStyle = 'white';
+                        ctx.fillText(confidenceText, x + 4, y + height - 4);
+                    }
                 });
                 
                 // Draw manual selection rectangle if in drawing mode
@@ -1633,7 +1635,7 @@
                     <div className="bg-white rounded-lg shadow-lg p-6">
                         <h1 className="text-3xl font-bold text-gray-800 mb-4 flex items-center gap-3">
                             <Eye />
-                            Hakli Symbol Recognizer
+                            Hakli Glyph Recognizer
                             <span className="text-sm font-normal text-gray-500 ml-2">based on Ahmad Al-Jallad (2025), The Decipherment of the Dhofari Script</span>
                         </h1>
                         
