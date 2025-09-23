@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hakli Glyph Recognizer - OpenCV Enhanced</title>
+    <title>Hakli Glyph Recognizer</title>
     <script src="https://docs.opencv.org/4.8.0/opencv.js"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -564,6 +564,7 @@
             const [correctionSymbolId, setCorrectionSymbolId] = useState('');
             const [correctionConfidence, setCorrectionConfidence] = useState(0.9);
             const [showSymbolDropdown, setShowSymbolDropdown] = useState(false);
+            const [renderKey, setRenderKey] = useState(0);
             const [actionHistory, setActionHistory] = useState([]);
             const [maxHistorySize] = useState(20);
 
@@ -735,10 +736,9 @@
                 setCorrectionConfidence(0.9);
                 setShowSymbolDropdown(false);
                 
-                // Force a re-render of the results
-                setTimeout(() => {
-                    console.log('Updated recognition results:', recognitionResults.length, 'items');
-                }, 100);
+                // Force complete re-render
+                console.log('Forcing complete re-render after correction');
+                setRenderKey(prev => prev + 1);
             }, [recognitionResults, equivalenceChart, recordAction]);
 
             const addAsTemplate = useCallback(async (detectionIndex) => {
@@ -1859,7 +1859,7 @@
                                             {recognitionResults
                                                 .sort((a, b) => a.position.x - b.position.x)
                                                 .map((result, index) => (
-                                                <div key={index} className={`bg-white rounded p-3 border-l-4 ${
+                                                <div key={`${index}-${result.matchType}-${result.symbol.id}-${result.confidence.toFixed(3)}`} className={`bg-white rounded p-3 border-l-4 ${
                                                     result.confidence > 0.7 ? 'border-green-500' : 
                                                     result.confidence > 0.5 ? 'border-yellow-500' : 'border-red-500'
                                                 }`}>
