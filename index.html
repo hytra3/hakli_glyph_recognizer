@@ -350,7 +350,23 @@
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         setUploadedImage(e.target.result);
+                        
+                        // Clear all previous analysis data
                         setRecognitionResults([]);
+                        setActiveDetections(new Set());
+                        setWordBoundaries(new Set());
+                        setCorrections({});
+                        setValidations({});
+                        setActionHistory([]);
+                        setIsolatedSymbolsDebug([]);
+                        
+                        // Reset manual selection mode if active
+                        setManualSelectionMode(false);
+                        setIsDrawing(false);
+                        setDrawStart(null);
+                        setDrawCurrent(null);
+                        
+                        console.log('New image loaded - all previous data cleared');
                     };
                     reader.readAsDataURL(file);
                 }
@@ -1529,6 +1545,8 @@
                 }
                 
                 // Check clicks on detection boxes to toggle active state
+                // Allow multiple boxes to be selected even if they overlap
+                let clickedAny = false;
                 for (let index = 0; index < recognitionResults.length; index++) {
                     const result = recognitionResults[index];
                     const { position } = result;
@@ -1542,12 +1560,16 @@
                     if (clickX >= x && clickX <= x + width && 
                         clickY >= y && clickY <= y + height) {
                         toggleDetectionActive(index);
-                        return;
+                        clickedAny = true;
+                        // Don't return here - allow clicking on overlapping boxes
+                        break; // But only select the first (topmost) one
                     }
                 }
                 
-                // Click outside any detection - clear selections
-                clearActiveSelections();
+                // Click outside any detection - clear selections only if no box was clicked
+                if (!clickedAny) {
+                    clearActiveSelections();
+                }
             }, [manualSelectionMode, recognitionResults, activeDetections, combineMode, deleteDetection, combineDetections, toggleDetectionActive, clearActiveSelections, reanalyzeCombinedSymbol]);
 
             // Trigger drawing when results change or manual mode changes
