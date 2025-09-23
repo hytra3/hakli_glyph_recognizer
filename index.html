@@ -1159,6 +1159,35 @@
                     return;
                 }
 
+                // Check for overlaps with existing detections
+                let hasOverlap = false;
+                const newRect = { x, y, width, height };
+                
+                recognitionResults.forEach((result, index) => {
+                    const existingRect = result.position;
+                    
+                    // Calculate overlap
+                    const overlapX = Math.max(0, Math.min(newRect.x + newRect.width, existingRect.x + existingRect.width) - Math.max(newRect.x, existingRect.x));
+                    const overlapY = Math.max(0, Math.min(newRect.y + newRect.height, existingRect.y + existingRect.height) - Math.max(newRect.y, existingRect.y));
+                    const overlapArea = overlapX * overlapY;
+                    const overlapPercentage = overlapArea / (newRect.width * newRect.height);
+                    
+                    if (overlapPercentage > 0.3) { // More than 30% overlap
+                        hasOverlap = true;
+                        console.log(`Manual selection overlaps ${overlapPercentage.toFixed(2)*100}% with existing detection #${index + 1} (${result.symbol.name})`);
+                    }
+                });
+
+                if (hasOverlap) {
+                    if (!confirm('This selection overlaps with existing detections. Continue anyway?')) {
+                        setManualSelectionMode(false);
+                        setIsDrawing(false);
+                        setDrawStart(null);
+                        setDrawCurrent(null);
+                        return;
+                    }
+                }
+
                 console.log(`Creating manual selection: ${x.toFixed(0)},${y.toFixed(0)} ${width.toFixed(0)}x${height.toFixed(0)}`);
 
                 // Create isolated symbol object for template matching
