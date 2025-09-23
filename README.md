@@ -1,2 +1,2 @@
 # hakli-recognizer
-recognizer for Hakli cave symbols
+recognizer for Hakli cave glyphs
