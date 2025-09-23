@@ -1858,8 +1858,12 @@
                                             </div>
                                             {recognitionResults
                                                 .sort((a, b) => a.position.x - b.position.x)
-                                                .map((result, index) => (
-                                                <div key={`${index}-${result.matchType}-${result.symbol.id}-${result.confidence.toFixed(3)}`} className={`bg-white rounded p-3 border-l-4 ${
+                                                .map((result, index) => {
+                                                    // Force re-render by including renderKey in component
+                                                    const uniqueKey = `${index}-${result.matchType}-${result.symbol.id}-${result.confidence.toFixed(3)}-${renderKey}`;
+                                                    
+                                                    return (
+                                                <div key={uniqueKey} className={`bg-white rounded p-3 border-l-4 ${
                                                     result.confidence > 0.7 ? 'border-green-500' : 
                                                     result.confidence > 0.5 ? 'border-yellow-500' : 'border-red-500'
                                                 }`}>
@@ -2035,7 +2039,7 @@
                                                         </div>
                                                     </div>
                                                 </div>
-                                            ))}
+                                            )})}
                                         </div>
                                     </div>
                                 )}
