@@ -1785,7 +1785,7 @@
                                                                                 
                                                                                 return (
                                                                                     <img 
-                                                                                        key={`detected-${index}-${renderKey}-${result.position.x}-${result.position.y}`}
+                                                                                        key={`detected-${originalIndex}-${renderKey}-${result.position.x}-${result.position.y}`}
                                                                                         src={debugDataUrl}
                                                                                         alt={`Detected: ${result.symbol.name}`}
                                                                                         className="w-full h-full object-contain"
@@ -1814,7 +1814,7 @@
                                                                                     );
                                                                                 } else {
                                                                                     return (
-                                                                                        <div key={`fallback-${index}-${renderKey}`} className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                                                                                        <div key={`fallback-${originalIndex}-${renderKey}`} className="w-full h-full flex items-center justify-center text-xs text-gray-400">
                                                                                             {result.matchType === 'manual' ? 'MAN' : 'N/A'}
                                                                                         </div>
                                                                                     );
