@@ -1611,6 +1611,14 @@
                 }
             }, [uploadedImage, recognitionResults, drawDetectionResults, manualSelectionMode]);
 
+            // Force thumbnail updates when corrections change
+            useEffect(() => {
+                if (Object.keys(corrections).length > 0) {
+                    console.log('Corrections updated, forcing thumbnail refresh:', corrections);
+                    setRenderKey(prev => prev + 1);
+                }
+            }, [corrections]);
+
             // Redraw during manual selection
             useEffect(() => {
                 if (manualSelectionMode && (isDrawing || drawStart || drawCurrent)) {
