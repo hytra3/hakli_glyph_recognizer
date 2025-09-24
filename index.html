@@ -1542,10 +1542,12 @@
                                                                                     0, 0, result.position.width, result.position.height
                                                                                 );
                                                                                 
-                                                                                const debugDataUrl = debugCanvas.toDataURL();
+                                                                                // Add renderKey to force refresh
+                                                                                const debugDataUrl = debugCanvas.toDataURL() + `?refresh=${renderKey}`;
                                                                                 
                                                                                 return (
                                                                                     <img 
+                                                                                        key={`detected-${index}-${renderKey}`}
                                                                                         src={debugDataUrl}
                                                                                         alt={`Detected: ${result.symbol.name}`}
                                                                                         className="w-full h-full object-contain"
@@ -1566,6 +1568,7 @@
                                                                                 if (templateImg) {
                                                                                     return (
                                                                                         <img 
+                                                                                            key={`template-${result.symbol.id}-${result.matchType}-${renderKey}`}
                                                                                             src={templateImg.src}
                                                                                             alt={`Template: ${result.symbol.name}`}
                                                                                             className="w-full h-full object-contain"
@@ -1573,7 +1576,7 @@
                                                                                     );
                                                                                 } else {
                                                                                     return (
-                                                                                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                                                                                        <div key={`fallback-${index}-${renderKey}`} className="w-full h-full flex items-center justify-center text-xs text-gray-400">
                                                                                             {result.matchType === 'manual' ? 'MAN' : 'N/A'}
                                                                                         </div>
                                                                                     );
