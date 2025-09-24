@@ -305,44 +305,423 @@
                 }
             }, []);
 
-            // Simplified detection function for testing
+            // Symbol isolation using OpenCV contour detection
+            const isolateSymbols = useCallback((imageElement) => {
+                if (!isOpenCVReady || !imageElement) {
+                    console.warn('OpenCV not ready or no image');
+                    return [];
+                }
+
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = imageElement.naturalWidth;
+                    canvas.height = imageElement.naturalHeight;
+                    ctx.drawImage(imageElement, 0, 0);
+
+                    const src = cv.imread(canvas);
+                    const gray = new cv.Mat();
+                    const binary = new cv.Mat();
+                    const morphKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+                    const contours = new cv.MatVector();
+                    const hierarchy = new cv.Mat();
+
+                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                    cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+                    cv.morphologyEx(binary, binary, cv.MORPH_CLOSE, morphKernel);
+                    cv.morphologyEx(binary, binary, cv.MORPH_OPEN, morphKernel);
+                    cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                    const isolatedSymbols = [];
+                    const minArea = processingSettings.minSymbolSize * processingSettings.minSymbolSize;
+                    const maxArea = processingSettings.maxSymbolSize * processingSettings.maxSymbolSize;
+
+                    for (let i = 0; i < contours.size(); i++) {
+                        const contour = contours.get(i);
+                        const boundingRect = cv.boundingRect(contour);
+                        const area = cv.contourArea(contour);
+
+                        if (area > minArea && area < maxArea) {
+                            const aspectRatio = boundingRect.width / boundingRect.height;
+                            
+                            if (aspectRatio > 0.2 && aspectRatio < 5.0) {
+                                const padding = 5;
+                                const x = Math.max(0, boundingRect.x - padding);
+                                const y = Math.max(0, boundingRect.y - padding);
+                                const width = Math.min(src.cols - x, boundingRect.width + 2 * padding);
+                                const height = Math.min(src.rows - y, boundingRect.height + 2 * padding);
+
+                                isolatedSymbols.push({
+                                    x: x,
+                                    y: y,
+                                    width: width,
+                                    height: height,
+                                    area: area,
+                                    contour: contour.clone()
+                                });
+                            }
+                        }
+                        contour.delete();
+                    }
+
+                    src.delete();
+                    gray.delete();
+                    binary.delete();
+                    morphKernel.delete();
+                    contours.delete();
+                    hierarchy.delete();
+
+                    isolatedSymbols.sort((a, b) => a.x - b.x);
+                    console.log(`Isolated ${isolatedSymbols.length} potential symbols`);
+                    
+                    return isolatedSymbols;
+
+                } catch (error) {
+                    console.error('Error in symbol isolation:', error);
+                    return [];
+                }
+            }, [isOpenCVReady, processingSettings]);
+
+            // Template matching function for isolated symbols
+            const templateMatchIsolated = useCallback((isolatedSymbol, templateImg) => {
+                if (!isOpenCVReady || !templateImg) return null;
+
+                try {
+                    if (templateImg.width === 0 || templateImg.height === 0) {
+                        console.warn('Template image has invalid dimensions');
+                        return null;
+                    }
+
+                    const symbolCanvas = document.createElement('canvas');
+                    const symbolCtx = symbolCanvas.getContext('2d');
+                    symbolCanvas.width = isolatedSymbol.width;
+                    symbolCanvas.height = isolatedSymbol.height;
+                    
+                    symbolCtx.drawImage(
+                        imageRef.current,
+                        isolatedSymbol.x, isolatedSymbol.y, isolatedSymbol.width, isolatedSymbol.height,
+                        0, 0, isolatedSymbol.width, isolatedSymbol.height
+                    );
+
+                    const symbolMat = cv.imread(symbolCanvas);
+                    const templateCanvas = document.createElement('canvas');
+                    const templateCtx = templateCanvas.getContext('2d');
+                    templateCanvas.width = templateImg.width;
+                    templateCanvas.height = templateImg.height;
+                    templateCtx.drawImage(templateImg, 0, 0);
+                    const templateMat = cv.imread(templateCanvas);
+
+                    const result = new cv.Mat();
+                    const resizedTemplate = new cv.Mat();
+                    const symbolSize = new cv.Size(isolatedSymbol.width, isolatedSymbol.height);
+                    cv.resize(templateMat, resizedTemplate, symbolSize);
+
+                    const symbolGray = new cv.Mat();
+                    const templateGray = new cv.Mat();
+                    cv.cvtColor(symbolMat, symbolGray, cv.COLOR_RGBA2GRAY);
+                    cv.cvtColor(resizedTemplate, templateGray, cv.COLOR_RGBA2GRAY);
+
+                    cv.matchTemplate(symbolGray, templateGray, result, cv.TM_CCOEFF_NORMED);
+                    
+                    const minMaxLoc = cv.minMaxLoc(result);
+                    const confidence = minMaxLoc.maxVal;
+
+                    symbolMat.delete();
+                    templateMat.delete();
+                    resizedTemplate.delete();
+                    symbolGray.delete();
+                    templateGray.delete();
+                    result.delete();
+
+                    return {
+                        confidence: confidence,
+                        position: {
+                            x: isolatedSymbol.x,
+                            y: isolatedSymbol.y,
+                            width: isolatedSymbol.width,
+                            height: isolatedSymbol.height
+                        }
+                    };
+
+                } catch (error) {
+                    console.error('Template matching error:', error.message || error);
+                    return null;
+                }
+            }, [isOpenCVReady]);
+
+            // Enhanced symbol detection with real OpenCV processing
             const detectSymbols = useCallback(async () => {
-                if (!uploadedImage || !equivalenceChart) {
+                if (!uploadedImage || !equivalenceChart || !imageRef.current) {
                     console.log('Missing requirements for detection');
                     return;
                 }
                 
                 setIsProcessing(true);
                 
-                // Simulate detection with mock results for testing
-                setTimeout(() => {
-                    const mockResults = [
-                        {
-                            symbol: { id: 'mock1', name: 'Test Symbol 1', arabic: 'ت' },
-                            confidence: 0.85,
-                            position: { x: 50, y: 50, width: 30, height: 40 },
-                            matchType: 'primary',
-                            matchDetails: { type: 'primary' }
-                        },
-                        {
-                            symbol: { id: 'mock2', name: 'Test Symbol 2', arabic: 'س' },
-                            confidence: 0.72,
-                            position: { x: 90, y: 55, width: 25, height: 35 },
-                            matchType: 'variant',
-                            matchDetails: { type: 'variant', variantIndex: 0 }
-                        }
-                    ];
-                    
-                    setRecognitionResults(mockResults);
+                // Check if we should use real detection or mock results
+                if (!isOpenCVReady) {
+                    console.log('OpenCV not ready, using mock results');
+                    // Use mock results as fallback
+                    setTimeout(() => {
+                        const mockResults = [
+                            {
+                                symbol: { id: 'mock1', name: 'Test Symbol 1', arabic: 'ت' },
+                                confidence: 0.85,
+                                position: { x: 50, y: 50, width: 30, height: 40 },
+                                matchType: 'primary',
+                                matchDetails: { type: 'primary' }
+                            },
+                            {
+                                symbol: { id: 'mock2', name: 'Test Symbol 2', arabic: 'س' },
+                                confidence: 0.72,
+                                position: { x: 90, y: 55, width: 25, height: 35 },
+                                matchType: 'variant',
+                                matchDetails: { type: 'variant', variantIndex: 0 }
+                            }
+                        ];
+                        
+                        setRecognitionResults(mockResults);
+                        setIsProcessing(false);
+                    }, 1000);
+                    return;
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                console.log('Starting real symbol isolation...');
+                const isolatedSymbols = isolateSymbols(imageRef.current);
+                
+                if (isolatedSymbols.length === 0) {
+                    console.warn('No symbols isolated');
                     setIsProcessing(false);
-                    console.log('Mock detection complete');
-                }, 1000);
-            }, [uploadedImage, equivalenceChart]);
+                    return;
+                }
 
-            // Placeholder functions
+                console.log(`Found ${isolatedSymbols.length} isolated symbols, now matching...`);
+                console.log(`Available symbol images: ${Object.keys(loadedSymbolImages).length}`);
+                
+                const detectionResults = [];
+                let matchAttempts = 0;
+                let successfulMatches = 0;
+                
+                for (let i = 0; i < isolatedSymbols.length; i++) {
+                    const isolatedSymbol = isolatedSymbols[i];
+                    let bestMatch = null;
+                    
+                    console.log(`Testing isolated symbol #${i + 1} (${isolatedSymbol.width}x${isolatedSymbol.height}, area: ${isolatedSymbol.area.toFixed(0)})`);
+                    
+                    for (const symbol of equivalenceChart.symbols) {
+                        const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
+                        if (primaryImg) {
+                            matchAttempts++;
+                            const match = templateMatchIsolated(isolatedSymbol, primaryImg);
+                            const confidence = match ? match.confidence : 0;
+                            
+                            if (match && confidence > processingSettings.detectionSensitivity) {
+                                console.log(`${symbol.name} (primary): ${confidence.toFixed(4)}`);
+                                if (!bestMatch || confidence > bestMatch.confidence) {
+                                    bestMatch = {
+                                        ...match,
+                                        symbol: symbol,
+                                        matchType: 'primary',
+                                        confidence: confidence
+                                    };
+                                }
+                            }
+                        }
+                        
+                        if (processingSettings.variantMatching && symbol.images.variants) {
+                            symbol.images.variants.forEach((variantPath, index) => {
+                                const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
+                                if (variantImg) {
+                                    matchAttempts++;
+                                    const match = templateMatchIsolated(isolatedSymbol, variantImg);
+                                    const confidence = match ? match.confidence : 0;
+                                    const threshold = processingSettings.detectionSensitivity * 0.9;
+                                    
+                                    if (match && confidence > threshold) {
+                                        console.log(`${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)}`);
+                                        const weightedConfidence = confidence * 0.9;
+                                        if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                            bestMatch = {
+                                                ...match,
+                                                symbol: symbol,
+                                                matchType: 'variant',
+                                                variantIndex: index,
+                                                confidence: weightedConfidence
+                                            };
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    
+                    if (bestMatch) {
+                        successfulMatches++;
+                        detectionResults.push({
+                            symbol: bestMatch.symbol,
+                            confidence: Math.min(0.95, bestMatch.confidence),
+                            position: bestMatch.position,
+                            matchDetails: {
+                                type: bestMatch.matchType,
+                                variantIndex: bestMatch.variantIndex,
+                                scale: 1.0,
+                                isolatedIndex: i
+                            },
+                            matchType: bestMatch.matchType,
+                            variantIndex: bestMatch.variantIndex
+                        });
+                    }
+                }
+                
+                // Clean up contours
+                isolatedSymbols.forEach(symbol => {
+                    if (symbol.contour) {
+                        symbol.contour.delete();
+                    }
+                });
+                
+                console.log(`Detection complete: ${detectionResults.length} symbols matched out of ${isolatedSymbols.length} isolated`);
+                console.log(`Total match attempts: ${matchAttempts}, Successful matches: ${successfulMatches}`);
+                
+                setRecognitionResults(detectionResults);
+                setIsProcessing(false);
+            }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, isolateSymbols, templateMatchIsolated, isOpenCVReady]);
+
+            // Canvas drawing for detection boxes
             const drawDetectionResults = useCallback(() => {
-                console.log('Drawing detection results...');
-            }, []);
+                if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) {
+                    return;
+                }
+                
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const img = imageRef.current;
+                const container = imageContainerRef.current;
+                
+                // Wait for image to be fully loaded and rendered
+                if (img.naturalWidth === 0 || img.naturalHeight === 0 || img.offsetWidth === 0 || img.offsetHeight === 0) {
+                    setTimeout(drawDetectionResults, 100);
+                    return;
+                }
+
+                // Get the bounding rectangles to calculate precise positioning
+                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
+                
+                // Calculate the actual offset of the image within its container
+                const offsetX = imgRect.left - containerRect.left;
+                const offsetY = imgRect.top - containerRect.top;
+                
+                // Set canvas size to exactly match the container
+                canvas.width = container.offsetWidth;
+                canvas.height = container.offsetHeight;
+                canvas.style.width = container.offsetWidth + 'px';
+                canvas.style.height = container.offsetHeight + 'px';
+                
+                // Position canvas to overlay the container perfectly
+                canvas.style.left = '0px';
+                canvas.style.top = '0px';
+                
+                // Calculate scaling factors from natural image size to displayed size
+                const scaleX = img.offsetWidth / img.naturalWidth;
+                const scaleY = img.offsetHeight / img.naturalHeight;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                console.log('Drawing detection boxes:', {
+                    imageNatural: `${img.naturalWidth}x${img.naturalHeight}`,
+                    imageDisplay: `${img.offsetWidth}x${img.offsetHeight}`,
+                    containerSize: `${container.offsetWidth}x${container.offsetHeight}`,
+                    imageOffset: `${offsetX.toFixed(1)}, ${offsetY.toFixed(1)}`,
+                    scale: `${scaleX.toFixed(3)}x${scaleY.toFixed(3)}`,
+                    results: recognitionResults.length
+                });
+                
+                recognitionResults.forEach((result, index) => {
+                    const { position, matchType, symbol } = result;
+                    
+                    // Apply scaling and offset transformations
+                    const x = (position.x * scaleX) + offsetX;
+                    const y = (position.y * scaleY) + offsetY;
+                    const width = position.width * scaleX;
+                    const height = position.height * scaleY;
+                    
+                    // Style based on match type
+                    let color = '#10b981'; // green for primary
+                    let lineWidth = 2;
+                    
+                    if (matchType === 'variant') {
+                        ctx.setLineDash([4, 4]);
+                        color = '#8b5cf6'; // purple for variants
+                    } else if (matchType === 'combined') {
+                        color = '#f59e0b'; // amber for combined
+                    } else {
+                        ctx.setLineDash([]);
+                    }
+                    
+                    // Draw the main bounding box
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = lineWidth;
+                    ctx.strokeRect(x, y, width, height);
+                    ctx.setLineDash([]);
+                    
+                    // Add Arabic character inside the box (centered)
+                    const character = symbol.arabic || symbol.name;
+                    const labelText = character.length > 3 ? symbol.name.charAt(0) : character;
+                    
+                    ctx.font = 'bold 16px Arial';
+                    ctx.fillStyle = color;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    // Center the text in the box
+                    const centerX = x + width / 2;
+                    const centerY = y + height / 2;
+                    
+                    // Draw text with slight background for visibility
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 3;
+                    ctx.strokeText(labelText, centerX, centerY);
+                    ctx.fillText(labelText, centerX, centerY);
+                    
+                    // Add confidence indicator in bottom-left corner
+                    const confidenceText = `${(result.confidence * 100).toFixed(0)}%`;
+                    ctx.font = '10px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    const confTextWidth = ctx.measureText(confidenceText).width + 4;
+                    ctx.fillRect(x + 2, y + height - 14, confTextWidth, 12);
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(confidenceText, x + 4, y + height - 4);
+                });
+                
+                // Reset text alignment
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'alphabetic';
+                ctx.font = 'bold 14px Arial';
+            }, [recognitionResults]);
+
+            // Trigger drawing when results change
+            useEffect(() => {
+                if (uploadedImage && recognitionResults.length > 0) {
+                    const timer = setTimeout(drawDetectionResults, 300);
+                    return () => clearTimeout(timer);
+                }
+            }, [uploadedImage, recognitionResults, drawDetectionResults]);
+
+            // Redraw on window resize
+            useEffect(() => {
+                const handleResize = () => {
+                    if (recognitionResults.length > 0) {
+                        setTimeout(drawDetectionResults, 100);
+                    }
+                };
+                
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, [recognitionResults, drawDetectionResults]);
 
             const undoLastAction = useCallback(() => {
                 console.log('Undo triggered');
@@ -501,6 +880,21 @@
                                                 src={uploadedImage}
                                                 alt="Hakli inscription"
                                                 className="max-w-full h-auto block mx-auto"
+                                                onLoad={() => {
+                                                    if (recognitionResults.length > 0) {
+                                                        setTimeout(drawDetectionResults, 100);
+                                                    }
+                                                }}
+                                            />
+                                            <canvas
+                                                ref={canvasRef}
+                                                className="absolute cursor-pointer"
+                                                style={{ 
+                                                    display: recognitionResults.length > 0 ? 'block' : 'none',
+                                                    left: '0px',
+                                                    top: '0px',
+                                                    pointerEvents: 'none'
+                                                }}
                                             />
                                         </div>
                                     ) : (
