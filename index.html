@@ -158,6 +158,158 @@
                 checkOpenCV();
             }, []);
 
+            // Combine selected detections
+            const combineDetections = useCallback(() => {
+                const activeIndices = Array.from(activeDetections).sort((a, b) => a - b);
+                if (activeIndices.length < 2) return;
+
+                const selectedResults = activeIndices.map(i => recognitionResults[i]);
+
+                // Find bounding box that encompasses all selected detections
+                const minX = Math.min(...selectedResults.map(r => r.position.x));
+                const minY = Math.min(...selectedResults.map(r => r.position.y));
+                const maxX = Math.max(...selectedResults.map(r => r.position.x + r.position.width));
+                const maxY = Math.max(...selectedResults.map(r => r.position.y + r.position.height));
+
+                // Create combined detection using the first selected as base
+                const baseResult = selectedResults[0];
+                const combinedResult = {
+                    ...baseResult,
+                    position: {
+                        x: minX,
+                        y: minY,
+                        width: maxX - minX,
+                        height: maxY - minY
+                    },
+                    symbol: {
+                        ...baseResult.symbol,
+                        name: selectedResults.map(r => r.symbol.name).join('+'),
+                        arabic: selectedResults.map(r => r.symbol.arabic || r.symbol.name).join('')
+                    },
+                    confidence: selectedResults.reduce((sum, r) => sum + r.confidence, 0) / selectedResults.length,
+                    matchType: 'combined'
+                };
+
+                // Remove individual detections and add combined one
+                const newResults = recognitionResults.filter((_, index) => !activeIndices.includes(index));
+                const combinedIndex = newResults.length;
+                newResults.push(combinedResult);
+
+                recordAction('combine_detections', {
+                    originalDetections: selectedResults,
+                    combinedResult: combinedResult,
+                    combinedIndex: combinedIndex,
+                    originalIndices: activeIndices
+                });
+
+                setRecognitionResults(newResults);
+                setActiveDetections(new Set());
+                setCombineMode(false);
+                
+                console.log('Combined detections:', selectedResults.map(r => r.symbol.name).join(' + '));
+            }, [activeDetections, recognitionResults, recordAction]);
+
+            // Re-analyze a combined symbol using template matching
+            const reanalyzeCombinedSymbol = useCallback(async (combinedIndex) => {
+                const combinedResult = recognitionResults[combinedIndex];
+                if (combinedResult.matchType !== 'combined' || !equivalenceChart || !imageRef.current) return;
+
+                console.log('Re-analyzing combined symbol:', combinedResult.symbol.name);
+
+                // Extract the combined region from the image
+                const combinedSymbol = {
+                    x: combinedResult.position.x,
+                    y: combinedResult.position.y,
+                    width: combinedResult.position.width,
+                    height: combinedResult.position.height,
+                    area: combinedResult.position.width * combinedResult.position.height
+                };
+
+                let bestMatch = null;
+                let matchAttempts = 0;
+
+                // Test against all symbols in the database
+                for (const symbol of equivalenceChart.symbols) {
+                    const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
+                    if (primaryImg) {
+                        matchAttempts++;
+                        const match = templateMatchIsolated(combinedSymbol, primaryImg);
+                        const confidence = match ? match.confidence : 0;
+                        
+                        if (match && confidence > processingSettings.detectionSensitivity) {
+                            console.log(`Re-analysis: ${symbol.name} (primary): ${confidence.toFixed(4)}`);
+                            if (!bestMatch || confidence > bestMatch.confidence) {
+                                bestMatch = {
+                                    ...match,
+                                    symbol: symbol,
+                                    matchType: 'primary',
+                                    confidence: confidence
+                                };
+                            }
+                        }
+                    }
+                    
+                    // Test variants if enabled
+                    if (processingSettings.variantMatching && symbol.images.variants) {
+                        symbol.images.variants.forEach((variantPath, index) => {
+                            const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
+                            if (variantImg) {
+                                matchAttempts++;
+                                const match = templateMatchIsolated(combinedSymbol, variantImg);
+                                const confidence = match ? match.confidence : 0;
+                                const threshold = processingSettings.detectionSensitivity * 0.9;
+                                
+                                if (match && confidence > threshold) {
+                                    console.log(`Re-analysis: ${symbol.name} (variant ${index + 1}): ${confidence.toFixed(4)}`);
+                                    const weightedConfidence = confidence * 0.9;
+                                    if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                        bestMatch = {
+                                            ...match,
+                                            symbol: symbol,
+                                            matchType: 'variant',
+                                            variantIndex: index,
+                                            confidence: weightedConfidence
+                                        };
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+
+                if (bestMatch) {
+                    recordAction('reanalysis', {
+                        detectionIndex: combinedIndex,
+                        originalDetection: combinedResult
+                    });
+
+                    // Update the combined symbol with new analysis
+                    setRecognitionResults(prev => 
+                        prev.map((result, index) => {
+                            if (index === combinedIndex) {
+                                return {
+                                    symbol: bestMatch.symbol,
+                                    confidence: Math.min(0.95, bestMatch.confidence),
+                                    position: result.position, // Keep original position
+                                    matchDetails: {
+                                        type: bestMatch.matchType,
+                                        variantIndex: bestMatch.variantIndex,
+                                        scale: 1.0,
+                                        reanalyzed: true
+                                    },
+                                    matchType: bestMatch.matchType,
+                                    variantIndex: bestMatch.variantIndex
+                                };
+                            }
+                            return result;
+                        })
+                    );
+                    console.log(`Re-analysis complete: Found ${bestMatch.symbol.name} with ${(bestMatch.confidence * 100).toFixed(0)}% confidence`);
+                } else {
+                    console.log('Re-analysis: No better match found');
+                }
+            }, [recognitionResults, equivalenceChart, loadedSymbolImages, processingSettings, templateMatchIsolated, recordAction]);
+
             // Convert relative paths to full GitHub URLs
             const convertToGitHubUrl = useCallback((relativePath) => {
                 if (!relativePath) return null;
@@ -692,7 +844,48 @@
                     ctx.strokeText(labelText, centerX, centerY);
                     ctx.fillText(labelText, centerX, centerY);
                     
+                    // Show action buttons and confidence ONLY for active boxes
                     if (isActive) {
+                        const buttonSize = 16;
+                        const buttonSpacing = 18;
+                        let buttonX = x + width + 5;
+                        const buttonY = y;
+                        
+                        // Delete button
+                        ctx.fillStyle = 'rgba(239, 68, 68, 0.9)'; // red
+                        ctx.fillRect(buttonX, buttonY, buttonSize, buttonSize);
+                        ctx.strokeStyle = 'white';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(buttonX + 3, buttonY + 3);
+                        ctx.lineTo(buttonX + buttonSize - 3, buttonY + buttonSize - 3);
+                        ctx.moveTo(buttonX + buttonSize - 3, buttonY + 3);
+                        ctx.lineTo(buttonX + 3, buttonY + buttonSize - 3);
+                        ctx.stroke();
+                        
+                        // Merge/Combine button (only show if multiple active or in combine mode)
+                        if (activeDetections.size > 1 || combineMode) {
+                            buttonX += buttonSpacing;
+                            ctx.fillStyle = 'rgba(59, 130, 246, 0.9)'; // blue
+                            ctx.fillRect(buttonX, buttonY, buttonSize, buttonSize);
+                            ctx.fillStyle = 'white';
+                            ctx.font = 'bold 12px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('+', buttonX + buttonSize/2, buttonY + buttonSize/2 + 1);
+                        }
+                        
+                        // Re-analyze button for combined symbols
+                        if (matchType === 'combined') {
+                            buttonX += buttonSpacing;
+                            ctx.fillStyle = 'rgba(16, 185, 129, 0.9)'; // green
+                            ctx.fillRect(buttonX, buttonY, buttonSize, buttonSize);
+                            ctx.fillStyle = 'white';
+                            ctx.font = 'bold 10px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.fillText('R', buttonX + buttonSize/2, buttonY + buttonSize/2 + 1);
+                        }
+                        
+                        // Confidence indicator in bottom-left corner (ONLY for active boxes)
                         const confidenceText = `${(result.confidence * 100).toFixed(0)}%`;
                         ctx.font = '10px Arial';
                         ctx.textAlign = 'left';
@@ -761,7 +954,7 @@
                 return () => window.removeEventListener('resize', handleResize);
             }, [recognitionResults, drawDetectionResults]);
 
-            // Interactive canvas click handling
+            // Interactive canvas click handling with button interactions
             const handleCanvasClick = useCallback((event) => {
                 if (manualSelectionMode) return;
                 
@@ -784,6 +977,52 @@
                 const scaleX = img.offsetWidth / img.naturalWidth;
                 const scaleY = img.offsetHeight / img.naturalHeight;
                 
+                // Check clicks on action buttons first (for active detections)
+                for (let index = 0; index < recognitionResults.length; index++) {
+                    if (!activeDetections.has(index)) continue;
+                    
+                    const result = recognitionResults[index];
+                    const { position, matchType } = result;
+                    
+                    const x = (position.x * scaleX) + offsetX;
+                    const y = (position.y * scaleY) + offsetY;
+                    const width = position.width * scaleX;
+                    
+                    const buttonSize = 16;
+                    const buttonSpacing = 18;
+                    let buttonX = x + width + 5;
+                    const buttonY = y;
+                    
+                    // Delete button
+                    if (clickX >= buttonX && clickX <= buttonX + buttonSize && 
+                        clickY >= buttonY && clickY <= buttonY + buttonSize) {
+                        deleteDetection(index);
+                        return;
+                    }
+                    
+                    // Combine button (if available)
+                    if (activeDetections.size > 1 || combineMode) {
+                        buttonX += buttonSpacing;
+                        if (clickX >= buttonX && clickX <= buttonX + buttonSize && 
+                            clickY >= buttonY && clickY <= buttonY + buttonSize) {
+                            if (activeDetections.size > 1) {
+                                combineDetections();
+                            }
+                            return;
+                        }
+                    }
+                    
+                    // Re-analyze button (for combined symbols)
+                    if (matchType === 'combined') {
+                        buttonX += buttonSpacing;
+                        if (clickX >= buttonX && clickX <= buttonX + buttonSize && 
+                            clickY >= buttonY && clickY <= buttonY + buttonSize) {
+                            reanalyzeCombinedSymbol(index);
+                            return;
+                        }
+                    }
+                }
+                
                 // Check clicks on detection boxes to toggle active state
                 let clickedAny = false;
                 for (let index = 0; index < recognitionResults.length; index++) {
@@ -805,7 +1044,7 @@
                 if (!clickedAny) {
                     clearActiveSelections();
                 }
-            }, [manualSelectionMode, recognitionResults]);
+            }, [manualSelectionMode, recognitionResults, activeDetections, combineMode, deleteDetection, combineDetections, toggleDetectionActive, clearActiveSelections, reanalyzeCombinedSymbol]);
 
             // Toggle detection active state
             const toggleDetectionActive = useCallback((index) => {
@@ -1542,12 +1781,11 @@
                                                                                     0, 0, result.position.width, result.position.height
                                                                                 );
                                                                                 
-                                                                                // Add renderKey to force refresh
-                                                                                const debugDataUrl = debugCanvas.toDataURL() + `?refresh=${renderKey}`;
+                                                                                const debugDataUrl = debugCanvas.toDataURL();
                                                                                 
                                                                                 return (
                                                                                     <img 
-                                                                                        key={`detected-${index}-${renderKey}`}
+                                                                                        key={`detected-${index}-${renderKey}-${result.position.x}-${result.position.y}`}
                                                                                         src={debugDataUrl}
                                                                                         alt={`Detected: ${result.symbol.name}`}
                                                                                         className="w-full h-full object-contain"
@@ -1647,19 +1885,19 @@
                                                                     </div>
 
                                                                     <button
-                                                                        onClick={() => toggleWordBoundary(index)}
+                                                                        onClick={() => toggleWordBoundary(originalIndex)}
                                                                         className={`text-xs px-2 py-1 rounded transition-colors ${
-                                                                            wordBoundaries.has(index)
+                                                                            wordBoundaries.has(originalIndex)
                                                                                 ? 'bg-purple-500 text-white'
                                                                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                                                         }`}
-                                                                        title={wordBoundaries.has(index) ? "Remove word boundary" : "Add word boundary before this symbol"}
+                                                                        title={wordBoundaries.has(originalIndex) ? "Remove word boundary" : "Add word boundary before this symbol"}
                                                                     >
-                                                                        {wordBoundaries.has(index) ? '| Word' : '+ Word'}
+                                                                        {wordBoundaries.has(originalIndex) ? '| Word' : '+ Word'}
                                                                     </button>
                                                                     
                                                                     <button
-                                                                        onClick={() => deleteDetection(index)}
+                                                                        onClick={() => deleteDetection(originalIndex)}
                                                                         className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
                                                                         title="Delete this detection"
                                                                     >
