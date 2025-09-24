@@ -565,6 +565,7 @@
             const [correctionConfidence, setCorrectionConfidence] = useState(0.9);
             const [showSymbolDropdown, setShowSymbolDropdown] = useState(false);
             const [renderKey, setRenderKey] = useState(0);
+            const [draggedIndex, setDraggedIndex] = useState(null);
             const [actionHistory, setActionHistory] = useState([]);
             const [maxHistorySize] = useState(20);
 
@@ -912,6 +913,11 @@
                                 return result;
                             })
                         );
+                        break;
+
+                    case 'reorder':
+                        // Restore original order
+                        setRecognitionResults(lastAction.data.originalOrder);
                         break;
 
                     default:
@@ -1619,6 +1625,46 @@
                 }
             }, [corrections]);
 
+            // Drag and drop handlers for reordering
+            const handleDragStart = useCallback((e, index) => {
+                setDraggedIndex(index);
+                e.dataTransfer.effectAllowed = 'move';
+            }, []);
+
+            const handleDragOver = useCallback((e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            }, []);
+
+            const handleDrop = useCallback((e, dropIndex) => {
+                e.preventDefault();
+                if (draggedIndex === null || draggedIndex === dropIndex) return;
+
+                console.log(`Reordering: moving item ${draggedIndex} to position ${dropIndex}`);
+
+                const newResults = [...recognitionResults];
+                const draggedItem = newResults[draggedIndex];
+                
+                // Remove dragged item
+                newResults.splice(draggedIndex, 1);
+                // Insert at new position
+                newResults.splice(dropIndex, 0, draggedItem);
+
+                setRecognitionResults(newResults);
+                setDraggedIndex(null);
+                
+                // Record action for undo
+                recordAction('reorder', {
+                    fromIndex: draggedIndex,
+                    toIndex: dropIndex,
+                    originalOrder: recognitionResults
+                });
+            }, [draggedIndex, recognitionResults, recordAction]);
+
+            const handleDragEnd = useCallback(() => {
+                setDraggedIndex(null);
+            }, []);
+
             // Redraw during manual selection
             useEffect(() => {
                 if (manualSelectionMode && (isDrawing || drawStart || drawCurrent)) {
@@ -1871,10 +1917,18 @@
                                                     const uniqueKey = `${index}-${result.matchType}-${result.symbol.id}-${result.confidence.toFixed(3)}-${renderKey}`;
                                                     
                                                     return (
-                                                <div key={uniqueKey} className={`bg-white rounded p-3 border-l-4 ${
-                                                    result.confidence > 0.7 ? 'border-green-500' : 
-                                                    result.confidence > 0.5 ? 'border-yellow-500' : 'border-red-500'
-                                                }`}>
+                                                <div 
+                                                    key={uniqueKey} 
+                                                    className={`bg-white rounded p-3 border-l-4 cursor-move ${
+                                                        result.confidence > 0.7 ? 'border-green-500' : 
+                                                        result.confidence > 0.5 ? 'border-yellow-500' : 'border-red-500'
+                                                    } ${draggedIndex === index ? 'opacity-50' : ''}`}
+                                                    draggable
+                                                    onDragStart={(e) => handleDragStart(e, index)}
+                                                    onDragOver={handleDragOver}
+                                                    onDrop={(e) => handleDrop(e, index)}
+                                                    onDragEnd={handleDragEnd}
+                                                >
                                                     <div className="flex justify-between items-center">
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
