@@ -589,7 +589,7 @@
                 setIsProcessing(false);
             }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, isolateSymbols, templateMatchIsolated, isOpenCVReady]);
 
-            // Canvas drawing for detection boxes
+            // Enhanced canvas drawing with interactive features
             const drawDetectionResults = useCallback(() => {
                 if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) {
                     return;
@@ -600,31 +600,24 @@
                 const img = imageRef.current;
                 const container = imageContainerRef.current;
                 
-                // Wait for image to be fully loaded and rendered
                 if (img.naturalWidth === 0 || img.naturalHeight === 0 || img.offsetWidth === 0 || img.offsetHeight === 0) {
                     setTimeout(drawDetectionResults, 100);
                     return;
                 }
 
-                // Get the bounding rectangles to calculate precise positioning
                 const containerRect = container.getBoundingClientRect();
                 const imgRect = img.getBoundingClientRect();
                 
-                // Calculate the actual offset of the image within its container
                 const offsetX = imgRect.left - containerRect.left;
                 const offsetY = imgRect.top - containerRect.top;
                 
-                // Set canvas size to exactly match the container
                 canvas.width = container.offsetWidth;
                 canvas.height = container.offsetHeight;
                 canvas.style.width = container.offsetWidth + 'px';
                 canvas.style.height = container.offsetHeight + 'px';
-                
-                // Position canvas to overlay the container perfectly
                 canvas.style.left = '0px';
                 canvas.style.top = '0px';
                 
-                // Calculate scaling factors from natural image size to displayed size
                 const scaleX = img.offsetWidth / img.naturalWidth;
                 const scaleY = img.offsetHeight / img.naturalHeight;
                 
@@ -636,38 +629,53 @@
                     containerSize: `${container.offsetWidth}x${container.offsetHeight}`,
                     imageOffset: `${offsetX.toFixed(1)}, ${offsetY.toFixed(1)}`,
                     scale: `${scaleX.toFixed(3)}x${scaleY.toFixed(3)}`,
-                    results: recognitionResults.length
+                    results: recognitionResults.length,
+                    active: activeDetections.size
                 });
                 
                 recognitionResults.forEach((result, index) => {
                     const { position, matchType, symbol } = result;
+                    const isActive = activeDetections.has(index);
                     
-                    // Apply scaling and offset transformations
                     const x = (position.x * scaleX) + offsetX;
                     const y = (position.y * scaleY) + offsetY;
                     const width = position.width * scaleX;
                     const height = position.height * scaleY;
                     
-                    // Style based on match type
-                    let color = '#10b981'; // green for primary
+                    let color = '#10b981';
                     let lineWidth = 2;
                     
                     if (matchType === 'variant') {
                         ctx.setLineDash([4, 4]);
-                        color = '#8b5cf6'; // purple for variants
+                        color = '#8b5cf6';
                     } else if (matchType === 'combined') {
-                        color = '#f59e0b'; // amber for combined
+                        color = '#f59e0b';
+                    } else if (matchType === 'corrected') {
+                        color = '#3b82f6';
+                    } else if (matchType === 'manual') {
+                        color = '#f97316';
                     } else {
                         ctx.setLineDash([]);
                     }
                     
-                    // Draw the main bounding box
+                    // Active state styling
+                    if (isActive) {
+                        lineWidth = 3;
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 5;
+                        ctx.strokeRect(x - 1, y - 1, width + 2, height + 2);
+                    }
+                    
                     ctx.strokeStyle = color;
                     ctx.lineWidth = lineWidth;
                     ctx.strokeRect(x, y, width, height);
                     ctx.setLineDash([]);
                     
-                    // Add Arabic character inside the box (centered)
+                    if (isActive) {
+                        ctx.fillStyle = color + '20';
+                        ctx.fillRect(x, y, width, height);
+                    }
+                    
                     const character = symbol.arabic || symbol.name;
                     const labelText = character.length > 3 ? symbol.name.charAt(0) : character;
                     
@@ -676,32 +684,62 @@
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     
-                    // Center the text in the box
                     const centerX = x + width / 2;
                     const centerY = y + height / 2;
                     
-                    // Draw text with slight background for visibility
                     ctx.strokeStyle = 'white';
                     ctx.lineWidth = 3;
                     ctx.strokeText(labelText, centerX, centerY);
                     ctx.fillText(labelText, centerX, centerY);
                     
-                    // Add confidence indicator in bottom-left corner
-                    const confidenceText = `${(result.confidence * 100).toFixed(0)}%`;
-                    ctx.font = '10px Arial';
-                    ctx.textAlign = 'left';
-                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                    const confTextWidth = ctx.measureText(confidenceText).width + 4;
-                    ctx.fillRect(x + 2, y + height - 14, confTextWidth, 12);
-                    ctx.fillStyle = 'white';
-                    ctx.fillText(confidenceText, x + 4, y + height - 4);
+                    if (isActive) {
+                        const confidenceText = `${(result.confidence * 100).toFixed(0)}%`;
+                        ctx.font = '10px Arial';
+                        ctx.textAlign = 'left';
+                        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                        const confTextWidth = ctx.measureText(confidenceText).width + 4;
+                        ctx.fillRect(x + 2, y + height - 14, confTextWidth, 12);
+                        ctx.fillStyle = 'white';
+                        ctx.fillText(confidenceText, x + 4, y + height - 4);
+                    }
                 });
                 
-                // Reset text alignment
+                // Draw manual selection rectangle
+                if (manualSelectionMode && isDrawing && drawStart && drawCurrent) {
+                    const startX = Math.min(drawStart.x, drawCurrent.x);
+                    const startY = Math.min(drawStart.y, drawCurrent.y);
+                    const rectWidth = Math.abs(drawCurrent.x - drawStart.x);
+                    const rectHeight = Math.abs(drawCurrent.y - drawStart.y);
+                    
+                    ctx.setLineDash([5, 5]);
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(startX, startY, rectWidth, rectHeight);
+                    
+                    ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+                    ctx.fillRect(startX, startY, rectWidth, rectHeight);
+                    ctx.setLineDash([]);
+                }
+                
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'alphabetic';
                 ctx.font = 'bold 14px Arial';
-            }, [recognitionResults]);
+            }, [recognitionResults, activeDetections, manualSelectionMode, isDrawing, drawStart, drawCurrent]);
+
+            // Manual selection controls
+            const startManualSelection = useCallback(() => {
+                setManualSelectionMode(true);
+                setActiveDetections(new Set());
+                console.log('Manual selection mode activated');
+            }, []);
+
+            const cancelManualSelection = useCallback(() => {
+                setManualSelectionMode(false);
+                setIsDrawing(false);
+                setDrawStart(null);
+                setDrawCurrent(null);
+                console.log('Manual selection mode cancelled');
+            }, []);
 
             // Trigger drawing when results change
             useEffect(() => {
@@ -723,12 +761,480 @@
                 return () => window.removeEventListener('resize', handleResize);
             }, [recognitionResults, drawDetectionResults]);
 
-            const undoLastAction = useCallback(() => {
-                console.log('Undo triggered');
+            // Interactive canvas click handling
+            const handleCanvasClick = useCallback((event) => {
+                if (manualSelectionMode) return;
+                
+                if (!canvasRef.current || !imageRef.current || !imageContainerRef.current || recognitionResults.length === 0) {
+                    return;
+                }
+                
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const clickX = event.clientX - rect.left;
+                const clickY = event.clientY - rect.top;
+                
+                const img = imageRef.current;
+                const container = imageContainerRef.current;
+                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
+                
+                const offsetX = imgRect.left - containerRect.left;
+                const offsetY = imgRect.top - containerRect.top;
+                const scaleX = img.offsetWidth / img.naturalWidth;
+                const scaleY = img.offsetHeight / img.naturalHeight;
+                
+                // Check clicks on detection boxes to toggle active state
+                let clickedAny = false;
+                for (let index = 0; index < recognitionResults.length; index++) {
+                    const result = recognitionResults[index];
+                    const { position } = result;
+                    
+                    const x = (position.x * scaleX) + offsetX;
+                    const y = (position.y * scaleY) + offsetY;
+                    const width = position.width * scaleX;
+                    const height = position.height * scaleY;
+                    
+                    if (clickX >= x && clickX <= x + width && clickY >= y && clickY <= y + height) {
+                        toggleDetectionActive(index);
+                        clickedAny = true;
+                        break;
+                    }
+                }
+                
+                if (!clickedAny) {
+                    clearActiveSelections();
+                }
+            }, [manualSelectionMode, recognitionResults]);
+
+            // Toggle detection active state
+            const toggleDetectionActive = useCallback((index) => {
+                setActiveDetections(prev => {
+                    const newActive = new Set(prev);
+                    if (newActive.has(index)) {
+                        newActive.delete(index);
+                    } else {
+                        newActive.add(index);
+                    }
+                    return newActive;
+                });
             }, []);
 
+            // Clear all active selections
+            const clearActiveSelections = useCallback(() => {
+                setActiveDetections(new Set());
+                setCombineMode(false);
+            }, []);
+
+            // Manual selection handlers
+            const handleMouseDown = useCallback((event) => {
+                if (!manualSelectionMode) return;
+                
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const startPoint = {
+                    x: event.clientX - rect.left,
+                    y: event.clientY - rect.top
+                };
+                
+                setIsDrawing(true);
+                setDrawStart(startPoint);
+                setDrawCurrent(startPoint);
+                event.preventDefault();
+            }, [manualSelectionMode]);
+
+            const handleMouseMove = useCallback((event) => {
+                if (!manualSelectionMode || !isDrawing || !drawStart) return;
+                
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const currentPoint = {
+                    x: event.clientX - rect.left,
+                    y: event.clientY - rect.top
+                };
+                
+                setDrawCurrent(currentPoint);
+                event.preventDefault();
+            }, [manualSelectionMode, isDrawing, drawStart]);
+
+            const handleMouseUp = useCallback((event) => {
+                if (!manualSelectionMode || !isDrawing || !drawStart) return;
+                
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const endPoint = {
+                    x: event.clientX - rect.left,
+                    y: event.clientY - rect.top
+                };
+                
+                const distance = Math.sqrt(
+                    Math.pow(endPoint.x - drawStart.x, 2) + 
+                    Math.pow(endPoint.y - drawStart.y, 2)
+                );
+                
+                if (distance > 10) {
+                    createManualDetection(drawStart, endPoint);
+                } else {
+                    setManualSelectionMode(false);
+                    setIsDrawing(false);
+                    setDrawStart(null);
+                    setDrawCurrent(null);
+                }
+                
+                event.preventDefault();
+            }, [manualSelectionMode, isDrawing, drawStart]);
+
+            // Create manual detection
+            const createManualDetection = useCallback(async (startPoint, endPoint) => {
+                if (!imageRef.current || !equivalenceChart) return;
+
+                const img = imageRef.current;
+                const container = imageContainerRef.current;
+                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
+                
+                const offsetX = imgRect.left - containerRect.left;
+                const offsetY = imgRect.top - containerRect.top;
+                const scaleX = img.offsetWidth / img.naturalWidth;
+                const scaleY = img.offsetHeight / img.naturalHeight;
+
+                const imageX1 = (startPoint.x - offsetX) / scaleX;
+                const imageY1 = (startPoint.y - offsetY) / scaleY;
+                const imageX2 = (endPoint.x - offsetX) / scaleX;
+                const imageY2 = (endPoint.y - offsetY) / scaleY;
+
+                const x = Math.min(imageX1, imageX2);
+                const y = Math.min(imageY1, imageY2);
+                const width = Math.abs(imageX2 - imageX1);
+                const height = Math.abs(imageY2 - imageY1);
+
+                if (width < 10 || height < 10) {
+                    console.log('Manual selection too small, ignoring');
+                    return;
+                }
+
+                // Simple manual detection - just add with first available symbol for now
+                const manualDetection = {
+                    symbol: equivalenceChart.symbols[0] || { id: 'manual', name: 'Manual Selection', arabic: 'م' },
+                    confidence: 0.8,
+                    position: { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) },
+                    matchType: 'manual',
+                    matchDetails: { type: 'manual', manual: true }
+                };
+
+                recordAction('manual_detection', {
+                    detectionIndex: recognitionResults.length,
+                    detection: manualDetection,
+                    selectionBounds: { startPoint, endPoint }
+                });
+
+                setRecognitionResults(prev => [...prev, manualDetection]);
+                setManualSelectionMode(false);
+                setIsDrawing(false);
+                setDrawStart(null);
+                setDrawCurrent(null);
+                
+                console.log('Manual detection added');
+            }, [equivalenceChart, recognitionResults]);
+
+            // Action recording system
+            const recordAction = useCallback((actionType, actionData) => {
+                const action = {
+                    type: actionType,
+                    data: actionData,
+                    timestamp: new Date().toISOString(),
+                    id: Date.now()
+                };
+
+                setActionHistory(prev => {
+                    const newHistory = [...prev, action];
+                    return newHistory.slice(-maxHistorySize);
+                });
+
+                console.log('Action recorded:', action);
+            }, [maxHistorySize]);
+
+            // Enhanced undo system
+            const undoLastAction = useCallback(() => {
+                if (actionHistory.length === 0) return;
+
+                const lastAction = actionHistory[actionHistory.length - 1];
+                console.log('Undoing action:', lastAction);
+
+                switch (lastAction.type) {
+                    case 'delete_detection':
+                        setRecognitionResults(prev => {
+                            const newResults = [...prev];
+                            newResults.splice(lastAction.data.index, 0, lastAction.data.detection);
+                            return newResults;
+                        });
+                        break;
+
+                    case 'manual_detection':
+                        setRecognitionResults(prev => prev.filter((_, index) => index !== lastAction.data.detectionIndex));
+                        break;
+
+                    case 'correction':
+                        setRecognitionResults(prev => 
+                            prev.map((result, index) => {
+                                if (index === lastAction.data.detectionIndex) {
+                                    return lastAction.data.originalDetection;
+                                }
+                                return result;
+                            })
+                        );
+                        setCorrections(prev => {
+                            const newCorrections = { ...prev };
+                            delete newCorrections[lastAction.data.detectionIndex];
+                            return newCorrections;
+                        });
+                        break;
+
+                    case 'validation':
+                        setValidations(prev => {
+                            const newValidations = { ...prev };
+                            delete newValidations[lastAction.data.detectionIndex];
+                            return newValidations;
+                        });
+                        break;
+
+                    case 'reorder':
+                        setRecognitionResults(lastAction.data.originalOrder);
+                        break;
+
+                    default:
+                        console.warn('Unknown action type for undo:', lastAction.type);
+                        return;
+                }
+
+                setActionHistory(prev => prev.slice(0, -1));
+                console.log('Action undone:', lastAction.type);
+            }, [actionHistory]);
+
+            // Validation functions
+            const validateDetection = useCallback((detectionIndex, isCorrect) => {
+                recordAction('validation', {
+                    detectionIndex: detectionIndex,
+                    isCorrect: isCorrect,
+                    detectionData: recognitionResults[detectionIndex]
+                });
+
+                setValidations(prev => ({
+                    ...prev,
+                    [detectionIndex]: {
+                        isCorrect: isCorrect,
+                        timestamp: new Date().toISOString(),
+                        detectionData: recognitionResults[detectionIndex]
+                    }
+                }));
+                
+                console.log(`Detection ${detectionIndex + 1} marked as ${isCorrect ? 'correct' : 'incorrect'}`);
+            }, [recognitionResults, recordAction]);
+
+            // Correction system
+            const openCorrectionModal = useCallback((detectionIndex) => {
+                setCorrectionTarget(detectionIndex);
+                setCorrectionSymbolId('');
+                setCorrectionConfidence(0.9);
+                setShowSymbolDropdown(false);
+                setShowCorrectionModal(true);
+            }, []);
+
+            const submitCorrection = useCallback((detectionIndex, correctSymbolId, confidence = 0.9) => {
+                const correctSymbol = equivalenceChart?.symbols.find(s => s.id === correctSymbolId);
+                if (!correctSymbol) {
+                    alert(`Symbol with ID "${correctSymbolId}" not found in database.`);
+                    return;
+                }
+
+                const originalDetection = recognitionResults[detectionIndex];
+
+                recordAction('correction', {
+                    detectionIndex: detectionIndex,
+                    originalDetection: originalDetection,
+                    correctedSymbol: correctSymbol,
+                    userConfidence: confidence
+                });
+
+                setCorrections(prev => ({
+                    ...prev,
+                    [detectionIndex]: {
+                        originalDetection: originalDetection,
+                        correctedSymbol: correctSymbol,
+                        userConfidence: confidence,
+                        timestamp: new Date().toISOString()
+                    }
+                }));
+
+                setRecognitionResults(prev => 
+                    prev.map((result, index) => {
+                        if (index === detectionIndex) {
+                            return {
+                                ...result,
+                                symbol: correctSymbol,
+                                confidence: confidence,
+                                matchType: 'corrected',
+                                matchDetails: {
+                                    ...result.matchDetails,
+                                    userCorrected: true,
+                                    originalSymbol: result.symbol
+                                }
+                            };
+                        }
+                        return result;
+                    })
+                );
+
+                console.log(`Detection ${detectionIndex + 1} corrected to: ${correctSymbol.name}`);
+                setShowCorrectionModal(false);
+                setCorrectionTarget(null);
+                setCorrectionSymbolId('');
+                setCorrectionConfidence(0.9);
+                setShowSymbolDropdown(false);
+                setRenderKey(prev => prev + 1);
+            }, [recognitionResults, equivalenceChart, recordAction]);
+
+            // Export learning data
             const exportLearningData = useCallback(() => {
-                console.log('Export learning data triggered');
+                const learningData = {
+                    corrections: corrections,
+                    validations: validations,
+                    exportDate: new Date().toISOString(),
+                    totalCorrections: Object.keys(corrections).length,
+                    totalValidations: Object.keys(validations).length,
+                    symbolStats: {}
+                };
+
+                Object.values(corrections).forEach(correction => {
+                    const symbolName = correction.correctedSymbol.name;
+                    if (!learningData.symbolStats[symbolName]) {
+                        learningData.symbolStats[symbolName] = { corrections: 0, validations: 0 };
+                    }
+                    learningData.symbolStats[symbolName].corrections++;
+                });
+
+                const blob = new Blob([JSON.stringify(learningData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `hakli_learning_data_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                console.log('Learning data exported:', learningData);
+            }, [corrections, validations]);
+
+            // Delete detection
+            const deleteDetection = useCallback((indexToDelete) => {
+                const detectionToDelete = recognitionResults[indexToDelete];
+                
+                recordAction('delete_detection', {
+                    index: indexToDelete,
+                    detection: detectionToDelete
+                });
+
+                setRecognitionResults(prev => prev.filter((_, index) => index !== indexToDelete));
+                
+                setActiveDetections(prev => {
+                    const newActive = new Set();
+                    prev.forEach(activeIndex => {
+                        if (activeIndex < indexToDelete) {
+                            newActive.add(activeIndex);
+                        } else if (activeIndex > indexToDelete) {
+                            newActive.add(activeIndex - 1);
+                        }
+                    });
+                    return newActive;
+                });
+                
+                setWordBoundaries(prev => {
+                    const newBoundaries = new Set();
+                    prev.forEach(boundaryIndex => {
+                        if (boundaryIndex < indexToDelete) {
+                            newBoundaries.add(boundaryIndex);
+                        } else if (boundaryIndex > indexToDelete) {
+                            newBoundaries.add(boundaryIndex - 1);
+                        }
+                    });
+                    return newBoundaries;
+                });
+            }, [recognitionResults, recordAction]);
+
+            // Drag and drop handlers
+            const handleDragStart = useCallback((e, index) => {
+                console.log('Drag started from index:', index);
+                setDraggedIndex(index);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', index.toString());
+                e.target.style.opacity = '0.5';
+            }, []);
+
+            const handleDragOver = useCallback((e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'move';
+                e.currentTarget.style.borderTop = '3px solid #3b82f6';
+            }, []);
+
+            const handleDragEnter = useCallback((e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            }, []);
+
+            const handleDragLeave = useCallback((e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.style.borderTop = 'none';
+            }, []);
+
+            const handleDrop = useCallback((e, dropIndex) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Drop event triggered at index:', dropIndex);
+                
+                e.currentTarget.style.borderTop = 'none';
+                
+                const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                console.log('Retrieved drag index:', dragIndex);
+                
+                if (isNaN(dragIndex) || dragIndex === dropIndex) {
+                    setDraggedIndex(null);
+                    return;
+                }
+
+                console.log(`Reordering: moving item ${dragIndex} to position ${dropIndex}`);
+
+                const newResults = [...recognitionResults];
+                const draggedItem = newResults[dragIndex];
+                
+                newResults.splice(dragIndex, 1);
+                const adjustedDropIndex = dragIndex < dropIndex ? dropIndex - 1 : dropIndex;
+                newResults.splice(adjustedDropIndex, 0, draggedItem);
+
+                setRecognitionResults(newResults);
+                setDraggedIndex(null);
+                
+                recordAction('reorder', {
+                    fromIndex: dragIndex,
+                    toIndex: adjustedDropIndex,
+                    originalOrder: recognitionResults
+                });
+                
+                setRenderKey(prev => prev + 1);
+                console.log('Reorder complete, new order:', newResults.map(r => r.symbol.name));
+            }, [recognitionResults, recordAction]);
+
+            const handleDragEnd = useCallback((e) => {
+                console.log('Drag ended');
+                e.target.style.opacity = '1';
+                setDraggedIndex(null);
+                
+                const allItems = document.querySelectorAll('[draggable="true"]');
+                allItems.forEach(item => {
+                    item.style.borderTop = 'none';
+                });
             }, []);
 
             return (
@@ -829,7 +1335,7 @@
                                     ) : (
                                         <>
                                             <Zap />
-                                            Detect Symbols
+                                            {isOpenCVReady ? 'Detect Symbols (OpenCV Ready)' : 'Detect Symbols (Mock Mode)'}
                                         </>
                                     )}
                                 </button>
@@ -839,7 +1345,7 @@
                                     <div className="space-y-2">
                                         {!manualSelectionMode ? (
                                             <button
-                                                onClick={() => setManualSelectionMode(true)}
+                                                onClick={startManualSelection}
                                                 disabled={!uploadedImage}
                                                 className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-gray-300 text-white font-medium py-2 px-4 rounded-lg"
                                             >
@@ -851,7 +1357,7 @@
                                                     Click and drag to select a symbol region
                                                 </div>
                                                 <button
-                                                    onClick={() => setManualSelectionMode(false)}
+                                                    onClick={cancelManualSelection}
                                                     className="w-full bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg"
                                                 >
                                                     Cancel Selection
@@ -888,13 +1394,16 @@
                                             />
                                             <canvas
                                                 ref={canvasRef}
-                                                className="absolute cursor-pointer"
+                                                className={`absolute ${manualSelectionMode ? 'cursor-crosshair' : 'cursor-pointer'}`}
                                                 style={{ 
-                                                    display: recognitionResults.length > 0 ? 'block' : 'none',
+                                                    display: recognitionResults.length > 0 || manualSelectionMode ? 'block' : 'none',
                                                     left: '0px',
-                                                    top: '0px',
-                                                    pointerEvents: 'none'
+                                                    top: '0px'
                                                 }}
+                                                onClick={!manualSelectionMode ? handleCanvasClick : undefined}
+                                                onMouseDown={manualSelectionMode ? handleMouseDown : undefined}
+                                                onMouseMove={manualSelectionMode ? handleMouseMove : undefined}
+                                                onMouseUp={manualSelectionMode ? handleMouseUp : undefined}
                                             />
                                         </div>
                                     ) : (
@@ -978,72 +1487,198 @@
                                         <div className="space-y-2">
                                             <div className="flex justify-between items-center">
                                                 <h4 className="font-medium text-gray-800">Individual Matches:</h4>
-                                                <div className="text-xs text-gray-600">
-                                                    Sorted by position • Drag to reorder
+                                                <div className="flex items-center gap-2">
+                                                    <div className="text-xs text-gray-600">
+                                                        Sorted by position • Drag to reorder • Click boxes above to select
+                                                    </div>
+                                                    {draggedIndex !== null && (
+                                                        <div className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
+                                                            Moving item #{draggedIndex + 1}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                             
-                                            <div className="space-y-2">
-                                                {recognitionResults.map((result, index) => (
-                                                    <div 
-                                                        key={`${index}-${result.symbol.id}`}
-                                                        className={`bg-white rounded p-3 border-l-4 ${
-                                                            result.confidence > 0.7 ? 'border-green-500' : 
-                                                            result.confidence > 0.5 ? 'border-yellow-500' : 'border-red-500'
-                                                        }`}
-                                                    >
-                                                        <div className="flex justify-between items-center">
-                                                            <div className="flex items-center gap-3">
-                                                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                                                    #{index + 1}
-                                                                </span>
-                                                                
-                                                                <div>
+                                            <div className={`space-y-2 ${draggedIndex !== null ? 'select-none' : ''}`}>
+                                                {recognitionResults.map((result, index) => {
+                                                    const uniqueKey = `${index}-${result.symbol.id}-${result.confidence.toFixed(3)}-${renderKey}`;
+                                                    const isActive = activeDetections.has(index);
+                                                    
+                                                    return (
+                                                        <div 
+                                                            key={uniqueKey}
+                                                            className={`bg-white rounded p-3 border-l-4 cursor-move transition-all duration-200 ${
+                                                                result.confidence > 0.7 ? 'border-green-500' : 
+                                                                result.confidence > 0.5 ? 'border-yellow-500' : 'border-red-500'
+                                                            } ${draggedIndex === index ? 'opacity-50 transform scale-95' : 'hover:shadow-md'} ${
+                                                                isActive ? 'bg-blue-50 ring-2 ring-blue-300' : ''
+                                                            }`}
+                                                            draggable
+                                                            onDragStart={(e) => handleDragStart(e, index)}
+                                                            onDragOver={handleDragOver}
+                                                            onDragEnter={handleDragEnter}
+                                                            onDragLeave={handleDragLeave}
+                                                            onDrop={(e) => handleDrop(e, index)}
+                                                            onDragEnd={handleDragEnd}
+                                                        >
+                                                            <div className="flex justify-between items-center">
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                                                        #{index + 1}
+                                                                    </span>
+                                                                    
                                                                     <div className="flex items-center gap-2">
-                                                                        <span className="font-medium">{result.symbol.name}</span>
-                                                                        {result.symbol.arabic && (
-                                                                            <span className="text-lg">({result.symbol.arabic})</span>
-                                                                        )}
-                                                                        <span className={`text-xs px-2 py-1 rounded ${
-                                                                            result.matchType === 'primary' ? 'bg-green-100 text-green-700' : 
-                                                                            result.matchType === 'variant' ? 'bg-purple-100 text-purple-700' :
-                                                                            'bg-gray-100 text-gray-700'
-                                                                        }`}>
-                                                                            {result.matchType}
-                                                                        </span>
+                                                                        <div className="w-12 h-12 bg-gray-100 border rounded flex-shrink-0">
+                                                                            {(() => {
+                                                                                if (!imageRef.current) return null;
+                                                                                const debugCanvas = document.createElement('canvas');
+                                                                                const debugCtx = debugCanvas.getContext('2d');
+                                                                                debugCanvas.width = result.position.width;
+                                                                                debugCanvas.height = result.position.height;
+                                                                                
+                                                                                debugCtx.drawImage(
+                                                                                    imageRef.current,
+                                                                                    result.position.x, result.position.y, result.position.width, result.position.height,
+                                                                                    0, 0, result.position.width, result.position.height
+                                                                                );
+                                                                                
+                                                                                const debugDataUrl = debugCanvas.toDataURL();
+                                                                                
+                                                                                return (
+                                                                                    <img 
+                                                                                        src={debugDataUrl}
+                                                                                        alt={`Detected: ${result.symbol.name}`}
+                                                                                        className="w-full h-full object-contain"
+                                                                                    />
+                                                                                );
+                                                                            })()}
+                                                                        </div>
+                                                                        <div className="text-sm text-gray-400">→</div>
+                                                                        <div className="w-12 h-12 bg-gray-50 border rounded flex-shrink-0">
+                                                                            {(() => {
+                                                                                let templateImg = null;
+                                                                                if (result.matchType === 'primary') {
+                                                                                    templateImg = loadedSymbolImages[`${result.symbol.id}_primary`];
+                                                                                } else if (result.matchType === 'variant' && result.variantIndex !== undefined) {
+                                                                                    templateImg = loadedSymbolImages[`${result.symbol.id}_variant_${result.variantIndex}`];
+                                                                                }
+                                                                                
+                                                                                if (templateImg) {
+                                                                                    return (
+                                                                                        <img 
+                                                                                            src={templateImg.src}
+                                                                                            alt={`Template: ${result.symbol.name}`}
+                                                                                            className="w-full h-full object-contain"
+                                                                                        />
+                                                                                    );
+                                                                                } else {
+                                                                                    return (
+                                                                                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                                                                                            {result.matchType === 'manual' ? 'MAN' : 'N/A'}
+                                                                                        </div>
+                                                                                    );
+                                                                                }
+                                                                            })()}
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="text-xs text-gray-500 mt-1">
-                                                                        Position: ({result.position.x}, {result.position.y}) Size: {result.position.width}x{result.position.height}px
+                                                                    
+                                                                    <div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-medium">{result.symbol.name}</span>
+                                                                            {result.symbol.arabic && (
+                                                                                <span className="text-lg">({result.symbol.arabic})</span>
+                                                                            )}
+                                                                            <span className={`text-xs px-2 py-1 rounded ${
+                                                                                result.matchType === 'primary' ? 'bg-green-100 text-green-700' : 
+                                                                                result.matchType === 'variant' ? 'bg-purple-100 text-purple-700' :
+                                                                                result.matchType === 'corrected' ? 'bg-blue-100 text-blue-700' :
+                                                                                result.matchType === 'manual' ? 'bg-orange-100 text-orange-700' :
+                                                                                'bg-gray-100 text-gray-700'
+                                                                            }`}>
+                                                                                {result.matchType === 'variant' ? `variant v${(result.variantIndex || 0) + 1}` : result.matchType}
+                                                                                {result.matchDetails?.manual && ' (manual)'}
+                                                                                {result.matchDetails?.userCorrected && ' (corrected)'}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="text-xs text-gray-500 mt-1">
+                                                                            Position: ({result.position.x}, {result.position.y}) Size: {result.position.width}x{result.position.height}px
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <button
-                                                                    onClick={() => toggleWordBoundary(index)}
-                                                                    className={`text-xs px-2 py-1 rounded transition-colors ${
-                                                                        wordBoundaries.has(index)
-                                                                            ? 'bg-purple-500 text-white'
-                                                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                                                    }`}
-                                                                    title={wordBoundaries.has(index) ? "Remove word boundary" : "Add word boundary before this symbol"}
-                                                                >
-                                                                    {wordBoundaries.has(index) ? '| Word' : '+ Word'}
-                                                                </button>
-                                                                <div className="text-right">
-                                                                    <div className={`px-2 py-1 rounded text-sm font-medium ${
-                                                                        result.confidence > 0.7 
-                                                                            ? 'bg-green-100 text-green-800' 
-                                                                            : result.confidence > 0.5
-                                                                                ? 'bg-yellow-100 text-yellow-800'
-                                                                                : 'bg-red-100 text-red-800'
-                                                                    }`}>
-                                                                        {(result.confidence * 100).toFixed(0)}%
+                                                                <div className="flex items-center gap-2">
+                                                                    {/* Validation Controls */}
+                                                                    <div className="flex items-center gap-1 mr-2">
+                                                                        {validations[index] ? (
+                                                                            <span className={`text-xs px-2 py-1 rounded ${
+                                                                                validations[index].isCorrect 
+                                                                                    ? 'bg-green-100 text-green-700' 
+                                                                                    : 'bg-red-100 text-red-700'
+                                                                            }`}>
+                                                                                {validations[index].isCorrect ? 'Validated ✓' : 'Rejected ✗'}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <>
+                                                                                <button
+                                                                                    onClick={() => validateDetection(index, true)}
+                                                                                    className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
+                                                                                    title="Mark as correct"
+                                                                                >
+                                                                                    ✓
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => validateDetection(index, false)}
+                                                                                    className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
+                                                                                    title="Mark as incorrect"
+                                                                                >
+                                                                                    ✗
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => openCorrectionModal(index)}
+                                                                                    className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                                                                                    title="Correct this detection"
+                                                                                >
+                                                                                    Fix
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+
+                                                                    <button
+                                                                        onClick={() => toggleWordBoundary(index)}
+                                                                        className={`text-xs px-2 py-1 rounded transition-colors ${
+                                                                            wordBoundaries.has(index)
+                                                                                ? 'bg-purple-500 text-white'
+                                                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                                        }`}
+                                                                        title={wordBoundaries.has(index) ? "Remove word boundary" : "Add word boundary before this symbol"}
+                                                                    >
+                                                                        {wordBoundaries.has(index) ? '| Word' : '+ Word'}
+                                                                    </button>
+                                                                    
+                                                                    <button
+                                                                        onClick={() => deleteDetection(index)}
+                                                                        className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
+                                                                        title="Delete this detection"
+                                                                    >
+                                                                        Delete
+                                                                    </button>
+                                                                    
+                                                                    <div className="text-right">
+                                                                        <div className={`px-2 py-1 rounded text-sm font-medium ${
+                                                                            result.confidence > 0.7 
+                                                                                ? 'bg-green-100 text-green-800' 
+                                                                                : result.confidence > 0.5
+                                                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                                                    : 'bg-red-100 text-red-800'
+                                                                        }`}>
+                                                                            {(result.confidence * 100).toFixed(0)}%
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     </div>
@@ -1051,6 +1686,128 @@
                             </div>
                         </div>
                     </div>
+
+                    {/* Correction Modal */}
+                    {showCorrectionModal && correctionTarget !== null && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                                <h3 className="text-lg font-semibold mb-4">Correct Detection</h3>
+                                <div className="mb-4">
+                                    <p className="text-sm text-gray-600 mb-2">
+                                        Current detection: <strong>{recognitionResults[correctionTarget]?.symbol.name}</strong>
+                                    </p>
+                                    <label className="block text-sm font-medium mb-2">
+                                        Select correct symbol:
+                                    </label>
+                                    
+                                    <div className="relative">
+                                        <div className="w-full border border-gray-300 rounded px-3 py-2 bg-white cursor-pointer min-h-[40px] flex items-center" 
+                                             onClick={() => setShowSymbolDropdown(!showSymbolDropdown)}>
+                                            {correctionSymbolId ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 bg-gray-100 border rounded flex-shrink-0">
+                                                        {(() => {
+                                                            const selectedSymbol = equivalenceChart?.symbols?.find(s => s.id === correctionSymbolId);
+                                                            const symbolImg = selectedSymbol ? loadedSymbolImages[`${selectedSymbol.id}_primary`] : null;
+                                                            
+                                                            if (symbolImg) {
+                                                                return <img src={symbolImg.src} alt={selectedSymbol.name} className="w-full h-full object-contain" />;
+                                                            } else {
+                                                                return <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">N/A</div>;
+                                                            }
+                                                        })()}
+                                                    </div>
+                                                    <span>
+                                                        {equivalenceChart?.symbols?.find(s => s.id === correctionSymbolId)?.name || 'Unknown'} 
+                                                        ({equivalenceChart?.symbols?.find(s => s.id === correctionSymbolId)?.arabic || 'N/A'})
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-500">Choose correct symbol...</span>
+                                            )}
+                                            <div className="ml-auto">▼</div>
+                                        </div>
+                                        
+                                        {showSymbolDropdown && (
+                                            <div className="absolute z-10 w-full max-h-60 overflow-y-auto bg-white border border-gray-300 rounded-b shadow-lg">
+                                                {equivalenceChart?.symbols?.map(symbol => (
+                                                    <div 
+                                                        key={symbol.id} 
+                                                        className="flex items-center gap-3 p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                                        onClick={() => {
+                                                            setCorrectionSymbolId(symbol.id);
+                                                            setShowSymbolDropdown(false);
+                                                        }}
+                                                    >
+                                                        <div className="w-8 h-8 bg-gray-100 border rounded flex-shrink-0">
+                                                            {(() => {
+                                                                const symbolImg = loadedSymbolImages[`${symbol.id}_primary`];
+                                                                if (symbolImg) {
+                                                                    return <img src={symbolImg.src} alt={symbol.name} className="w-full h-full object-contain" />;
+                                                                } else {
+                                                                    return <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">N/A</div>;
+                                                                }
+                                                            })()}
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <div className="font-medium">{symbol.name}</div>
+                                                            <div className="text-sm text-gray-500">
+                                                                Arabic: {symbol.arabic || 'N/A'} • ID: {symbol.id}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium mb-2">
+                                        Confidence in correction:
+                                    </label>
+                                    <input
+                                        type="range"
+                                        min="0.5"
+                                        max="1.0"
+                                        step="0.1"
+                                        value={correctionConfidence}
+                                        onChange={(e) => setCorrectionConfidence(parseFloat(e.target.value))}
+                                        className="w-full"
+                                    />
+                                    <div className="text-xs text-gray-500 mt-1">
+                                        Current: {Math.round(correctionConfidence * 100)}%
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => {
+                                            if (correctionSymbolId) {
+                                                submitCorrection(correctionTarget, correctionSymbolId, correctionConfidence);
+                                            } else {
+                                                alert('Please select a correct symbol');
+                                            }
+                                        }}
+                                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                        disabled={!correctionSymbolId}
+                                    >
+                                        Submit Correction
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowCorrectionModal(false);
+                                            setCorrectionTarget(null);
+                                            setCorrectionSymbolId('');
+                                            setCorrectionConfidence(0.9);
+                                            setShowSymbolDropdown(false);
+                                        }}
+                                        className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
