@@ -546,9 +546,88 @@
                 }
             }, []);
 
-            // State for isolated symbols
+            // State for isolated symbols and selection
             const [isolatedSymbols, setIsolatedSymbols] = useState([]);
-            const performTemplateMatching = useCallback((inputImage, templateImage, threshold = 0.7) => {
+            const [selectedRegions, setSelectedRegions] = useState(new Set());
+            const [showRegionBoundaries, setShowRegionBoundaries] = useState(true);
+            // Region management functions
+            const toggleRegionSelection = useCallback((regionIndex) => {
+                setSelectedRegions(prev => {
+                    const newSet = new Set(prev);
+                    if (newSet.has(regionIndex)) {
+                        newSet.delete(regionIndex);
+                    } else {
+                        newSet.add(regionIndex);
+                    }
+                    return newSet;
+                });
+            }, []);
+
+            const mergeSelectedRegions = useCallback(() => {
+                if (selectedRegions.size < 2) {
+                    console.log('Need at least 2 regions selected to merge');
+                    return;
+                }
+
+                const selectedIndices = Array.from(selectedRegions).sort((a, b) => a - b);
+                const regionsToMerge = selectedIndices.map(i => isolatedSymbols[i]);
+
+                // Calculate bounding box that encompasses all selected regions
+                const minX = Math.min(...regionsToMerge.map(r => r.bounds.x));
+                const minY = Math.min(...regionsToMerge.map(r => r.bounds.y));
+                const maxX = Math.max(...regionsToMerge.map(r => r.bounds.x + r.bounds.width));
+                const maxY = Math.max(...regionsToMerge.map(r => r.bounds.y + r.bounds.height));
+
+                const mergedRegion = {
+                    bounds: {
+                        x: minX,
+                        y: minY,
+                        width: maxX - minX,
+                        height: maxY - minY
+                    },
+                    area: (maxX - minX) * (maxY - minY),
+                    aspectRatio: (maxX - minX) / (maxY - minY),
+                    merged: true,
+                    originalRegions: selectedIndices.length
+                };
+
+                // Create new array with merged region
+                const newIsolatedSymbols = [];
+                let mergedAdded = false;
+
+                for (let i = 0; i < isolatedSymbols.length; i++) {
+                    if (selectedRegions.has(i)) {
+                        // Add merged region only once (at first selected index position)
+                        if (!mergedAdded) {
+                            newIsolatedSymbols.push(mergedRegion);
+                            mergedAdded = true;
+                        }
+                        // Skip other selected regions
+                    } else {
+                        newIsolatedSymbols.push(isolatedSymbols[i]);
+                    }
+                }
+
+                setIsolatedSymbols(newIsolatedSymbols);
+                setSelectedRegions(new Set()); // Clear selection
+                console.log(`Merged ${selectedIndices.length} regions into one`);
+            }, [selectedRegions, isolatedSymbols]);
+
+            const deleteSelectedRegions = useCallback(() => {
+                if (selectedRegions.size === 0) {
+                    console.log('No regions selected to delete');
+                    return;
+                }
+
+                const newIsolatedSymbols = isolatedSymbols.filter((_, index) => !selectedRegions.has(index));
+                setIsolatedSymbols(newIsolatedSymbols);
+                setSelectedRegions(new Set()); // Clear selection
+                console.log(`Deleted ${selectedRegions.size} regions`);
+            }, [selectedRegions, isolatedSymbols]);
+
+            const clearRegionSelection = useCallback(() => {
+                setSelectedRegions(new Set());
+            }, []);
                 if (!isOpenCvReady) {
                     console.error('OpenCV is not ready');
                     return [];
@@ -1095,6 +1174,49 @@
                                     onMouseUp={handleCanvasMouseUp}
                                 />
                                 
+                                {/* Region boundary overlays */}
+                                {showRegionBoundaries && isolatedSymbols.map((region, idx) => {
+                                    if (!imageRef.current) return null;
+
+                                    const img = imageRef.current;
+                                    const scaleX = img.offsetWidth / img.naturalWidth;
+                                    const scaleY = img.offsetHeight / img.naturalHeight;
+
+                                    const boxStyle = {
+                                        left: region.bounds.x * scaleX,
+                                        top: region.bounds.y * scaleY,
+                                        width: region.bounds.width * scaleX,
+                                        height: region.bounds.height * scaleY,
+                                    };
+
+                                    let borderColor = 'border-blue-400';
+                                    let bgColor = 'bg-blue-100';
+                                    
+                                    if (selectedRegions.has(idx)) {
+                                        borderColor = 'border-orange-500';
+                                        bgColor = 'bg-orange-100';
+                                    }
+                                    
+                                    if (region.merged) {
+                                        borderColor = 'border-purple-500';
+                                        bgColor = 'bg-purple-100';
+                                    }
+
+                                    return (
+                                        <div
+                                            key={`region-${idx}`}
+                                            className={`detection-box border-2 ${borderColor} ${bgColor} bg-opacity-20 cursor-pointer hover:bg-opacity-40`}
+                                            style={boxStyle}
+                                            onClick={() => toggleRegionSelection(idx)}
+                                            title={`Region ${idx + 1} - Click to select/deselect`}
+                                        >
+                                            <div className="absolute -top-6 left-0 text-xs bg-white px-1 rounded shadow border">
+                                                R{idx + 1}{region.merged && ` (${region.originalRegions} merged)`}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                
                                 {/* Detection overlays */}
                                 {recognitionResults.map((result, idx) => {
                                     if (!imageRef.current) return null;
@@ -1137,7 +1259,54 @@
                         </div>
                     )}
 
-                                            {/* Isolated Symbols Debug Panel */}
+                                            {/* Region Management Controls */}
+                        {isolatedSymbols.length > 0 && (
+                            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                                <div className="flex flex-wrap gap-3 items-center mb-3">
+                                    <label className="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={showRegionBoundaries}
+                                            onChange={(e) => setShowRegionBoundaries(e.target.checked)}
+                                            className="rounded"
+                                        />
+                                        <span className="text-sm">Show Region Boundaries</span>
+                                    </label>
+                                    
+                                    <button
+                                        onClick={mergeSelectedRegions}
+                                        disabled={selectedRegions.size < 2}
+                                        className="px-3 py-1 text-sm bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Merge Selected ({selectedRegions.size})
+                                    </button>
+                                    
+                                    <button
+                                        onClick={deleteSelectedRegions}
+                                        disabled={selectedRegions.size === 0}
+                                        className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Delete Selected ({selectedRegions.size})
+                                    </button>
+                                    
+                                    <button
+                                        onClick={clearRegionSelection}
+                                        disabled={selectedRegions.size === 0}
+                                        className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Clear Selection
+                                    </button>
+                                </div>
+                                
+                                {selectedRegions.size > 0 && (
+                                    <div className="text-sm text-gray-600">
+                                        Selected regions: {Array.from(selectedRegions).sort((a, b) => a - b).map(i => `R${i + 1}`).join(', ')}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Isolated Symbols Debug Panel */}
                         {isolatedSymbols.length > 0 && (
                             <div className="space-y-4">
                                 <h3 className="text-lg font-medium text-gray-900">
@@ -1151,7 +1320,18 @@
                                     
                                     <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
                                         {isolatedSymbols.map((region, idx) => (
-                                            <div key={idx} className="text-center">
+                                            <div 
+                                                key={idx} 
+                                                className={`text-center cursor-pointer rounded p-1 ${
+                                                    selectedRegions.has(idx) 
+                                                        ? 'bg-orange-200 border-2 border-orange-400' 
+                                                        : region.merged
+                                                            ? 'bg-purple-100 border border-purple-300'
+                                                            : 'bg-white border border-gray-300'
+                                                }`}
+                                                onClick={() => toggleRegionSelection(idx)}
+                                                title={`Click to ${selectedRegions.has(idx) ? 'deselect' : 'select'} region ${idx + 1}`}
+                                            >
                                                 <div className="w-16 h-16 bg-white border border-gray-300 rounded mb-1 flex items-center justify-center">
                                                     {imageRef.current && (() => {
                                                         try {
@@ -1179,7 +1359,9 @@
                                                     })()}
                                                 </div>
                                                 <div className="text-xs text-gray-600">
-                                                    <div>#{idx + 1}</div>
+                                                    <div className={`font-medium ${selectedRegions.has(idx) ? 'text-orange-700' : ''}`}>
+                                                        #{idx + 1}{region.merged ? ` (${region.originalRegions}M)` : ''}
+                                                    </div>
                                                     <div>{region.bounds.width}×{region.bounds.height}</div>
                                                     <div>Area: {region.area}</div>
                                                 </div>
