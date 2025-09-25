@@ -460,7 +460,94 @@
                 }
             }, []);
 
-            // Template matching function
+            // Symbol isolation using OpenCV contour detection
+            const isolateSymbols = useCallback((inputImage) => {
+                if (!isOpenCvReady) {
+                    console.error('OpenCV is not ready for symbol isolation');
+                    return [];
+                }
+
+                try {
+                    const src = cv.imread(inputImage);
+                    const gray = new cv.Mat();
+                    const binary = new cv.Mat();
+                    const morphKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(2, 2));
+                    const processed = new cv.Mat();
+
+                    // Convert to grayscale
+                    if (src.channels() > 1) {
+                        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                    } else {
+                        gray = src.clone();
+                    }
+
+                    // Apply adaptive thresholding
+                    cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+
+                    // Apply morphological operations to clean up
+                    cv.morphologyEx(binary, processed, cv.MORPH_CLOSE, morphKernel);
+
+                    // Find contours
+                    const contours = new cv.MatVector();
+                    const hierarchy = new cv.Mat();
+                    cv.findContours(processed, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                    const isolatedRegions = [];
+                    const minArea = 100;  // Minimum area for a symbol
+                    const maxArea = 10000;  // Maximum area for a symbol
+                    const minAspectRatio = 0.2;  // Minimum width/height ratio
+                    const maxAspectRatio = 5.0;  // Maximum width/height ratio
+
+                    for (let i = 0; i < contours.size(); i++) {
+                        const contour = contours.get(i);
+                        const boundingRect = cv.boundingRect(contour);
+                        const area = boundingRect.width * boundingRect.height;
+                        const aspectRatio = boundingRect.width / boundingRect.height;
+
+                        // Filter by size and aspect ratio
+                        if (area >= minArea && area <= maxArea && 
+                            aspectRatio >= minAspectRatio && aspectRatio <= maxAspectRatio) {
+                            
+                            // Add some padding around the detected region
+                            const padding = 5;
+                            const paddedRect = {
+                                x: Math.max(0, boundingRect.x - padding),
+                                y: Math.max(0, boundingRect.y - padding),
+                                width: Math.min(src.cols - boundingRect.x + padding, boundingRect.width + 2 * padding),
+                                height: Math.min(src.rows - boundingRect.y + padding, boundingRect.height + 2 * padding)
+                            };
+
+                            isolatedRegions.push({
+                                bounds: paddedRect,
+                                area: area,
+                                aspectRatio: aspectRatio
+                            });
+                        }
+                    }
+
+                    // Sort regions left-to-right for proper reading order
+                    isolatedRegions.sort((a, b) => a.bounds.x - b.bounds.x);
+
+                    // Cleanup
+                    src.delete();
+                    gray.delete();
+                    binary.delete();
+                    morphKernel.delete();
+                    processed.delete();
+                    contours.delete();
+                    hierarchy.delete();
+
+                    console.log(`🔍 Symbol isolation found ${isolatedRegions.length} potential symbol regions`);
+                    return isolatedRegions;
+
+                } catch (error) {
+                    console.error('Symbol isolation error:', error);
+                    return [];
+                }
+            }, []);
+
+            // State for isolated symbols
+            const [isolatedSymbols, setIsolatedSymbols] = useState([]);
             const performTemplateMatching = useCallback((inputImage, templateImage, threshold = 0.7) => {
                 if (!isOpenCvReady) {
                     console.error('OpenCV is not ready');
@@ -478,7 +565,8 @@
                     const matches = [];
 
                     if (result.maxVal >= threshold) {
-                        matches.push({
+                        // Original template match position
+                        const originalMatch = {
                             confidence: result.maxVal,
                             position: {
                                 x: result.maxLoc.x,
@@ -486,7 +574,93 @@
                                 width: templ.cols,
                                 height: templ.rows
                             }
-                        });
+                        };
+
+                        // Try to refine the bounding box by finding the actual content bounds
+                        try {
+                            // Extract the matched region
+                            const matchedRegion = src.roi(new cv.Rect(
+                                result.maxLoc.x, 
+                                result.maxLoc.y, 
+                                templ.cols, 
+                                templ.rows
+                            ));
+
+                            // Convert to grayscale if needed
+                            let gray = new cv.Mat();
+                            if (matchedRegion.channels() > 1) {
+                                cv.cvtColor(matchedRegion, gray, cv.COLOR_RGBA2GRAY);
+                            } else {
+                                gray = matchedRegion.clone();
+                            }
+
+                            // Apply threshold to find the actual content
+                            let binary = new cv.Mat();
+                            cv.threshold(gray, binary, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+                            // Find contours to get tight bounds
+                            let contours = new cv.MatVector();
+                            let hierarchy = new cv.Mat();
+                            cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                            if (contours.size() > 0) {
+                                // Find the bounding rect of all contours
+                                let allPoints = [];
+                                for (let i = 0; i < contours.size(); i++) {
+                                    const contour = contours.get(i);
+                                    for (let j = 0; j < contour.data32S.length; j += 2) {
+                                        allPoints.push({
+                                            x: contour.data32S[j],
+                                            y: contour.data32S[j + 1]
+                                        });
+                                    }
+                                }
+
+                                if (allPoints.length > 0) {
+                                    const minX = Math.min(...allPoints.map(p => p.x));
+                                    const maxX = Math.max(...allPoints.map(p => p.x));
+                                    const minY = Math.min(...allPoints.map(p => p.y));
+                                    const maxY = Math.max(...allPoints.map(p => p.y));
+
+                                    const contentWidth = maxX - minX;
+                                    const contentHeight = maxY - minY;
+
+                                    // Only use refined bounds if they're reasonable (not too small)
+                                    if (contentWidth > 10 && contentHeight > 10 && 
+                                        contentWidth < templ.cols && contentHeight < templ.rows) {
+                                        
+                                        const padding = 5; // Small padding around content
+                                        matches.push({
+                                            confidence: result.maxVal,
+                                            position: {
+                                                x: result.maxLoc.x + Math.max(0, minX - padding),
+                                                y: result.maxLoc.y + Math.max(0, minY - padding),
+                                                width: Math.min(templ.cols, contentWidth + padding * 2),
+                                                height: Math.min(templ.rows, contentHeight + padding * 2)
+                                            }
+                                        });
+                                    } else {
+                                        // Fall back to original bounds if refinement doesn't look good
+                                        matches.push(originalMatch);
+                                    }
+                                } else {
+                                    matches.push(originalMatch);
+                                }
+                            } else {
+                                matches.push(originalMatch);
+                            }
+
+                            // Clean up
+                            matchedRegion.delete();
+                            gray.delete();
+                            binary.delete();
+                            contours.delete();
+                            hierarchy.delete();
+
+                        } catch (refinementError) {
+                            console.warn('Could not refine bounding box, using original:', refinementError);
+                            matches.push(originalMatch);
+                        }
                     }
 
                     src.delete();
@@ -500,7 +674,7 @@
                 }
             }, []);
 
-            // Recognition function
+            // Recognition function with symbol isolation
             const recognizeSymbols = useCallback(async () => {
                 if (!image || !equivalenceChart || !isOpenCvReady) {
                     console.log('Missing requirements:', { 
@@ -518,87 +692,108 @@
                     // Create temporary image element for OpenCV
                     const tempImg = new Image();
                     tempImg.onload = () => {
+                        // Step 1: Isolate symbols first
+                        console.log('🔍 Starting symbol isolation...');
+                        const isolated = isolateSymbols(tempImg);
+                        setIsolatedSymbols(isolated);
+
+                        if (isolated.length === 0) {
+                            console.log('⚠️ No symbol regions found during isolation');
+                            setIsProcessing(false);
+                            return;
+                        }
+
+                        // Step 2: Template match each isolated region
                         const results = [];
                         let totalAttempts = 0;
 
-                        console.log('🔍 Starting symbol recognition...');
+                        console.log(`🎯 Template matching ${isolated.length} isolated regions against ${equivalenceChart.symbols.length} symbols...`);
 
-                        // Process each symbol in the chart
-                        for (const symbol of equivalenceChart.symbols) {
-                            // Check primary image
-                            if (loadedSymbolImages[symbol.id]) {
-                                totalAttempts++;
-                                const matches = performTemplateMatching(tempImg, loadedSymbolImages[symbol.id], 0.6);
-                                
-                                matches.forEach(match => {
-                                    results.push({
-                                        symbol: symbol,
-                                        confidence: match.confidence * 1.0, // Primary image weight
-                                        position: match.position,
-                                        matchType: 'primary'
+                        // Process each isolated region
+                        for (let regionIndex = 0; regionIndex < isolated.length; regionIndex++) {
+                            const region = isolated[regionIndex];
+                            let bestMatch = null;
+
+                            // Try to match this region against all symbols
+                            for (const symbol of equivalenceChart.symbols) {
+                                // Check primary image
+                                if (loadedSymbolImages[symbol.id]) {
+                                    totalAttempts++;
+                                    const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region, 0.6);
+                                    
+                                    matches.forEach(match => {
+                                        if (!bestMatch || match.confidence > bestMatch.confidence) {
+                                            bestMatch = {
+                                                symbol: symbol,
+                                                confidence: match.confidence * 1.0, // Primary image weight
+                                                position: region.bounds, // Use isolated region bounds
+                                                matchType: 'primary',
+                                                regionIndex: regionIndex
+                                            };
+                                        }
                                     });
-                                });
-                            }
+                                }
 
-                            // Check variant images
-                            if (symbol.variants) {
-                                for (let i = 0; i < symbol.variants.length; i++) {
-                                    const variantKey = `${symbol.id}_variant_${i}`;
-                                    if (loadedSymbolImages[variantKey]) {
-                                        totalAttempts++;
-                                        const matches = performTemplateMatching(tempImg, loadedSymbolImages[variantKey], 0.6);
-                                        
-                                        matches.forEach(match => {
-                                            results.push({
-                                                symbol: symbol,
-                                                confidence: match.confidence * 0.9, // Variant weight
-                                                position: match.position,
-                                                matchType: 'variant',
-                                                variantIndex: i
+                                // Check variant images
+                                if (symbol.images?.variants) {
+                                    for (let i = 0; i < symbol.images.variants.length; i++) {
+                                        const variantKey = `${symbol.id}_variant_${i}`;
+                                        if (loadedSymbolImages[variantKey]) {
+                                            totalAttempts++;
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[variantKey], region, 0.6);
+                                            
+                                            matches.forEach(match => {
+                                                const weightedConfidence = match.confidence * 0.9; // Variant weight
+                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                                    bestMatch = {
+                                                        symbol: symbol,
+                                                        confidence: weightedConfidence,
+                                                        position: region.bounds,
+                                                        matchType: 'variant',
+                                                        variantIndex: i,
+                                                        regionIndex: regionIndex
+                                                    };
+                                                }
                                             });
-                                        });
+                                        }
+                                    }
+                                }
+
+                                // Check example images
+                                if (symbol.images?.examples) {
+                                    for (let i = 0; i < symbol.images.examples.length; i++) {
+                                        const exampleKey = `${symbol.id}_example_${i}`;
+                                        if (loadedSymbolImages[exampleKey]) {
+                                            totalAttempts++;
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[exampleKey], region, 0.6);
+                                            
+                                            matches.forEach(match => {
+                                                const weightedConfidence = match.confidence * 0.8; // Example weight
+                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                                    bestMatch = {
+                                                        symbol: symbol,
+                                                        confidence: weightedConfidence,
+                                                        position: region.bounds,
+                                                        matchType: 'example',
+                                                        exampleIndex: i,
+                                                        regionIndex: regionIndex
+                                                    };
+                                                }
+                                            });
+                                        }
                                     }
                                 }
                             }
 
-                            // Check example images
-                            if (symbol.examples) {
-                                for (let i = 0; i < symbol.examples.length; i++) {
-                                    const exampleKey = `${symbol.id}_example_${i}`;
-                                    if (loadedSymbolImages[exampleKey]) {
-                                        totalAttempts++;
-                                        const matches = performTemplateMatching(tempImg, loadedSymbolImages[exampleKey], 0.6);
-                                        
-                                        matches.forEach(match => {
-                                            results.push({
-                                                symbol: symbol,
-                                                confidence: match.confidence * 0.8, // Example weight
-                                                position: match.position,
-                                                matchType: 'example',
-                                                exampleIndex: i
-                                            });
-                                        });
-                                    }
-                                }
+                            // Add the best match for this region (if any)
+                            if (bestMatch && bestMatch.confidence > 0.5) {
+                                results.push(bestMatch);
                             }
                         }
 
-                        // Sort by confidence and remove duplicates in same area
-                        const filteredResults = results
-                            .sort((a, b) => b.confidence - a.confidence)
-                            .filter((result, index, array) => {
-                                // Remove overlapping detections (keep highest confidence)
-                                return !array.slice(0, index).some(prev => {
-                                    const overlap = Math.abs(prev.position.x - result.position.x) < 30 &&
-                                                   Math.abs(prev.position.y - result.position.y) < 30;
-                                    return overlap;
-                                });
-                            })
-                            .slice(0, 20); // Limit to top 20 results
-
-                        console.log(`🎯 Recognition complete: ${filteredResults.length} symbols found from ${totalAttempts} template matching attempts`);
+                        console.log(`🎯 Recognition complete: ${results.length} symbols matched from ${isolated.length} isolated regions (${totalAttempts} template matching attempts)`);
                         
-                        setRecognitionResults(filteredResults);
+                        setRecognitionResults(results);
                         setIsProcessing(false);
                     };
 
@@ -608,7 +803,52 @@
                     console.error('Recognition error:', error);
                     setIsProcessing(false);
                 }
-            }, [image, equivalenceChart, loadedSymbolImages, performTemplateMatching]);
+            }, [image, equivalenceChart, loadedSymbolImages, isolateSymbols]);
+
+            // Template matching for a specific region
+            const performTemplateMatchingOnRegion = useCallback((inputImage, templateImage, region, threshold = 0.7) => {
+                if (!isOpenCvReady) return [];
+
+                try {
+                    const src = cv.imread(inputImage);
+                    
+                    // Extract the isolated region
+                    const regionMat = src.roi(new cv.Rect(
+                        region.bounds.x,
+                        region.bounds.y,
+                        region.bounds.width,
+                        region.bounds.height
+                    ));
+                    
+                    const templ = cv.imread(templateImage);
+                    const dst = new cv.Mat();
+
+                    // Only proceed if template is smaller than region
+                    if (templ.cols <= regionMat.cols && templ.rows <= regionMat.rows) {
+                        cv.matchTemplate(regionMat, templ, dst, cv.TM_CCOEFF_NORMED);
+                        const result = cv.minMaxLoc(dst);
+
+                        const matches = [];
+                        if (result.maxVal >= threshold) {
+                            matches.push({
+                                confidence: result.maxVal,
+                                position: region.bounds // Use the isolated region bounds
+                            });
+                        }
+
+                        dst.delete();
+                    }
+
+                    src.delete();
+                    regionMat.delete();
+                    templ.delete();
+
+                    return [];
+                } catch (error) {
+                    console.error('Region template matching error:', error);
+                    return [];
+                }
+            }, []);
 
             // Manual detection functions
             const handleCanvasMouseDown = useCallback((event) => {
@@ -897,7 +1137,60 @@
                         </div>
                     )}
 
-                    {/* Recognition Results */}
+                                            {/* Isolated Symbols Debug Panel */}
+                        {isolatedSymbols.length > 0 && (
+                            <div className="space-y-4">
+                                <h3 className="text-lg font-medium text-gray-900">
+                                    Isolated Symbol Regions ({isolatedSymbols.length})
+                                </h3>
+                                
+                                <div className="p-4 bg-blue-50 rounded-lg">
+                                    <p className="text-sm text-gray-700 mb-3">
+                                        OpenCV found these potential symbol regions before template matching:
+                                    </p>
+                                    
+                                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+                                        {isolatedSymbols.map((region, idx) => (
+                                            <div key={idx} className="text-center">
+                                                <div className="w-16 h-16 bg-white border border-gray-300 rounded mb-1 flex items-center justify-center">
+                                                    {imageRef.current && (() => {
+                                                        try {
+                                                            const canvas = document.createElement('canvas');
+                                                            const ctx = canvas.getContext('2d');
+                                                            canvas.width = region.bounds.width;
+                                                            canvas.height = region.bounds.height;
+                                                            
+                                                            ctx.drawImage(
+                                                                imageRef.current,
+                                                                region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height,
+                                                                0, 0, region.bounds.width, region.bounds.height
+                                                            );
+                                                            
+                                                            return (
+                                                                <img 
+                                                                    src={canvas.toDataURL()} 
+                                                                    alt={`Region ${idx + 1}`}
+                                                                    className="max-w-full max-h-full object-contain"
+                                                                />
+                                                            );
+                                                        } catch (e) {
+                                                            return <span className="text-xs text-gray-400">#{idx + 1}</span>;
+                                                        }
+                                                    })()}
+                                                </div>
+                                                <div className="text-xs text-gray-600">
+                                                    <div>#{idx + 1}</div>
+                                                    <div>{region.bounds.width}×{region.bounds.height}</div>
+                                                    <div>Area: {region.area}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Recognition Results */}
                     {recognitionResults.length > 0 && (
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">
