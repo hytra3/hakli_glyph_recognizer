@@ -71,6 +71,7 @@
             const imageRef = useRef(null);
             const canvasRef = useRef(null);
             const fileInputRef = useRef(null);
+            const imageContainerRef = useRef(null);
 
             // Action recording system
             const recordAction = useCallback((actionType, actionData) => {
@@ -534,18 +535,47 @@
                 const x = event.clientX - rect.left;
                 const y = event.clientY - rect.top;
 
+                setIsDrawing(true);
+                setDrawStart({ x, y });
+                setDrawCurrent({ x, y });
+
+                event.preventDefault();
+            }, [manualDetectionMode]);
+
+            const handleCanvasMouseMove = useCallback((event) => {
+                if (!isDrawing || !manualDetectionMode) return;
+
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                setDrawCurrent({ x, y });
+                event.preventDefault();
+            }, [isDrawing, manualDetectionMode]);
+
+            const handleCanvasMouseUp = useCallback((event) => {
+                if (!isDrawing || !drawStart || !manualDetectionMode) return;
+
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const endPoint = {
+                    x: event.clientX - rect.left,
+                    y: event.clientY - rect.top
+                };
+
                 const distance = Math.sqrt(Math.pow(endPoint.x - drawStart.x, 2) + Math.pow(endPoint.y - drawStart.y, 2));
                 if (distance > 10) {
                     createManualDetection(drawStart, endPoint);
                 } else {
-                    setManualSelectionMode(false);
-                    setIsDrawing(false);
-                    setDrawStart(null);
-                    setDrawCurrent(null);
+                    console.log('Manual selection too small, ignoring');
                 }
 
+                setIsDrawing(false);
+                setDrawStart(null);
+                setDrawCurrent(null);
                 event.preventDefault();
-            }, [manualDetectionMode, isDrawing, drawStart]);
+            }, [isDrawing, drawStart, manualDetectionMode]);
 
             const createManualDetection = useCallback((startPoint, endPoint) => {
                 if (!imageRef.current || !equivalenceChart) return;
@@ -737,6 +767,8 @@
                                         height: imageRef.current?.offsetHeight || 0
                                     }}
                                     onMouseDown={handleCanvasMouseDown}
+                                    onMouseMove={handleCanvasMouseMove}
+                                    onMouseUp={handleCanvasMouseUp}
                                 />
                                 
                                 {/* Detection overlays */}
