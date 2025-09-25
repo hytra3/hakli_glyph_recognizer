@@ -882,7 +882,7 @@
                     console.error('Recognition error:', error);
                     setIsProcessing(false);
                 }
-            }, [image, equivalenceChart, loadedSymbolImages, isolateSymbols]);
+            }, [image, equivalenceChart, loadedSymbolImages, isolateSymbols, performTemplateMatchingOnRegion]);
 
             // Template matching for a specific region
             const performTemplateMatchingOnRegion = useCallback((inputImage, templateImage, region, threshold = 0.7) => {
