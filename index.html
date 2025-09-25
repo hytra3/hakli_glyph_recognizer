@@ -143,7 +143,7 @@
             }, [actionHistory]);
 
             // Validation and correction functions
-            const validateDetection = useCallback((detectionIndex, isCorrect) => {
+            const validateDetection = (detectionIndex, isCorrect) => {
                 recordAction('validation', {
                     detectionIndex: detectionIndex,
                     isCorrect: isCorrect,
@@ -160,9 +160,9 @@
                 }));
                 
                 console.log(`Detection ${detectionIndex + 1} marked as ${isCorrect ? 'correct' : 'incorrect'}`);
-            }, [recognitionResults, recordAction]);
+            };
 
-            const correctDetection = useCallback((detectionIndex, newSymbolId) => {
+            const correctDetection = (detectionIndex, newSymbolId) => {
                 const originalDetection = recognitionResults[detectionIndex];
                 const newSymbol = equivalenceChart.symbols.find(s => s.id === newSymbolId);
                 
@@ -196,9 +196,9 @@
                 }));
 
                 console.log(`Detection ${detectionIndex + 1} corrected to ${newSymbol.name}`);
-            }, [recognitionResults, equivalenceChart, recordAction]);
+            };
 
-            const deleteDetection = useCallback((detectionIndex) => {
+            const deleteDetection = (detectionIndex) => {
                 recordAction('delete_detection', {
                     index: detectionIndex,
                     detection: recognitionResults[detectionIndex]
@@ -209,9 +209,9 @@
                     newResults.splice(detectionIndex, 1);
                     return newResults;
                 });
-            }, [recognitionResults, recordAction]);
+            };
 
-            const toggleWordBoundary = useCallback((detectionIndex) => {
+            const toggleWordBoundary = (detectionIndex) => {
                 setRecognitionResults(prev => prev.map((result, index) => {
                     if (index === detectionIndex) {
                         return {
@@ -221,7 +221,7 @@
                     }
                     return result;
                 }));
-            }, []);
+            };
 
             // GitHub URL converter
             const convertToGitHubUrl = useCallback((githubUrl) => {
@@ -247,9 +247,9 @@
             }, []);
 
             // Manual reload chart function for the button
-            const reloadChart = useCallback(() => {
+            const reloadChart = () => {
                 setChartLoadStatus('not-loaded');
-            }, []);
+            };
 
             // Auto-load chart on component mount
             useEffect(() => {
