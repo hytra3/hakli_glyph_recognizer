@@ -293,20 +293,21 @@
                             for (const symbol of chartData.symbols) {
                                 console.log(`🔍 Processing symbol: ${symbol.name}`, {
                                     id: symbol.id,
-                                    hasImage: !!symbol.image,
-                                    image: symbol.image,
-                                    hasVariants: !!symbol.variants,
-                                    variants: symbol.variants,
-                                    hasExamples: !!symbol.examples,
-                                    examples: symbol.examples
+                                    hasImages: !!symbol.images,
+                                    hasPrimary: !!symbol.images?.primary,
+                                    primary: symbol.images?.primary,
+                                    hasVariants: !!symbol.images?.variants?.length,
+                                    variants: symbol.images?.variants,
+                                    hasExamples: !!symbol.images?.examples?.length,
+                                    examples: symbol.images?.examples
                                 });
 
                                 try {
                                     // Load primary image
-                                    if (symbol.image) {
-                                        const fullUrl = convertToGitHubUrl(symbol.image);
+                                    if (symbol.images?.primary) {
+                                        const fullUrl = convertToGitHubUrl(symbol.images.primary);
                                         console.log(`Trying to load primary image for ${symbol.name}:`, fullUrl);
-                                        if (fullUrl && fullUrl !== symbol.image) {
+                                        if (fullUrl && fullUrl !== symbol.images.primary) {
                                             try {
                                                 const img = new Image();
                                                 img.crossOrigin = 'anonymous';
@@ -344,12 +345,12 @@
                                     }
 
                                     // Load variant images
-                                    if (symbol.variants && Array.isArray(symbol.variants)) {
-                                        for (let i = 0; i < symbol.variants.length; i++) {
+                                    if (symbol.images?.variants && Array.isArray(symbol.images.variants)) {
+                                        for (let i = 0; i < symbol.images.variants.length; i++) {
                                             try {
-                                                const fullUrl = convertToGitHubUrl(symbol.variants[i]);
+                                                const fullUrl = convertToGitHubUrl(symbol.images.variants[i]);
                                                 console.log(`Trying to load variant ${i} for ${symbol.name}:`, fullUrl);
-                                                if (fullUrl && fullUrl !== symbol.variants[i]) {
+                                                if (fullUrl && fullUrl !== symbol.images.variants[i]) {
                                                     const img = new Image();
                                                     img.crossOrigin = 'anonymous';
                                                     await new Promise((resolve, reject) => {
@@ -384,12 +385,12 @@
                                     }
 
                                     // Load example images
-                                    if (symbol.examples && Array.isArray(symbol.examples)) {
-                                        for (let i = 0; i < symbol.examples.length; i++) {
+                                    if (symbol.images?.examples && Array.isArray(symbol.images.examples)) {
+                                        for (let i = 0; i < symbol.images.examples.length; i++) {
                                             try {
-                                                const fullUrl = convertToGitHubUrl(symbol.examples[i]);
+                                                const fullUrl = convertToGitHubUrl(symbol.images.examples[i]);
                                                 console.log(`Trying to load example ${i} for ${symbol.name}:`, fullUrl);
-                                                if (fullUrl && fullUrl !== symbol.examples[i]) {
+                                                if (fullUrl && fullUrl !== symbol.images.examples[i]) {
                                                     const img = new Image();
                                                     img.crossOrigin = 'anonymous';
                                                     await new Promise((resolve, reject) => {
@@ -749,7 +750,7 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Symbol Recognizer</h1>
-                        <p className="text-gray-600">Al-Jallad, A. [in press (2025)]. The Decipherment of the Dhofari Script: Three halḥam abecedaries and the first glimpses into the corpus. Jaarbericht Ex Oriente Lux (JEOL) 49.</p>
+                        <p className="text-gray-600">based on Ahmad Al Jallad (2025) The Decipherment of the Dhofari Script</p>
                     </div>
 
                     {/* Chart Status */}
