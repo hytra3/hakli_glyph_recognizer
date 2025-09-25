@@ -227,185 +227,221 @@
             const convertToGitHubUrl = useCallback((githubUrl) => {
                 if (!githubUrl) return null;
                 
-                if (githubUrl.includes('github.com') && githubUrl.includes('/blob/')) {
-                    return githubUrl.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+                // If it's already a full URL, handle accordingly
+                if (githubUrl.startsWith('http')) {
+                    if (githubUrl.includes('github.com') && githubUrl.includes('/blob/')) {
+                        return githubUrl.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+                    }
+                    return githubUrl;
                 }
-                return githubUrl;
+                
+                // If it's a relative path, convert to full GitHub raw URL
+                if (typeof githubUrl === 'string' && githubUrl.length > 0) {
+                    const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/';
+                    // Remove leading slash if present
+                    const cleanPath = githubUrl.startsWith('/') ? githubUrl.substring(1) : githubUrl;
+                    return baseUrl + cleanPath;
+                }
+                
+                return null;
             }, []);
 
-            // Symbol image loading
-            const loadSymbolImages = useCallback(async (chart) => {
-                console.log('🖼️ Loading symbol images...');
-                const imageCache = {};
-                let successCount = 0;
-                let failCount = 0;
-                
-                for (const symbol of chart.symbols) {
-                    try {
-                        // Load primary image
-                        if (symbol.image) {
-                            const fullUrl = convertToGitHubUrl(symbol.image);
-                            console.log(`Trying to load primary image for ${symbol.name}:`, fullUrl);
-                            if (fullUrl) {
-                                try {
-                                    const img = new Image();
-                                    img.crossOrigin = 'anonymous';
-                                    await new Promise((resolve, reject) => {
-                                        const timeout = setTimeout(() => {
-                                            reject(new Error('Image load timeout'));
-                                        }, 10000); // 10 second timeout
-                                        
-                                        img.onload = () => {
-                                            clearTimeout(timeout);
-                                            imageCache[symbol.id] = img;
-                                            successCount++;
-                                            console.log(`✅ Loaded primary image for ${symbol.name}`);
-                                            resolve();
-                                        };
-                                        img.onerror = (e) => {
-                                            clearTimeout(timeout);
-                                            failCount++;
-                                            console.warn(`❌ Failed to load primary image for ${symbol.name}:`, e);
-                                            reject(e);
-                                        };
-                                        img.src = fullUrl;
-                                    });
-                                } catch (e) {
-                                    console.warn(`Failed to load primary image for ${symbol.name}:`, e);
-                                    failCount++;
-                                }
-                            }
-                        }
-
-                        // Load variant images
-                        if (symbol.variants && Array.isArray(symbol.variants)) {
-                            for (let i = 0; i < symbol.variants.length; i++) {
-                                try {
-                                    const fullUrl = convertToGitHubUrl(symbol.variants[i]);
-                                    console.log(`Trying to load variant ${i} for ${symbol.name}:`, fullUrl);
-                                    if (fullUrl) {
-                                        const img = new Image();
-                                        img.crossOrigin = 'anonymous';
-                                        await new Promise((resolve, reject) => {
-                                            const timeout = setTimeout(() => {
-                                                reject(new Error('Image load timeout'));
-                                            }, 10000);
-                                            
-                                            img.onload = () => {
-                                                clearTimeout(timeout);
-                                                imageCache[`${symbol.id}_variant_${i}`] = img;
-                                                successCount++;
-                                                console.log(`✅ Loaded variant ${i} for ${symbol.name}`);
-                                                resolve();
-                                            };
-                                            img.onerror = (e) => {
-                                                clearTimeout(timeout);
-                                                failCount++;
-                                                console.warn(`❌ Failed to load variant ${i} for ${symbol.name}:`, e);
-                                                reject(e);
-                                            };
-                                            img.src = fullUrl;
-                                        });
-                                    }
-                                } catch (e) {
-                                    console.warn(`Failed to load variant ${i} for ${symbol.name}:`, e);
-                                    failCount++;
-                                }
-                            }
-                        }
-
-                        // Load example images
-                        if (symbol.examples && Array.isArray(symbol.examples)) {
-                            for (let i = 0; i < symbol.examples.length; i++) {
-                                try {
-                                    const fullUrl = convertToGitHubUrl(symbol.examples[i]);
-                                    console.log(`Trying to load example ${i} for ${symbol.name}:`, fullUrl);
-                                    if (fullUrl) {
-                                        const img = new Image();
-                                        img.crossOrigin = 'anonymous';
-                                        await new Promise((resolve, reject) => {
-                                            const timeout = setTimeout(() => {
-                                                reject(new Error('Image load timeout'));
-                                            }, 10000);
-                                            
-                                            img.onload = () => {
-                                                clearTimeout(timeout);
-                                                imageCache[`${symbol.id}_example_${i}`] = img;
-                                                successCount++;
-                                                console.log(`✅ Loaded example ${i} for ${symbol.name}`);
-                                                resolve();
-                                            };
-                                            img.onerror = (e) => {
-                                                clearTimeout(timeout);
-                                                failCount++;
-                                                console.warn(`❌ Failed to load example ${i} for ${symbol.name}:`, e);
-                                                reject(e);
-                                            };
-                                            img.src = fullUrl;
-                                        });
-                                    }
-                                } catch (e) {
-                                    console.warn(`Failed to load example ${i} for ${symbol.name}:`, e);
-                                    failCount++;
-                                }
-                            }
-                        }
-                    } catch (error) {
-                        console.warn(`Error processing images for symbol ${symbol.name}:`, error);
-                        failCount++;
-                    }
-                }
-                
-                console.log(`🖼️ Image loading complete: ${successCount} successful, ${failCount} failed`);
-                return imageCache;
-            }, [convertToGitHubUrl]);
-
-            // Load chart from GitHub
-            const loadChart = useCallback(() => {
-                const loadChartInternal = async () => {
-                    setChartLoadStatus('loading');
-                    
-                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
-                    
-                    try {
-                        console.log('📡 Fetching JSON from:', githubJsonUrl);
-                        const response = await fetch(githubJsonUrl);
-                        
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        
-                        const chartData = await response.json();
-                        
-                        console.log('✅ Chart loaded successfully:', {
-                            totalSymbols: chartData.symbols?.length || 0,
-                            categories: chartData.categories?.length || 0
-                        });
-                        
-                        setEquivalenceChart(chartData);
-                        
-                        // Load symbol images
-                        const imageCache = await loadSymbolImages(chartData);
-                        console.log('🖼️ Images loaded count:', Object.keys(imageCache).length);
-                        setLoadedSymbolImages(imageCache);
-                        
-                        setChartLoadStatus('loaded');
-                        
-                    } catch (error) {
-                        console.error('❌ Error loading chart from GitHub:', error);
-                        setChartLoadStatus('error');
-                    }
-                };
-                
-                loadChartInternal();
-            }, [loadSymbolImages]);
+            // Manual reload chart function for the button
+            const reloadChart = useCallback(() => {
+                setChartLoadStatus('not-loaded');
+            }, []);
 
             // Auto-load chart on component mount
             useEffect(() => {
                 if (chartLoadStatus === 'not-loaded') {
-                    loadChart();
+                    const loadChartFromGitHub = async () => {
+                        console.log('🔄 Starting to load chart from GitHub...');
+                        setChartLoadStatus('loading');
+                        
+                        const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
+                        
+                        try {
+                            console.log('📡 Fetching JSON from:', githubJsonUrl);
+                            const response = await fetch(githubJsonUrl);
+                            
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            
+                            const chartData = await response.json();
+                            
+                            console.log('✅ Chart loaded successfully:', {
+                                totalSymbols: chartData.symbols?.length || 0,
+                                categories: chartData.categories?.length || 0
+                            });
+                            
+                            setEquivalenceChart(chartData);
+                            
+                            // Load symbol images directly here
+                            console.log('🖼️ Loading symbol images...');
+                            console.log('📋 Chart structure:', {
+                                totalSymbols: chartData.symbols?.length,
+                                firstSymbol: chartData.symbols?.[0],
+                                symbolKeys: chartData.symbols?.[0] ? Object.keys(chartData.symbols[0]) : 'No symbols'
+                            });
+                            
+                            const imageCache = {};
+                            let successCount = 0;
+                            let failCount = 0;
+                            let skipCount = 0;
+                            
+                            for (const symbol of chartData.symbols) {
+                                console.log(`🔍 Processing symbol: ${symbol.name}`, {
+                                    id: symbol.id,
+                                    hasImage: !!symbol.image,
+                                    image: symbol.image,
+                                    hasVariants: !!symbol.variants,
+                                    variants: symbol.variants,
+                                    hasExamples: !!symbol.examples,
+                                    examples: symbol.examples
+                                });
+
+                                try {
+                                    // Load primary image
+                                    if (symbol.image) {
+                                        const fullUrl = convertToGitHubUrl(symbol.image);
+                                        console.log(`Trying to load primary image for ${symbol.name}:`, fullUrl);
+                                        if (fullUrl && fullUrl !== symbol.image) {
+                                            try {
+                                                const img = new Image();
+                                                img.crossOrigin = 'anonymous';
+                                                await new Promise((resolve, reject) => {
+                                                    const timeout = setTimeout(() => {
+                                                        reject(new Error('Image load timeout'));
+                                                    }, 10000);
+                                                    
+                                                    img.onload = () => {
+                                                        clearTimeout(timeout);
+                                                        imageCache[symbol.id] = img;
+                                                        successCount++;
+                                                        console.log(`✅ Loaded primary image for ${symbol.name}`);
+                                                        resolve();
+                                                    };
+                                                    img.onerror = (e) => {
+                                                        clearTimeout(timeout);
+                                                        failCount++;
+                                                        console.warn(`❌ Failed to load primary image for ${symbol.name}:`, e);
+                                                        reject(e);
+                                                    };
+                                                    img.src = fullUrl;
+                                                });
+                                            } catch (e) {
+                                                console.warn(`Failed to load primary image for ${symbol.name}:`, e);
+                                                failCount++;
+                                            }
+                                        } else {
+                                            console.log(`⏭️ Skipping primary image for ${symbol.name} - invalid URL`);
+                                            skipCount++;
+                                        }
+                                    } else {
+                                        console.log(`⏭️ No primary image for ${symbol.name}`);
+                                        skipCount++;
+                                    }
+
+                                    // Load variant images
+                                    if (symbol.variants && Array.isArray(symbol.variants)) {
+                                        for (let i = 0; i < symbol.variants.length; i++) {
+                                            try {
+                                                const fullUrl = convertToGitHubUrl(symbol.variants[i]);
+                                                console.log(`Trying to load variant ${i} for ${symbol.name}:`, fullUrl);
+                                                if (fullUrl && fullUrl !== symbol.variants[i]) {
+                                                    const img = new Image();
+                                                    img.crossOrigin = 'anonymous';
+                                                    await new Promise((resolve, reject) => {
+                                                        const timeout = setTimeout(() => {
+                                                            reject(new Error('Image load timeout'));
+                                                        }, 10000);
+                                                        
+                                                        img.onload = () => {
+                                                            clearTimeout(timeout);
+                                                            imageCache[`${symbol.id}_variant_${i}`] = img;
+                                                            successCount++;
+                                                            console.log(`✅ Loaded variant ${i} for ${symbol.name}`);
+                                                            resolve();
+                                                        };
+                                                        img.onerror = (e) => {
+                                                            clearTimeout(timeout);
+                                                            failCount++;
+                                                            console.warn(`❌ Failed to load variant ${i} for ${symbol.name}:`, e);
+                                                            reject(e);
+                                                        };
+                                                        img.src = fullUrl;
+                                                    });
+                                                } else {
+                                                    console.log(`⏭️ Skipping variant ${i} for ${symbol.name} - invalid URL`);
+                                                    skipCount++;
+                                                }
+                                            } catch (e) {
+                                                console.warn(`Failed to load variant ${i} for ${symbol.name}:`, e);
+                                                failCount++;
+                                            }
+                                        }
+                                    }
+
+                                    // Load example images
+                                    if (symbol.examples && Array.isArray(symbol.examples)) {
+                                        for (let i = 0; i < symbol.examples.length; i++) {
+                                            try {
+                                                const fullUrl = convertToGitHubUrl(symbol.examples[i]);
+                                                console.log(`Trying to load example ${i} for ${symbol.name}:`, fullUrl);
+                                                if (fullUrl && fullUrl !== symbol.examples[i]) {
+                                                    const img = new Image();
+                                                    img.crossOrigin = 'anonymous';
+                                                    await new Promise((resolve, reject) => {
+                                                        const timeout = setTimeout(() => {
+                                                            reject(new Error('Image load timeout'));
+                                                        }, 10000);
+                                                        
+                                                        img.onload = () => {
+                                                            clearTimeout(timeout);
+                                                            imageCache[`${symbol.id}_example_${i}`] = img;
+                                                            successCount++;
+                                                            console.log(`✅ Loaded example ${i} for ${symbol.name}`);
+                                                            resolve();
+                                                        };
+                                                        img.onerror = (e) => {
+                                                            clearTimeout(timeout);
+                                                            failCount++;
+                                                            console.warn(`❌ Failed to load example ${i} for ${symbol.name}:`, e);
+                                                            reject(e);
+                                                        };
+                                                        img.src = fullUrl;
+                                                    });
+                                                } else {
+                                                    console.log(`⏭️ Skipping example ${i} for ${symbol.name} - invalid URL`);
+                                                    skipCount++;
+                                                }
+                                            } catch (e) {
+                                                console.warn(`Failed to load example ${i} for ${symbol.name}:`, e);
+                                                failCount++;
+                                            }
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.warn(`Error processing images for symbol ${symbol.name}:`, error);
+                                    failCount++;
+                                }
+                            }
+                            
+                            console.log(`🖼️ Image loading complete: ${successCount} successful, ${failCount} failed, ${skipCount} skipped`);
+                            setLoadedSymbolImages(imageCache);
+                            
+                            setChartLoadStatus('loaded');
+                            
+                        } catch (error) {
+                            console.error('❌ Error loading chart from GitHub:', error);
+                            setChartLoadStatus('error');
+                        }
+                    };
+                    
+                    loadChartFromGitHub();
                 }
-            }, [chartLoadStatus, loadChart]);
+            }, [chartLoadStatus, convertToGitHubUrl]);
 
             // File upload handler
             const handleFileUpload = useCallback((event) => {
@@ -713,7 +749,7 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Symbol Recognizer</h1>
-                        <p className="text-gray-600">Advanced archaeological symbol detection using computer vision</p>
+                        <p className="text-gray-600">Al-Jallad, A. [in press (2025)]. The Decipherment of the Dhofari Script: Three halḥam abecedaries and the first glimpses into the corpus. Jaarbericht Ex Oriente Lux (JEOL) 49.</p>
                     </div>
 
                     {/* Chart Status */}
@@ -739,7 +775,7 @@
                                 </div>
                             </div>
                             <button
-                                onClick={loadChart}
+                                onClick={reloadChart}
                                 className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                                 disabled={chartLoadStatus === 'loading'}
                             >
