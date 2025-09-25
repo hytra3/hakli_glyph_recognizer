@@ -8,6 +8,14 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // OpenCV ready flag and callback - must be defined before OpenCV loads
+        let isOpenCvReady = false;
+        function onOpenCvReady() {
+            isOpenCvReady = true;
+            console.log('✅ OpenCV.js is ready');
+        }
+    </script>
     <script async src="https://docs.opencv.org/4.5.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
     <style>
         .detection-box {
@@ -35,13 +43,6 @@
 
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback, useMemo } = React;
-
-        let isOpenCvReady = false;
-
-        function onOpenCvReady() {
-            isOpenCvReady = true;
-            console.log('✅ OpenCV.js is ready');
-        }
 
         function HakliSymbolRecognizer() {
             // State management
