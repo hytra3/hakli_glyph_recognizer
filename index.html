@@ -902,12 +902,13 @@
                     const templ = cv.imread(templateImage);
                     const dst = new cv.Mat();
 
+                    const matches = [];
+                    
                     // Only proceed if template is smaller than region
                     if (templ.cols <= regionMat.cols && templ.rows <= regionMat.rows) {
                         cv.matchTemplate(regionMat, templ, dst, cv.TM_CCOEFF_NORMED);
                         const result = cv.minMaxLoc(dst);
 
-                        const matches = [];
                         if (result.maxVal >= threshold) {
                             matches.push({
                                 confidence: result.maxVal,
