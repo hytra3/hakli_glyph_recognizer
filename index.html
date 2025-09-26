@@ -931,7 +931,7 @@
             }, []);
 
             // Manual detection functions
-            const handleCanvasMouseDown = useCallback((event) => {
+            const handleCanvasMouseDown = (event) => {
                 if (!manualDetectionMode || !imageRef.current) return;
 
                 const canvas = canvasRef.current;
@@ -944,9 +944,9 @@
                 setDrawCurrent({ x, y });
 
                 event.preventDefault();
-            }, [manualDetectionMode]);
+            };
 
-            const handleCanvasMouseMove = useCallback((event) => {
+            const handleCanvasMouseMove = (event) => {
                 if (!isDrawing || !manualDetectionMode) return;
 
                 const canvas = canvasRef.current;
@@ -956,9 +956,9 @@
 
                 setDrawCurrent({ x, y });
                 event.preventDefault();
-            }, [isDrawing, manualDetectionMode]);
+            };
 
-            const handleCanvasMouseUp = useCallback((event) => {
+            const handleCanvasMouseUp = (event) => {
                 if (!isDrawing || !drawStart || !manualDetectionMode) return;
 
                 const canvas = canvasRef.current;
@@ -979,9 +979,9 @@
                 setDrawStart(null);
                 setDrawCurrent(null);
                 event.preventDefault();
-            }, [isDrawing, drawStart, manualDetectionMode]);
+            };
 
-            const createManualDetection = useCallback((startPoint, endPoint) => {
+            const createManualDetection = (startPoint, endPoint) => {
                 if (!imageRef.current || !equivalenceChart) return;
 
                 const img = imageRef.current;
@@ -1022,25 +1022,25 @@
 
                 setRecognitionResults(prev => [...prev, manualDetection]);
                 console.log('Manual detection added:', manualDetection);
-            }, [equivalenceChart, recognitionResults.length, recordAction]);
+            };
 
             // Drag and drop handlers
-            const handleDragStart = useCallback((e, index) => {
+            const handleDragStart = (e, index) => {
                 setDraggedIndex(index);
                 e.dataTransfer.effectAllowed = 'move';
-            }, []);
+            };
 
-            const handleDragOver = useCallback((e, index) => {
+            const handleDragOver = (e, index) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
                 setDragOverIndex(index);
-            }, []);
+            };
 
-            const handleDragLeave = useCallback(() => {
+            const handleDragLeave = () => {
                 setDragOverIndex(null);
-            }, []);
+            };
 
-            const handleDrop = useCallback((e, dropIndex) => {
+            const handleDrop = (e, dropIndex) => {
                 e.preventDefault();
                 
                 if (draggedIndex === null || draggedIndex === dropIndex) {
@@ -1063,7 +1063,7 @@
 
                 setDraggedIndex(null);
                 setDragOverIndex(null);
-            }, [draggedIndex, recordAction]);
+            };
 
             // Rendering the component
             return (
