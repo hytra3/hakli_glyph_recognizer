@@ -21,11 +21,44 @@
             position: absolute;
             pointer-events: none;
             z-index: 10;
+            border: 2px solid;
+            border-radius: 4px;
         }
+        .detection-box.validated-correct { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+        .detection-box.validated-incorrect { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+        .detection-box.unvalidated { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+        .detection-box.selected { border-color: #f59e0b; background: rgba(245, 158, 11, 0.2); }
+        .detection-box.dragging { opacity: 0.7; }
+        
         .canvas-container {
             position: relative;
             display: inline-block;
             max-width: 100%;
+        }
+        
+        .manual-selection-box {
+            position: absolute;
+            border: 2px dashed #f59e0b;
+            background: rgba(245, 158, 11, 0.1);
+            pointer-events: none;
+            z-index: 5;
+        }
+        
+        .region-boundary {
+            position: absolute;
+            border: 1px solid rgba(156, 163, 175, 0.5);
+            background: rgba(156, 163, 175, 0.05);
+            pointer-events: none;
+            z-index: 3;
+        }
+        
+        .merge-indicator {
+            position: absolute;
+            border: 3px solid #8b5cf6;
+            background: rgba(139, 92, 246, 0.15);
+            border-radius: 8px;
+            pointer-events: none;
+            z-index: 15;
         }
     </style>
 </head>
@@ -36,8 +69,10 @@
         var useState = React.useState;
         var useEffect = React.useEffect;
         var useRef = React.useRef;
+        var useCallback = React.useCallback;
 
         function HakliSymbolRecognizer() {
+            // Core state
             var imageState = useState(null);
             var image = imageState[0];
             var setImage = imageState[1];
@@ -62,6 +97,28 @@
             var loadedSymbolImages = loadedSymbolImagesState[0];
             var setLoadedSymbolImages = loadedSymbolImagesState[1];
 
+            // Manual detection state
+            var manualDetectionModeState = useState(false);
+            var manualDetectionMode = manualDetectionModeState[0];
+            var setManualDetectionMode = manualDetectionModeState[1];
+
+            var isDrawingState = useState(false);
+            var isDrawing = isDrawingState[0];
+            var setIsDrawing = isDrawingState[1];
+
+            var drawStartState = useState(null);
+            var drawStart = drawStartState[0];
+            var setDrawStart = drawStartState[1];
+
+            var drawCurrentState = useState(null);
+            var drawCurrent = drawCurrentState[0];
+            var setDrawCurrent = drawCurrentState[1];
+
+            // Selection and validation
+            var selectedRegionsState = useState(new Set());
+            var selectedRegions = selectedRegionsState[0];
+            var setSelectedRegions = selectedRegionsState[1];
+
             var validationsState = useState({});
             var validations = validationsState[0];
             var setValidations = validationsState[1];
@@ -70,6 +127,7 @@
             var corrections = correctionsState[0];
             var setCorrections = correctionsState[1];
 
+            // Action history
             var actionHistoryState = useState([]);
             var actionHistory = actionHistoryState[0];
             var setActionHistory = actionHistoryState[1];
@@ -78,14 +136,16 @@
             var isolatedSymbols = isolatedSymbolsState[0];
             var setIsolatedSymbols = isolatedSymbolsState[1];
 
-            var selectedRegionsState = useState(new Set());
-            var selectedRegions = selectedRegionsState[0];
-            var setSelectedRegions = selectedRegionsState[1];
-
-            var showRegionBoundariesState = useState(true);
+            var showRegionBoundariesState = useState(false);
             var showRegionBoundaries = showRegionBoundariesState[0];
             var setShowRegionBoundaries = showRegionBoundariesState[1];
 
+            // Merge state
+            var mergeIndicatorState = useState(null);
+            var mergeIndicator = mergeIndicatorState[0];
+            var setMergeIndicator = mergeIndicatorState[1];
+
+            // Refs
             var imageRef = useRef(null);
             var canvasRef = useRef(null);
             var fileInputRef = useRef(null);
@@ -159,20 +219,218 @@
                     newResults.splice(detectionIndex, 1);
                     return newResults;
                 });
-            }
 
-            function toggleWordBoundary(detectionIndex) {
-                setRecognitionResults(function(prev) {
-                    return prev.map(function(result, index) {
-                        if (index === detectionIndex) {
-                            return Object.assign({}, result, {
-                                wordBoundary: !result.wordBoundary
-                            });
+                // Clean up validations
+                setValidations(function(prev) {
+                    var newValidations = Object.assign({}, prev);
+                    delete newValidations[detectionIndex];
+                    
+                    // Shift indices down for remaining validations
+                    var shiftedValidations = {};
+                    Object.keys(newValidations).forEach(function(key) {
+                        var numKey = parseInt(key);
+                        if (numKey > detectionIndex) {
+                            shiftedValidations[numKey - 1] = newValidations[key];
+                        } else {
+                            shiftedValidations[key] = newValidations[key];
                         }
-                        return result;
                     });
+                    
+                    return shiftedValidations;
                 });
             }
+
+            function mergeSelectedDetections() {
+                var selectedIndices = Array.from(selectedRegions).sort(function(a, b) { return a - b; });
+                
+                if (selectedIndices.length < 2) {
+                    alert('Please select at least 2 detections to merge');
+                    return;
+                }
+
+                var detectionsToMerge = selectedIndices.map(function(i) { return recognitionResults[i]; });
+                
+                // Calculate bounding box of merged detections
+                var minX = Math.min.apply(Math, detectionsToMerge.map(function(d) { return d.position.x; }));
+                var minY = Math.min.apply(Math, detectionsToMerge.map(function(d) { return d.position.y; }));
+                var maxX = Math.max.apply(Math, detectionsToMerge.map(function(d) { return d.position.x + d.position.width; }));
+                var maxY = Math.max.apply(Math, detectionsToMerge.map(function(d) { return d.position.y + d.position.height; }));
+
+                // Find highest confidence detection to use as base
+                var baseDetection = detectionsToMerge.reduce(function(best, current) {
+                    return current.confidence > best.confidence ? current : best;
+                });
+
+                var mergedDetection = Object.assign({}, baseDetection, {
+                    position: {
+                        x: minX,
+                        y: minY,
+                        width: maxX - minX,
+                        height: maxY - minY
+                    },
+                    confidence: detectionsToMerge.reduce(function(sum, d) { return sum + d.confidence; }, 0) / detectionsToMerge.length,
+                    mergedFrom: detectionsToMerge.length,
+                    isMerged: true
+                });
+
+                recordAction('merge_detections', {
+                    indices: selectedIndices,
+                    detections: detectionsToMerge,
+                    mergedResult: mergedDetection
+                });
+
+                // Remove original detections (in reverse order to maintain indices)
+                var newResults = recognitionResults.slice();
+                for (var i = selectedIndices.length - 1; i >= 0; i--) {
+                    newResults.splice(selectedIndices[i], 1);
+                }
+                
+                // Add merged detection
+                newResults.push(mergedDetection);
+                
+                setRecognitionResults(newResults);
+                setSelectedRegions(new Set());
+                setMergeIndicator(null);
+            }
+
+            function addManualDetection(bounds, symbolId) {
+                if (!equivalenceChart) return;
+
+                var symbol = equivalenceChart.symbols.find(function(s) { return s.id === symbolId; });
+                if (!symbol) return;
+
+                var manualDetection = {
+                    symbol: symbol,
+                    confidence: 0.95,
+                    position: bounds,
+                    matchType: 'manual',
+                    isManual: true
+                };
+
+                recordAction('add_manual_detection', {
+                    detection: manualDetection,
+                    bounds: bounds
+                });
+
+                setRecognitionResults(function(prev) {
+                    return prev.concat([manualDetection]);
+                });
+            }
+
+            function getImageCoordinates(event) {
+                if (!imageRef.current) return null;
+
+                var rect = imageRef.current.getBoundingClientRect();
+                var scaleX = imageRef.current.naturalWidth / rect.width;
+                var scaleY = imageRef.current.naturalHeight / rect.height;
+
+                return {
+                    x: (event.clientX - rect.left) * scaleX,
+                    y: (event.clientY - rect.top) * scaleY
+                };
+            }
+
+            function handleImageMouseDown(event) {
+                if (!manualDetectionMode) return;
+
+                var coords = getImageCoordinates(event);
+                if (!coords) return;
+
+                setIsDrawing(true);
+                setDrawStart(coords);
+                setDrawCurrent(coords);
+            }
+
+            function handleImageMouseMove(event) {
+                if (!manualDetectionMode || !isDrawing) return;
+
+                var coords = getImageCoordinates(event);
+                if (!coords) return;
+
+                setDrawCurrent(coords);
+            }
+
+            function handleImageMouseUp(event) {
+                if (!manualDetectionMode || !isDrawing || !drawStart) return;
+
+                var coords = getImageCoordinates(event);
+                if (!coords) return;
+
+                var bounds = {
+                    x: Math.min(drawStart.x, coords.x),
+                    y: Math.min(drawStart.y, coords.y),
+                    width: Math.abs(coords.x - drawStart.x),
+                    height: Math.abs(coords.y - drawStart.y)
+                };
+
+                // Only create detection if bounds are reasonable
+                if (bounds.width > 10 && bounds.height > 10) {
+                    // For now, add as unknown symbol - user can correct later
+                    var unknownSymbol = {
+                        id: 'unknown',
+                        name: 'Unknown',
+                        transliteration: '?'
+                    };
+
+                    var manualDetection = {
+                        symbol: unknownSymbol,
+                        confidence: 0.5,
+                        position: bounds,
+                        matchType: 'manual',
+                        isManual: true
+                    };
+
+                    setRecognitionResults(function(prev) {
+                        return prev.concat([manualDetection]);
+                    });
+                }
+
+                setIsDrawing(false);
+                setDrawStart(null);
+                setDrawCurrent(null);
+            }
+
+            function toggleRegionSelection(regionIndex) {
+                setSelectedRegions(function(prev) {
+                    var newSet = new Set(prev);
+                    if (newSet.has(regionIndex)) {
+                        newSet.delete(regionIndex);
+                    } else {
+                        newSet.add(regionIndex);
+                    }
+                    return newSet;
+                });
+            }
+
+            function handleDetectionClick(event, index) {
+                if (event.ctrlKey || event.metaKey) {
+                    toggleRegionSelection(index);
+                }
+            }
+
+            // Update merge indicator when selection changes
+            useEffect(function() {
+                if (selectedRegions.size >= 2) {
+                    var selectedIndices = Array.from(selectedRegions);
+                    var selectedDetections = selectedIndices.map(function(i) { return recognitionResults[i]; });
+                    
+                    if (selectedDetections.length > 0) {
+                        var minX = Math.min.apply(Math, selectedDetections.map(function(d) { return d.position.x; }));
+                        var minY = Math.min.apply(Math, selectedDetections.map(function(d) { return d.position.y; }));
+                        var maxX = Math.max.apply(Math, selectedDetections.map(function(d) { return d.position.x + d.position.width; }));
+                        var maxY = Math.max.apply(Math, selectedDetections.map(function(d) { return d.position.y + d.position.height; }));
+
+                        setMergeIndicator({
+                            x: minX,
+                            y: minY,
+                            width: maxX - minX,
+                            height: maxY - minY
+                        });
+                    }
+                } else {
+                    setMergeIndicator(null);
+                }
+            }, [selectedRegions, recognitionResults]);
 
             function isolateSymbols(inputImage) {
                 if (!isOpenCvReady) {
@@ -432,25 +690,49 @@
                         setCorrections({});
                         setActionHistory([]);
                         setIsolatedSymbols([]);
+                        setSelectedRegions(new Set());
+                        setMergeIndicator(null);
                     };
                     reader.readAsDataURL(file);
                 }
             }
 
-            function toggleRegionSelection(regionIndex) {
-                setSelectedRegions(function(prev) {
-                    var newSet = new Set(prev);
-                    if (newSet.has(regionIndex)) {
-                        newSet.delete(regionIndex);
-                    } else {
-                        newSet.add(regionIndex);
-                    }
-                    return newSet;
-                });
-            }
-
             function reloadChart() {
                 setChartLoadStatus('not-loaded');
+            }
+
+            function getDetectionBoxStyle(index) {
+                var detection = recognitionResults[index];
+                if (!detection || !imageRef.current) return {};
+
+                var imageRect = imageRef.current.getBoundingClientRect();
+                var scaleX = imageRect.width / imageRef.current.naturalWidth;
+                var scaleY = imageRect.height / imageRef.current.naturalHeight;
+
+                var style = {
+                    left: detection.position.x * scaleX + 'px',
+                    top: detection.position.y * scaleY + 'px',
+                    width: detection.position.width * scaleX + 'px',
+                    height: detection.position.height * scaleY + 'px'
+                };
+
+                return style;
+            }
+
+            function getDetectionBoxClass(index) {
+                var classes = ['detection-box'];
+                
+                if (validations[index]) {
+                    classes.push(validations[index].isCorrect ? 'validated-correct' : 'validated-incorrect');
+                } else {
+                    classes.push('unvalidated');
+                }
+                
+                if (selectedRegions.has(index)) {
+                    classes.push('selected');
+                }
+
+                return classes.join(' ');
             }
 
             useEffect(function() {
@@ -510,222 +792,4 @@
                                                 loadPromises.push(promise);
                                             })(symbol.id, fullUrl);
                                         }
-                                    }
-
-                                    if (symbol.images && symbol.images.variants) {
-                                        for (var i = 0; i < symbol.images.variants.length; i++) {
-                                            var fullUrl = convertToGitHubUrl(symbol.images.variants[i]);
-                                            if (fullUrl) {
-                                                (function(variantKey, url) {
-                                                    var promise = new Promise(function(resolve, reject) {
-                                                        var img = new Image();
-                                                        img.crossOrigin = 'anonymous';
-                                                        var timeout = setTimeout(function() {
-                                                            reject(new Error('Timeout'));
-                                                        }, 10000);
-                                                        img.onload = function() {
-                                                            clearTimeout(timeout);
-                                                            imageCache[variantKey] = img;
-                                                            successCount++;
-                                                            resolve();
-                                                        };
-                                                        img.onerror = function() {
-                                                            clearTimeout(timeout);
-                                                            failCount++;
-                                                            reject();
-                                                        };
-                                                        img.src = url;
-                                                    });
-                                                    loadPromises.push(promise);
-                                                })(symbol.id + '_variant_' + i, fullUrl);
-                                            }
-                                        }
-                                    }
-
-                                    if (symbol.images && symbol.images.examples) {
-                                        for (var i = 0; i < symbol.images.examples.length; i++) {
-                                            var fullUrl = convertToGitHubUrl(symbol.images.examples[i]);
-                                            if (fullUrl) {
-                                                (function(exampleKey, url) {
-                                                    var promise = new Promise(function(resolve, reject) {
-                                                        var img = new Image();
-                                                        img.crossOrigin = 'anonymous';
-                                                        var timeout = setTimeout(function() {
-                                                            reject(new Error('Timeout'));
-                                                        }, 10000);
-                                                        img.onload = function() {
-                                                            clearTimeout(timeout);
-                                                            imageCache[exampleKey] = img;
-                                                            successCount++;
-                                                            resolve();
-                                                        };
-                                                        img.onerror = function() {
-                                                            clearTimeout(timeout);
-                                                            failCount++;
-                                                            reject();
-                                                        };
-                                                        img.src = url;
-                                                    });
-                                                    loadPromises.push(promise);
-                                                })(symbol.id + '_example_' + i, fullUrl);
-                                            }
-                                        }
-                                    }
-                                }
-                                
-                                Promise.allSettled(loadPromises).then(function() {
-                                    console.log('Image loading complete: ' + successCount + ' successful, ' + failCount + ' failed');
-                                    setLoadedSymbolImages(imageCache);
-                                    setChartLoadStatus('loaded');
-                                });
-                            })
-                            .catch(function(error) {
-                                console.error('Error loading chart:', error);
-                                setChartLoadStatus('error');
-                            });
-                    }
-                    
-                    loadChartFromGitHub();
-                }
-            }, [chartLoadStatus]);
-
-            return React.createElement('div', {
-                className: 'max-w-6xl mx-auto p-6 bg-white'
-            }, [
-                React.createElement('div', {
-                    key: 'header',
-                    className: 'mb-8'
-                }, [
-                    React.createElement('h1', {
-                        key: 'title',
-                        className: 'text-3xl font-bold text-gray-900 mb-2'
-                    }, 'Hakli Symbol Recognizer'),
-                    React.createElement('p', {
-                        key: 'subtitle',
-                        className: 'text-gray-600'
-                    }, 'based on Ahmad Al Jallad (2025) The Decipherment of the Dhofari Script')
-                ]),
-
-                React.createElement('div', {
-                    key: 'chart-status',
-                    className: 'mb-6 p-4 bg-gray-50 rounded-lg'
-                }, [
-                    React.createElement('div', {
-                        key: 'status-container',
-                        className: 'flex items-center justify-between'
-                    }, [
-                        React.createElement('div', {
-                            key: 'status-info'
-                        }, [
-                            React.createElement('h3', {
-                                key: 'status-title',
-                                className: 'font-semibold text-gray-900'
-                            }, 'Equivalence Chart Status'),
-                            React.createElement('div', {
-                                key: 'status-content',
-                                className: 'flex items-center gap-2 mt-1'
-                            }, [
-                                chartLoadStatus === 'loading' && React.createElement('span', {
-                                    key: 'loading',
-                                    className: 'text-blue-600'
-                                }, 'Loading chart from GitHub...'),
-                                chartLoadStatus === 'loaded' && equivalenceChart && React.createElement('span', {
-                                    key: 'loaded',
-                                    className: 'text-green-600'
-                                }, 'Chart loaded (' + (equivalenceChart.symbols ? equivalenceChart.symbols.length : 0) + ' symbols, ' + Object.keys(loadedSymbolImages).length + ' images)'),
-                                chartLoadStatus === 'error' && React.createElement('span', {
-                                    key: 'error',
-                                    className: 'text-red-600'
-                                }, 'Error loading chart')
-                            ])
-                        ]),
-                        React.createElement('button', {
-                            key: 'reload-button',
-                            onClick: reloadChart,
-                            className: 'px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600',
-                            disabled: chartLoadStatus === 'loading'
-                        }, 'Reload Chart')
-                    ])
-                ]),
-
-                React.createElement('div', {
-                    key: 'file-upload',
-                    className: 'mb-6'
-                }, [
-                    React.createElement('input', {
-                        key: 'file-input',
-                        ref: fileInputRef,
-                        type: 'file',
-                        accept: 'image/*',
-                        onChange: handleFileUpload,
-                        className: 'block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100'
-                    })
-                ]),
-
-                image && React.createElement('div', {
-                    key: 'controls',
-                    className: 'mb-6 p-4 bg-gray-50 rounded-lg'
-                }, [
-                    React.createElement('div', {
-                        key: 'controls-container',
-                        className: 'flex flex-wrap gap-3 items-center'
-                    }, [
-                        React.createElement('button', {
-                            key: 'recognize-button',
-                            onClick: recognizeSymbols,
-                            disabled: isProcessing || !equivalenceChart,
-                            className: 'px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50'
-                        }, isProcessing ? 'Processing...' : 'Recognize Symbols'),
-                        React.createElement('div', {
-                            key: 'status-text',
-                            className: 'text-sm text-gray-600'
-                        }, recognitionResults.length + ' detections')
-                    ])
-                ]),
-
-                image && React.createElement('div', {
-                    key: 'image-display',
-                    className: 'mb-6'
-                }, [
-                    React.createElement('div', {
-                        key: 'image-container',
-                        className: 'canvas-container relative',
-                        ref: imageContainerRef
-                    }, [
-                        React.createElement('img', {
-                            key: 'main-image',
-                            ref: imageRef,
-                            src: image,
-                            alt: 'Uploaded inscription',
-                            className: 'max-w-full h-auto border border-gray-300 rounded'
-                        })
-                    ])
-                ]),
-
-                React.createElement('div', {
-                    key: 'opencv-status',
-                    className: 'mt-8 p-4 bg-gray-50 rounded-lg'
-                }, [
-                    React.createElement('div', {
-                        key: 'opencv-content',
-                        className: 'text-sm text-gray-600'
-                    }, [
-                        React.createElement('div', {
-                            key: 'opencv-indicator',
-                            className: 'flex items-center gap-2'
-                        }, [
-                            React.createElement('span', {
-                                key: 'opencv-dot',
-                                className: 'w-2 h-2 rounded-full ' + (isOpenCvReady ? 'bg-green-500' : 'bg-red-500')
-                            }),
-                            'OpenCV Status: ' + (isOpenCvReady ? 'Ready' : 'Loading...')
-                        ])
-                    ])
-                ])
-            ]);
-        }
-
-        ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(HakliSymbolRecognizer));
-    </script>
-</body>
-</html>
+                
