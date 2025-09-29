@@ -339,16 +339,20 @@
                 if (!image || !equivalenceChart || !isOpenCvReady) return;
                 setIsProcessing(true);
                 setRecognitionResults([]);
+                console.log('Starting recognition with', equivalenceChart.symbols.length, 'symbols and', Object.keys(loadedSymbolImages).length, 'loaded images');
                 try {
                     const tempImg = new Image();
                     tempImg.onload = () => {
                         const isolated = isolateSymbols(tempImg);
                         setIsolatedSymbols(isolated);
+                        console.log('Isolated', isolated.length, 'regions');
                         if (isolated.length === 0) {
+                            console.log('No regions found - check image contrast and size');
                             setIsProcessing(false);
                             return;
                         }
                         const results = [];
+                        let totalMatches = 0;
                         for (const region of isolated) {
                             let bestMatch = null;
                             
@@ -356,6 +360,7 @@
                                 // Check primary image
                                 if (loadedSymbolImages[symbol.id]) {
                                     const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region);
+                                    totalMatches += matches.length;
                                     for (const match of matches) {
                                         if (!bestMatch || match.confidence > bestMatch.confidence) {
                                             bestMatch = {
@@ -413,10 +418,12 @@
                                 }
                             }
                             
-                            if (bestMatch && bestMatch.confidence > 0.5) {
+                            if (bestMatch && bestMatch.confidence > 0.4) {
                                 results.push(bestMatch);
+                                console.log(`Region ${isolated.indexOf(region)}: Matched ${bestMatch.symbol.name} with ${(bestMatch.confidence * 100).toFixed(1)}% confidence`);
                             }
                         }
+                        console.log(`Recognition complete: ${results.length} symbols detected from ${isolated.length} regions (${totalMatches} total template matches tested)`);
                         setRecognitionResults(results);
                         setIsProcessing(false);
                     };
