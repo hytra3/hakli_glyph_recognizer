@@ -21,14 +21,14 @@
             position: absolute;
             pointer-events: auto;
             z-index: 10;
-            border: 2px solid;
+            border: 3px solid;
             border-radius: 4px;
             cursor: pointer;
         }
-        .detection-box.validated-correct { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
-        .detection-box.validated-incorrect { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
-        .detection-box.unvalidated { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
-        .detection-box.selected { border-color: #f59e0b; background: rgba(245, 158, 11, 0.2); border-width: 3px; }
+        .detection-box.validated-correct { border-color: #10b981; background: rgba(16, 185, 129, 0.25); }
+        .detection-box.validated-incorrect { border-color: #ef4444; background: rgba(239, 68, 68, 0.25); }
+        .detection-box.unvalidated { border-color: #3b82f6; background: rgba(59, 130, 246, 0.25); }
+        .detection-box.selected { border-color: #f59e0b; background: rgba(245, 158, 11, 0.3); border-width: 4px; }
         
         .canvas-container {
             position: relative;
@@ -351,7 +351,9 @@
                         const results = [];
                         for (const region of isolated) {
                             let bestMatch = null;
+                            
                             for (const symbol of equivalenceChart.symbols) {
+                                // Check primary image
                                 if (loadedSymbolImages[symbol.id]) {
                                     const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region);
                                     for (const match of matches) {
@@ -365,7 +367,52 @@
                                         }
                                     }
                                 }
+                                
+                                // Check variant images
+                                if (symbol.images && symbol.images.variants) {
+                                    for (let i = 0; i < symbol.images.variants.length; i++) {
+                                        const variantKey = `${symbol.id}_variant_${i}`;
+                                        if (loadedSymbolImages[variantKey]) {
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[variantKey], region);
+                                            for (const match of matches) {
+                                                const weightedConfidence = match.confidence * 0.9;
+                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                                    bestMatch = {
+                                                        symbol,
+                                                        confidence: weightedConfidence,
+                                                        position: region.bounds,
+                                                        matchType: 'variant',
+                                                        variantIndex: i
+                                                    };
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Check example images
+                                if (symbol.images && symbol.images.examples) {
+                                    for (let i = 0; i < symbol.images.examples.length; i++) {
+                                        const exampleKey = `${symbol.id}_example_${i}`;
+                                        if (loadedSymbolImages[exampleKey]) {
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[exampleKey], region);
+                                            for (const match of matches) {
+                                                const weightedConfidence = match.confidence * 0.8;
+                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                                    bestMatch = {
+                                                        symbol,
+                                                        confidence: weightedConfidence,
+                                                        position: region.bounds,
+                                                        matchType: 'example',
+                                                        exampleIndex: i
+                                                    };
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                            
                             if (bestMatch && bestMatch.confidence > 0.5) {
                                 results.push(bestMatch);
                             }
@@ -432,7 +479,9 @@
                             setEquivalenceChart(chartData);
                             const imageCache = {};
                             const loadPromises = [];
+                            
                             for (const symbol of chartData.symbols) {
+                                // Load primary image
                                 if (symbol.images && symbol.images.primary) {
                                     const fullUrl = convertToGitHubUrl(symbol.images.primary);
                                     if (fullUrl) {
@@ -449,8 +498,52 @@
                                         loadPromises.push(promise);
                                     }
                                 }
+                                
+                                // Load variant images
+                                if (symbol.images && symbol.images.variants) {
+                                    for (let i = 0; i < symbol.images.variants.length; i++) {
+                                        const fullUrl = convertToGitHubUrl(symbol.images.variants[i]);
+                                        if (fullUrl) {
+                                            const variantKey = `${symbol.id}_variant_${i}`;
+                                            const promise = new Promise((resolve) => {
+                                                const img = new Image();
+                                                img.crossOrigin = 'anonymous';
+                                                img.onload = () => {
+                                                    imageCache[variantKey] = img;
+                                                    resolve();
+                                                };
+                                                img.onerror = () => resolve();
+                                                img.src = fullUrl;
+                                            });
+                                            loadPromises.push(promise);
+                                        }
+                                    }
+                                }
+                                
+                                // Load example images
+                                if (symbol.images && symbol.images.examples) {
+                                    for (let i = 0; i < symbol.images.examples.length; i++) {
+                                        const fullUrl = convertToGitHubUrl(symbol.images.examples[i]);
+                                        if (fullUrl) {
+                                            const exampleKey = `${symbol.id}_example_${i}`;
+                                            const promise = new Promise((resolve) => {
+                                                const img = new Image();
+                                                img.crossOrigin = 'anonymous';
+                                                img.onload = () => {
+                                                    imageCache[exampleKey] = img;
+                                                    resolve();
+                                                };
+                                                img.onerror = () => resolve();
+                                                img.src = fullUrl;
+                                            });
+                                            loadPromises.push(promise);
+                                        }
+                                    }
+                                }
                             }
+                            
                             Promise.all(loadPromises).then(() => {
+                                console.log(`Loaded ${Object.keys(imageCache).length} total images`);
                                 setLoadedSymbolImages(imageCache);
                                 setChartLoadStatus('loaded');
                             });
