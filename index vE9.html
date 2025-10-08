@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hakli Symbol Recognizer</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // OpenCV ready flag and callback - must be defined before OpenCV loads
+        let isOpenCvReady = false;
+        function onOpenCvReady() {
+            isOpenCvReady = true;
+            console.log('✅ OpenCV.js is ready');
+        }
+    </script>
+    <script async src="https://docs.opencv.org/4.5.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+    <style>
+        .detection-box {
+            position: absolute;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+        }
+        .draggable-item {
+            transition: transform 0.2s ease;
+        }
+        .draggable-item.dragging {
+            transform: scale(1.05);
+            z-index: 1000;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+        function HakliSymbolRecognizer() {
+            // State management
+            const [image, setImage] = useState(null);
+            const [recognitionResults, setRecognitionResults] = useState([]);
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [equivalenceChart, setEquivalenceChart] = useState(null);
+            const [chartLoadStatus, setChartLoadStatus] = useState('not-loaded');
+            const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
+            const [manualDetectionMode, setManualDetectionMode] = useState(false);
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [drawStart, setDrawStart] = useState(null);
+            const [drawCurrent, setDrawCurrent] = useState(null);
+            const [activeDetections, setActiveDetections] = useState(new Set());
+            
+            // Validation and action recording
+            const [validations, setValidations] = useState({});
+            const [corrections, setCorrections] = useState({});
+            const [actionHistory, setActionHistory] = useState([]);
+            const [maxHistorySize] = useState(50);
+            
+            // Drag and drop state
+            const [draggedIndex, setDraggedIndex] = useState(null);
+            const [dragOverIndex, setDragOverIndex] = useState(null);
+
+            // Refs
+            const imageRef = useRef(null);
+            const canvasRef = useRef(null);
+            const fileInputRef = useRef(null);
+            const imageContainerRef = useRef(null);
+
+            // Action recording system
+            const recordAction = useCallback((actionType, actionData) => {
+                const action = {
+                    type: actionType,
+                    data: actionData,
+                    timestamp: new Date().toISOString(),
+                    id: Date.now()
+                };
+
+                setActionHistory(prev => {
+                    const newHistory = [...prev, action];
+                    return newHistory.slice(-maxHistorySize);
+                });
+
+                console.log('Action recorded:', action);
+            }, [maxHistorySize]);
+
+            // Enhanced undo system
+            const undoLastAction = useCallback(() => {
+                if (actionHistory.length === 0) return;
+
+                const lastAction = actionHistory[actionHistory.length - 1];
+                console.log('Undoing action:', lastAction);
+
+                switch (lastAction.type) {
+                    case 'delete_detection':
+                        setRecognitionResults(prev => {
+                            const newResults = [...prev];
+                            newResults.splice(lastAction.data.index, 0, lastAction.data.detection);
+                            return newResults;
+                        });
+                        break;
+                    case 'manual_detection':
+                        setRecognitionResults(prev => prev.filter((_, index) => index !== lastAction.data.detectionIndex));
+                        break;
+                    case 'correction':
+                        setRecognitionResults(prev => prev.map((result, index) => {
+                            if (index === lastAction.data.detectionIndex) {
+                                return lastAction.data.originalDetection;
+                            }
+                            return result;
+                        }));
+                        setCorrections(prev => {
+                            const newCorrections = { ...prev };
+                            delete newCorrections[lastAction.data.detectionIndex];
+                            return newCorrections;
+                        });
+                        break;
+                    case 'validation':
+                        setValidations(prev => {
+                            const newValidations = { ...prev };
+                            delete newValidations[lastAction.data.detectionIndex];
+                            return newValidations;
+                        });
+                        break;
+                    case 'reorder':
+                        setRecognitionResults(prev => {
+                            const newResults = [...prev];
+                            const [item] = newResults.splice(lastAction.data.newIndex, 1);
+                            newResults.splice(lastAction.data.originalIndex, 0, item);
+                            return newResults;
+                        });
+                        break;
+                }
+
+                setActionHistory(prev => prev.slice(0, -1));
+            }, [actionHistory]);
+
+            // Validation and correction functions
+            const validateDetection = useCallback((detectionIndex, isCorrect) => {
+                recordAction('validation', {
+                    detectionIndex: detectionIndex,
+                    isCorrect: isCorrect,
+                    detectionData: recognitionResults[detectionIndex]
+                });
+
+                setValidations(prev => ({
+                    ...prev,
+                    [detectionIndex]: {
+                        isCorrect: isCorrect,
+                        timestamp: new Date().toISOString(),
+                        detectionData: recognitionResults[detectionIndex]
+                    }
+                }));
+                
+                console.log(`Detection ${detectionIndex + 1} marked as ${isCorrect ? 'correct' : 'incorrect'}`);
+            }, [recognitionResults, recordAction]);
+
+            const correctDetection = useCallback((detectionIndex, newSymbolId) => {
+                const originalDetection = recognitionResults[detectionIndex];
+                const newSymbol = equivalenceChart.symbols.find(s => s.id === newSymbolId);
+                
+                if (!newSymbol) return;
+
+                recordAction('correction', {
+                    detectionIndex: detectionIndex,
+                    originalDetection: originalDetection,
+                    newSymbol: newSymbol
+                });
+
+                setRecognitionResults(prev => prev.map((result, index) => {
+                    if (index === detectionIndex) {
+                        return {
+                            ...result,
+                            symbol: newSymbol,
+                            confidence: 1.0,
+                            matchType: 'manual_correction'
+                        };
+                    }
+                    return result;
+                }));
+
+                setCorrections(prev => ({
+                    ...prev,
+                    [detectionIndex]: {
+                        originalSymbol: originalDetection.symbol,
+                        newSymbol: newSymbol,
+                        timestamp: new Date().toISOString()
+                    }
+                }));
+
+                console.log(`Detection ${detectionIndex + 1} corrected to ${newSymbol.name}`);
+            }, [recognitionResults, equivalenceChart, recordAction]);
+
+            const deleteDetection = useCallback((detectionIndex) => {
+                recordAction('delete_detection', {
+                    index: detectionIndex,
+                    detection: recognitionResults[detectionIndex]
+                });
+
+                setRecognitionResults(prev => {
+                    const newResults = [...prev];
+                    newResults.splice(detectionIndex, 1);
+                    return newResults;
+                });
+            }, [recognitionResults, recordAction]);
+
+            const toggleWordBoundary = useCallback((detectionIndex) => {
+                setRecognitionResults(prev => prev.map((result, index) => {
+                    if (index === detectionIndex) {
+                        return {
+                            ...result,
+                            wordBoundary: !result.wordBoundary
+                        };
+                    }
+                    return result;
+                }));
+            }, []);
+
+            // GitHub URL converter
+            const convertToGitHubUrl = useCallback((githubUrl) => {
+                if (!githubUrl) return null;
+                
+                if (githubUrl.includes('github.com') && githubUrl.includes('/blob/')) {
+                    return githubUrl.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+                }
+                return githubUrl;
+            }, []);
+
+            // Symbol image loading
+            const loadSymbolImages = useCallback(async (chart) => {
+                console.log('🖼️ Loading symbol images...');
+                const imageCache = {};
+                let successCount = 0;
+                let failCount = 0;
+                
+                for (const symbol of chart.symbols) {
+                    try {
+                        // Load primary image
+                        if (symbol.image) {
+                            const fullUrl = convertToGitHubUrl(symbol.image);
+                            console.log(`Trying to load primary image for ${symbol.name}:`, fullUrl);
+                            if (fullUrl) {
+                                try {
+                                    const img = new Image();
+                                    img.crossOrigin = 'anonymous';
+                                    await new Promise((resolve, reject) => {
+                                        const timeout = setTimeout(() => {
+                                            reject(new Error('Image load timeout'));
+                                        }, 10000); // 10 second timeout
+                                        
+                                        img.onload = () => {
+                                            clearTimeout(timeout);
+                                            imageCache[symbol.id] = img;
+                                            successCount++;
+                                            console.log(`✅ Loaded primary image for ${symbol.name}`);
+                                            resolve();
+                                        };
+                                        img.onerror = (e) => {
+                                            clearTimeout(timeout);
+                                            failCount++;
+                                            console.warn(`❌ Failed to load primary image for ${symbol.name}:`, e);
+                                            reject(e);
+                                        };
+                                        img.src = fullUrl;
+                                    });
+                                } catch (e) {
+                                    console.warn(`Failed to load primary image for ${symbol.name}:`, e);
+                                    failCount++;
+                                }
+                            }
+                        }
+
+                        // Load variant images
+                        if (symbol.variants && Array.isArray(symbol.variants)) {
+                            for (let i = 0; i < symbol.variants.length; i++) {
+                                try {
+                                    const fullUrl = convertToGitHubUrl(symbol.variants[i]);
+                                    console.log(`Trying to load variant ${i} for ${symbol.name}:`, fullUrl);
+                                    if (fullUrl) {
+                                        const img = new Image();
+                                        img.crossOrigin = 'anonymous';
+                                        await new Promise((resolve, reject) => {
+                                            const timeout = setTimeout(() => {
+                                                reject(new Error('Image load timeout'));
+                                            }, 10000);
+                                            
+                                            img.onload = () => {
+                                                clearTimeout(timeout);
+                                                imageCache[`${symbol.id}_variant_${i}`] = img;
+                                                successCount++;
+                                                console.log(`✅ Loaded variant ${i} for ${symbol.name}`);
+                                                resolve();
+                                            };
+                                            img.onerror = (e) => {
+                                                clearTimeout(timeout);
+                                                failCount++;
+                                                console.warn(`❌ Failed to load variant ${i} for ${symbol.name}:`, e);
+                                                reject(e);
+                                            };
+                                            img.src = fullUrl;
+                                        });
+                                    }
+                                } catch (e) {
+                                    console.warn(`Failed to load variant ${i} for ${symbol.name}:`, e);
+                                    failCount++;
+                                }
+                            }
+                        }
+
+                        // Load example images
+                        if (symbol.examples && Array.isArray(symbol.examples)) {
+                            for (let i = 0; i < symbol.examples.length; i++) {
+                                try {
+                                    const fullUrl = convertToGitHubUrl(symbol.examples[i]);
+                                    console.log(`Trying to load example ${i} for ${symbol.name}:`, fullUrl);
+                                    if (fullUrl) {
+                                        const img = new Image();
+                                        img.crossOrigin = 'anonymous';
+                                        await new Promise((resolve, reject) => {
+                                            const timeout = setTimeout(() => {
+                                                reject(new Error('Image load timeout'));
+                                            }, 10000);
+                                            
+                                            img.onload = () => {
+                                                clearTimeout(timeout);
+                                                imageCache[`${symbol.id}_example_${i}`] = img;
+                                                successCount++;
+                                                console.log(`✅ Loaded example ${i} for ${symbol.name}`);
+                                                resolve();
+                                            };
+                                            img.onerror = (e) => {
+                                                clearTimeout(timeout);
+                                                failCount++;
+                                                console.warn(`❌ Failed to load example ${i} for ${symbol.name}:`, e);
+                                                reject(e);
+                                            };
+                                            img.src = fullUrl;
+                                        });
+                                    }
+                                } catch (e) {
+                                    console.warn(`Failed to load example ${i} for ${symbol.name}:`, e);
+                                    failCount++;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`Error processing images for symbol ${symbol.name}:`, error);
+                        failCount++;
+                    }
+                }
+                
+                console.log(`🖼️ Image loading complete: ${successCount} successful, ${failCount} failed`);
+                return imageCache;
+            }, [convertToGitHubUrl]);
+
+            // Load chart from GitHub
+            const loadChart = useCallback(() => {
+                const loadChartInternal = async () => {
+                    setChartLoadStatus('loading');
+                    
+                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
+                    
+                    try {
+                        console.log('📡 Fetching JSON from:', githubJsonUrl);
+                        const response = await fetch(githubJsonUrl);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const chartData = await response.json();
+                        
+                        console.log('✅ Chart loaded successfully:', {
+                            totalSymbols: chartData.symbols?.length || 0,
+                            categories: chartData.categories?.length || 0
+                        });
+                        
+                        setEquivalenceChart(chartData);
+                        
+                        // Load symbol images
+                        const imageCache = await loadSymbolImages(chartData);
+                        console.log('🖼️ Images loaded count:', Object.keys(imageCache).length);
+                        setLoadedSymbolImages(imageCache);
+                        
+                        setChartLoadStatus('loaded');
+                        
+                    } catch (error) {
+                        console.error('❌ Error loading chart from GitHub:', error);
+                        setChartLoadStatus('error');
+                    }
+                };
+                
+                loadChartInternal();
+            }, [loadSymbolImages]);
+
+            // Auto-load chart on component mount
+            useEffect(() => {
+                if (chartLoadStatus === 'not-loaded') {
+                    loadChart();
+                }
+            }, [chartLoadStatus, loadChart]);
+
+            // File upload handler
+            const handleFileUpload = useCallback((event) => {
+                const file = event.target.files[0];
+                if (file && file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        setImage(e.target.result);
+                        setRecognitionResults([]);
+                        setValidations({});
+                        setCorrections({});
+                        setActionHistory([]);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }, []);
+
+            // Template matching function
+            const performTemplateMatching = useCallback((inputImage, templateImage, threshold = 0.7) => {
+                if (!isOpenCvReady) {
+                    console.error('OpenCV is not ready');
+                    return [];
+                }
+
+                try {
+                    const src = cv.imread(inputImage);
+                    const templ = cv.imread(templateImage);
+                    const dst = new cv.Mat();
+
+                    cv.matchTemplate(src, templ, dst, cv.TM_CCOEFF_NORMED);
+
+                    const result = cv.minMaxLoc(dst);
+                    const matches = [];
+
+                    if (result.maxVal >= threshold) {
+                        matches.push({
+                            confidence: result.maxVal,
+                            position: {
+                                x: result.maxLoc.x,
+                                y: result.maxLoc.y,
+                                width: templ.cols,
+                                height: templ.rows
+                            }
+                        });
+                    }
+
+                    src.delete();
+                    templ.delete();
+                    dst.delete();
+
+                    return matches;
+                } catch (error) {
+                    console.error('Template matching error:', error);
+                    return [];
+                }
+            }, []);
+
+            // Recognition function
+            const recognizeSymbols = useCallback(async () => {
+                if (!image || !equivalenceChart || !isOpenCvReady) {
+                    console.log('Missing requirements:', { 
+                        hasImage: !!image, 
+                        hasChart: !!equivalenceChart,
+                        openCvReady: isOpenCvReady 
+                    });
+                    return;
+                }
+
+                setIsProcessing(true);
+                setRecognitionResults([]);
+
+                try {
+                    // Create temporary image element for OpenCV
+                    const tempImg = new Image();
+                    tempImg.onload = () => {
+                        const results = [];
+                        let totalAttempts = 0;
+
+                        console.log('🔍 Starting symbol recognition...');
+
+                        // Process each symbol in the chart
+                        for (const symbol of equivalenceChart.symbols) {
+                            // Check primary image
+                            if (loadedSymbolImages[symbol.id]) {
+                                totalAttempts++;
+                                const matches = performTemplateMatching(tempImg, loadedSymbolImages[symbol.id], 0.6);
+                                
+                                matches.forEach(match => {
+                                    results.push({
+                                        symbol: symbol,
+                                        confidence: match.confidence * 1.0, // Primary image weight
+                                        position: match.position,
+                                        matchType: 'primary'
+                                    });
+                                });
+                            }
+
+                            // Check variant images
+                            if (symbol.variants) {
+                                for (let i = 0; i < symbol.variants.length; i++) {
+                                    const variantKey = `${symbol.id}_variant_${i}`;
+                                    if (loadedSymbolImages[variantKey]) {
+                                        totalAttempts++;
+                                        const matches = performTemplateMatching(tempImg, loadedSymbolImages[variantKey], 0.6);
+                                        
+                                        matches.forEach(match => {
+                                            results.push({
+                                                symbol: symbol,
+                                                confidence: match.confidence * 0.9, // Variant weight
+                                                position: match.position,
+                                                matchType: 'variant',
+                                                variantIndex: i
+                                            });
+                                        });
+                                    }
+                                }
+                            }
+
+                            // Check example images
+                            if (symbol.examples) {
+                                for (let i = 0; i < symbol.examples.length; i++) {
+                                    const exampleKey = `${symbol.id}_example_${i}`;
+                                    if (loadedSymbolImages[exampleKey]) {
+                                        totalAttempts++;
+                                        const matches = performTemplateMatching(tempImg, loadedSymbolImages[exampleKey], 0.6);
+                                        
+                                        matches.forEach(match => {
+                                            results.push({
+                                                symbol: symbol,
+                                                confidence: match.confidence * 0.8, // Example weight
+                                                position: match.position,
+                                                matchType: 'example',
+                                                exampleIndex: i
+                                            });
+                                        });
+                                    }
+                                }
+                            }
+                        }
+
+                        // Sort by confidence and remove duplicates in same area
+                        const filteredResults = results
+                            .sort((a, b) => b.confidence - a.confidence)
+                            .filter((result, index, array) => {
+                                // Remove overlapping detections (keep highest confidence)
+                                return !array.slice(0, index).some(prev => {
+                                    const overlap = Math.abs(prev.position.x - result.position.x) < 30 &&
+                                                   Math.abs(prev.position.y - result.position.y) < 30;
+                                    return overlap;
+                                });
+                            })
+                            .slice(0, 20); // Limit to top 20 results
+
+                        console.log(`🎯 Recognition complete: ${filteredResults.length} symbols found from ${totalAttempts} template matching attempts`);
+                        
+                        setRecognitionResults(filteredResults);
+                        setIsProcessing(false);
+                    };
+
+                    tempImg.src = image;
+
+                } catch (error) {
+                    console.error('Recognition error:', error);
+                    setIsProcessing(false);
+                }
+            }, [image, equivalenceChart, loadedSymbolImages, performTemplateMatching]);
+
+            // Manual detection functions
+            const handleCanvasMouseDown = useCallback((event) => {
+                if (!manualDetectionMode || !imageRef.current) return;
+
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                setIsDrawing(true);
+                setDrawStart({ x, y });
+                setDrawCurrent({ x, y });
+
+                event.preventDefault();
+            }, [manualDetectionMode]);
+
+            const handleCanvasMouseMove = useCallback((event) => {
+                if (!isDrawing || !manualDetectionMode) return;
+
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                setDrawCurrent({ x, y });
+                event.preventDefault();
+            }, [isDrawing, manualDetectionMode]);
+
+            const handleCanvasMouseUp = useCallback((event) => {
+                if (!isDrawing || !drawStart || !manualDetectionMode) return;
+
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const endPoint = {
+                    x: event.clientX - rect.left,
+                    y: event.clientY - rect.top
+                };
+
+                const distance = Math.sqrt(Math.pow(endPoint.x - drawStart.x, 2) + Math.pow(endPoint.y - drawStart.y, 2));
+                if (distance > 10) {
+                    createManualDetection(drawStart, endPoint);
+                } else {
+                    console.log('Manual selection too small, ignoring');
+                }
+
+                setIsDrawing(false);
+                setDrawStart(null);
+                setDrawCurrent(null);
+                event.preventDefault();
+            }, [isDrawing, drawStart, manualDetectionMode]);
+
+            const createManualDetection = useCallback((startPoint, endPoint) => {
+                if (!imageRef.current || !equivalenceChart) return;
+
+                const img = imageRef.current;
+                const container = imageContainerRef.current;
+                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
+                const offsetX = imgRect.left - containerRect.left;
+                const offsetY = imgRect.top - containerRect.top;
+                const scaleX = img.offsetWidth / img.naturalWidth;
+                const scaleY = img.offsetHeight / img.naturalHeight;
+                const imageX1 = (startPoint.x - offsetX) / scaleX;
+                const imageY1 = (startPoint.y - offsetY) / scaleY;
+                const imageX2 = (endPoint.x - offsetX) / scaleX;
+                const imageY2 = (endPoint.y - offsetY) / scaleY;
+                const x = Math.min(imageX1, imageX2);
+                const y = Math.min(imageY1, imageY2);
+                const width = Math.abs(imageX2 - imageX1);
+                const height = Math.abs(imageY2 - imageY1);
+
+                if (width < 10 || height < 10) {
+                    console.log('Manual selection too small, ignoring');
+                    return;
+                }
+
+                // Simple manual detection - just add with first available symbol for now
+                const manualDetection = {
+                    symbol: equivalenceChart.symbols[0] || { id: 'manual', name: 'Manual Selection', arabic: 'ا' },
+                    confidence: 0.8,
+                    position: { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) },
+                    matchType: 'manual',
+                    detectionIndex: recognitionResults.length
+                };
+
+                recordAction('manual_detection', {
+                    detectionIndex: recognitionResults.length,
+                    detection: manualDetection
+                });
+
+                setRecognitionResults(prev => [...prev, manualDetection]);
+                console.log('Manual detection added:', manualDetection);
+            }, [equivalenceChart, recognitionResults.length, recordAction]);
+
+            // Drag and drop handlers
+            const handleDragStart = useCallback((e, index) => {
+                setDraggedIndex(index);
+                e.dataTransfer.effectAllowed = 'move';
+            }, []);
+
+            const handleDragOver = useCallback((e, index) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                setDragOverIndex(index);
+            }, []);
+
+            const handleDragLeave = useCallback(() => {
+                setDragOverIndex(null);
+            }, []);
+
+            const handleDrop = useCallback((e, dropIndex) => {
+                e.preventDefault();
+                
+                if (draggedIndex === null || draggedIndex === dropIndex) {
+                    setDraggedIndex(null);
+                    setDragOverIndex(null);
+                    return;
+                }
+
+                recordAction('reorder', {
+                    originalIndex: draggedIndex,
+                    newIndex: dropIndex
+                });
+
+                setRecognitionResults(prev => {
+                    const newResults = [...prev];
+                    const [draggedItem] = newResults.splice(draggedIndex, 1);
+                    newResults.splice(dropIndex, 0, draggedItem);
+                    return newResults;
+                });
+
+                setDraggedIndex(null);
+                setDragOverIndex(null);
+            }, [draggedIndex, recordAction]);
+
+            // Rendering the component
+            return (
+                <div className="max-w-6xl mx-auto p-6 bg-white">
+                    <div className="mb-8">
+                        <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Symbol Recognizer</h1>
+                        <p className="text-gray-600">Advanced archaeological symbol detection using computer vision</p>
+                    </div>
+
+                    {/* Chart Status */}
+                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="font-semibold text-gray-900">Equivalence Chart Status</h3>
+                                <div className="flex items-center gap-2 mt-1">
+                                    {chartLoadStatus === 'loading' && (
+                                        <span className="text-blue-600">🔄 Loading chart from GitHub...</span>
+                                    )}
+                                    {chartLoadStatus === 'loaded' && equivalenceChart && (
+                                        <>
+                                            <span className="text-green-600">✅ Chart loaded</span>
+                                            <span className="text-sm text-gray-500">
+                                                ({equivalenceChart.symbols?.length || 0} symbols, {Object.keys(loadedSymbolImages).length} images)
+                                            </span>
+                                        </>
+                                    )}
+                                    {chartLoadStatus === 'error' && (
+                                        <span className="text-red-600">❌ Error loading chart</span>
+                                    )}
+                                </div>
+                            </div>
+                            <button
+                                onClick={loadChart}
+                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                disabled={chartLoadStatus === 'loading'}
+                            >
+                                Reload Chart
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* File Upload */}
+                    <div className="mb-6">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileUpload}
+                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        />
+                    </div>
+
+                    {/* Action Controls */}
+                    {image && (
+                        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                            <div className="flex flex-wrap gap-3 items-center">
+                                <button
+                                    onClick={recognizeSymbols}
+                                    disabled={isProcessing || !equivalenceChart}
+                                    className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isProcessing ? 'Processing...' : 'Recognize Symbols'}
+                                </button>
+
+                                <button
+                                    onClick={() => setManualDetectionMode(!manualDetectionMode)}
+                                    className={`px-4 py-2 rounded border ${manualDetectionMode 
+                                        ? 'bg-orange-500 text-white' 
+                                        : 'bg-white text-gray-700 border-gray-300'}`}
+                                >
+                                    Manual Selection: {manualDetectionMode ? 'ON' : 'OFF'}
+                                </button>
+
+                                <button
+                                    onClick={undoLastAction}
+                                    disabled={actionHistory.length === 0}
+                                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Undo ({actionHistory.length})
+                                </button>
+
+                                <div className="text-sm text-gray-600">
+                                    {recognitionResults.length} detections • {Object.keys(validations).length} validated • {Object.keys(corrections).length} corrected
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Image Display with Detections */}
+                    {image && (
+                        <div className="mb-6">
+                            <div className="canvas-container relative" ref={imageContainerRef}>
+                                <img
+                                    ref={imageRef}
+                                    src={image}
+                                    alt="Uploaded inscription"
+                                    className="max-w-full h-auto border border-gray-300 rounded"
+                                    onLoad={() => console.log('Image loaded for processing')}
+                                />
+                                <canvas
+                                    ref={canvasRef}
+                                    className="absolute top-0 left-0 pointer-events-auto"
+                                    style={{
+                                        width: imageRef.current?.offsetWidth || 0,
+                                        height: imageRef.current?.offsetHeight || 0
+                                    }}
+                                    onMouseDown={handleCanvasMouseDown}
+                                    onMouseMove={handleCanvasMouseMove}
+                                    onMouseUp={handleCanvasMouseUp}
+                                />
+                                
+                                {/* Detection overlays */}
+                                {recognitionResults.map((result, idx) => {
+                                    if (!imageRef.current) return null;
+
+                                    const img = imageRef.current;
+                                    const scaleX = img.offsetWidth / img.naturalWidth;
+                                    const scaleY = img.offsetHeight / img.naturalHeight;
+
+                                    const boxStyle = {
+                                        left: result.position.x * scaleX,
+                                        top: result.position.y * scaleY,
+                                        width: result.position.width * scaleX,
+                                        height: result.position.height * scaleY,
+                                    };
+
+                                    let borderColor = 'border-green-500';
+                                    if (result.matchType === 'variant') borderColor = 'border-purple-500 border-dashed';
+                                    else if (result.matchType === 'example') borderColor = 'border-blue-500 border-dotted';
+                                    else if (result.matchType === 'manual') borderColor = 'border-orange-500';
+
+                                    if (validations[idx]?.isCorrect === false) borderColor = 'border-red-500 border-2';
+                                    else if (validations[idx]?.isCorrect === true) borderColor = 'border-green-600 border-2';
+                                    if (corrections[idx]) borderColor = 'border-amber-500 border-2';
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className={`detection-box border-2 ${borderColor} ${
+                                                activeDetections.has(idx) ? 'bg-blue-100 bg-opacity-30' : ''
+                                            }`}
+                                            style={boxStyle}
+                                        >
+                                            <div className="absolute -top-6 left-0 text-xs bg-white px-1 rounded shadow">
+                                                #{idx + 1}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Recognition Results */}
+                    {recognitionResults.length > 0 && (
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-xl font-semibold text-gray-900">
+                                    Recognition Results ({recognitionResults.length})
+                                </h3>
+                            </div>
+
+                            {/* Active Selection Summary */}
+                            {activeDetections.size > 0 && (
+                                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <span className="font-medium text-blue-800">
+                                                Active Selection ({activeDetections.size}):
+                                            </span>
+                                            <span className="ml-2 text-blue-700">
+                                                {Array.from(activeDetections)
+                                                    .sort((a, b) => a - b)
+                                                    .map(i => recognitionResults[i]?.symbol.name || `#${i+1}`)
+                                                    .join(', ')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                                <h4 className="font-medium text-gray-800 mb-2 text-sm">Visual Legend:</h4>
+                                <div className="space-y-2 text-xs">
+                                    <div className="flex gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-4 h-3 border-2 border-green-500"></div>
+                                            <span>Primary Match</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-4 h-3 border-2 border-purple-500 border-dashed"></div>
+                                            <span>Variant Match</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-4 h-3 border-2 border-amber-500"></div>
+                                            <span>Combined Symbol</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-4 h-3 border-2 border-blue-500 border-dotted"></div>
+                                            <span>Example Match</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-4 h-3 border-2 border-orange-500"></div>
+                                            <span>Manual Selection</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-4 h-3 border-2 border-red-500"></div>
+                                            <span>Marked Incorrect</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Individual Matches */}
+                            <div className="space-y-3">
+                                <h4 className="font-medium text-gray-800">Individual Matches:</h4>
+                                
+                                {recognitionResults.map((result, idx) => (
+                                    <div
+                                        key={idx}
+                                        className={`draggable-item p-4 border rounded-lg cursor-move ${
+                                            draggedIndex === idx ? 'dragging' : ''
+                                        } ${dragOverIndex === idx ? 'border-blue-400 bg-blue-50' : 'border-gray-200'} ${
+                                            activeDetections.has(idx) ? 'bg-blue-50 border-blue-300' : 'bg-white'
+                                        }`}
+                                        draggable
+                                        onDragStart={(e) => handleDragStart(e, idx)}
+                                        onDragOver={(e) => handleDragOver(e, idx)}
+                                        onDragLeave={handleDragLeave}
+                                        onDrop={(e) => handleDrop(e, idx)}
+                                    >
+                                        <div className="flex items-start gap-4">
+                                            <div className="flex-shrink-0">
+                                                <div className="w-12 h-12 bg-gray-100 border rounded flex-shrink-0">
+                                                    {(() => {
+                                                        if (!imageRef.current) return null;
+                                                        const debugCanvas = document.createElement('canvas');
+                                                        const debugCtx = debugCanvas.getContext('2d');
+                                                        debugCanvas.width = result.position.width;
+                                                        debugCanvas.height = result.position.height;
+                                                        
+                                                        debugCtx.drawImage(
+                                                            imageRef.current,
+                                                            result.position.x, result.position.y, result.position.width, result.position.height,
+                                                            0, 0, result.position.width, result.position.height
+                                                        );
+                                                        
+                                                        const debugDataUrl = debugCanvas.toDataURL();
+                                                        return (
+                                                            <img 
+                                                                src={debugDataUrl} 
+                                                                alt="Symbol crop" 
+                                                                className="w-full h-full object-contain rounded"
+                                                            />
+                                                        );
+                                                    })()}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex-grow">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className="font-medium text-gray-900">
+                                                        #{idx + 1}: {result.symbol.name}
+                                                    </span>
+                                                    
+                                                    <span className="text-2xl">{result.symbol.arabic}</span>
+                                                    
+                                                    <span className="text-sm text-gray-500">
+                                                        ({result.symbol.transliteration})
+                                                    </span>
+                                                    
+                                                    {result.matchType === 'variant' && (
+                                                        <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                                                            Variant {result.variantIndex}
+                                                        </span>
+                                                    )}
+                                                    {result.matchType === 'example' && (
+                                                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                                            Example {result.exampleIndex}
+                                                        </span>
+                                                    )}
+                                                    {result.matchType === 'manual' && (
+                                                        <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                                                            Manual
+                                                        </span>
+                                                    )}
+                                                    {corrections[idx] && (
+                                                        <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">
+                                                            Corrected
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <div className="text-sm text-gray-600 mb-2">
+                                                    <div className="flex gap-4">
+                                                        <span>Confidence: {(result.confidence * 100).toFixed(1)}%</span>
+                                                        <span>Position: ({result.position.x}, {result.position.y})</span>
+                                                        <span>Size: {result.position.width} × {result.position.height}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Validation Status */}
+                                                {validations[idx] && (
+                                                    <div className={`text-sm mb-2 ${
+                                                        validations[idx].isCorrect ? 'text-green-600' : 'text-red-600'
+                                                    }`}>
+                                                        ✓ Marked as {validations[idx].isCorrect ? 'correct' : 'incorrect'}
+                                                        <span className="text-gray-500 ml-2">
+                                                            {new Date(validations[idx].timestamp).toLocaleTimeString()}
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                {/* Action Buttons */}
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        onClick={() => validateDetection(idx, true)}
+                                                        className={`px-3 py-1 text-xs rounded ${
+                                                            validations[idx]?.isCorrect === true
+                                                                ? 'bg-green-600 text-white'
+                                                                : 'bg-green-100 text-green-800 hover:bg-green-200'
+                                                        }`}
+                                                    >
+                                                        ✓ Correct
+                                                    </button>
+                                                    
+                                                    <button
+                                                        onClick={() => validateDetection(idx, false)}
+                                                        className={`px-3 py-1 text-xs rounded ${
+                                                            validations[idx]?.isCorrect === false
+                                                                ? 'bg-red-600 text-white'
+                                                                : 'bg-red-100 text-red-800 hover:bg-red-200'
+                                                        }`}
+                                                    >
+                                                        ✗ Incorrect
+                                                    </button>
+                                                    
+                                                    <button
+                                                        onClick={() => toggleWordBoundary(idx)}
+                                                        className={`px-3 py-1 text-xs rounded ${
+                                                            result.wordBoundary
+                                                                ? 'bg-blue-600 text-white'
+                                                                : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                                                        }`}
+                                                    >
+                                                        Word Boundary
+                                                    </button>
+                                                    
+                                                    <button
+                                                        onClick={() => deleteDetection(idx)}
+                                                        className="px-3 py-1 text-xs bg-red-100 text-red-800 rounded hover:bg-red-200"
+                                                    >
+                                                        Delete
+                                                    </button>
+
+                                                    {equivalenceChart && (
+                                                        <select
+                                                            onChange={(e) => correctDetection(idx, e.target.value)}
+                                                            value=""
+                                                            className="px-2 py-1 text-xs border border-gray-300 rounded"
+                                                        >
+                                                            <option value="">Correct to...</option>
+                                                            {equivalenceChart.symbols.map(symbol => (
+                                                                <option key={symbol.id} value={symbol.id}>
+                                                                    {symbol.name} ({symbol.arabic})
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Reading Order Display */}
+                            {recognitionResults.length > 0 && (
+                                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                                    <h4 className="font-medium text-gray-800 mb-3">Reading Order:</h4>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {recognitionResults.map((result, idx) => (
+                                            <React.Fragment key={idx}>
+                                                <div
+                                                    className={`flex items-center gap-2 px-3 py-2 rounded border ${
+                                                        validations[idx]?.isCorrect === false 
+                                                            ? 'bg-red-50 border-red-200' 
+                                                            : validations[idx]?.isCorrect === true
+                                                                ? 'bg-green-50 border-green-200'
+                                                                : corrections[idx]
+                                                                    ? 'bg-amber-50 border-amber-200'
+                                                                    : 'bg-white border-gray-200'
+                                                    }`}
+                                                >
+                                                    <span className="text-xs text-gray-500">#{idx + 1}</span>
+                                                    <span className="text-lg">{result.symbol.arabic}</span>
+                                                    <span className="text-sm text-gray-600">
+                                                        {result.symbol.transliteration}
+                                                    </span>
+                                                </div>
+                                                {result.wordBoundary && idx < recognitionResults.length - 1 && (
+                                                    <div className="text-gray-400 font-bold">|</div>
+                                                )}
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                    
+                                    {/* Combined Reading */}
+                                    <div className="mt-4 p-3 bg-white rounded border">
+                                        <div className="font-medium text-gray-700 mb-2">Combined Reading:</div>
+                                        <div className="text-2xl text-right mb-2">
+                                            {recognitionResults.map(result => result.symbol.arabic).join('')}
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                            {recognitionResults.map(result => result.symbol.transliteration).join('-')}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Action History */}
+                            {actionHistory.length > 0 && (
+                                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                                    <h4 className="font-medium text-gray-800 mb-3">Recent Actions:</h4>
+                                    <div className="space-y-1 max-h-32 overflow-y-auto text-sm">
+                                        {actionHistory.slice(-10).reverse().map((action, idx) => (
+                                            <div key={action.id} className="flex justify-between text-gray-600">
+                                                <span>
+                                                    {action.type.replace('_', ' ').toUpperCase()}: 
+                                                    {action.type === 'validation' && ` Detection ${action.data.detectionIndex + 1} marked ${action.data.isCorrect ? 'correct' : 'incorrect'}`}
+                                                    {action.type === 'correction' && ` Detection ${action.data.detectionIndex + 1} corrected to ${action.data.newSymbol.name}`}
+                                                    {action.type === 'delete_detection' && ` Detection ${action.data.index + 1} deleted`}
+                                                    {action.type === 'manual_detection' && ` Manual detection added`}
+                                                    {action.type === 'reorder' && ` Moved detection ${action.data.originalIndex + 1} to position ${action.data.newIndex + 1}`}
+                                                </span>
+                                                <span className="text-xs">
+                                                    {new Date(action.timestamp).toLocaleTimeString()}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* OpenCV Status */}
+                    <div className="mt-8 p-4 bg-gray-50 rounded-lg">
+                        <div className="text-sm text-gray-600">
+                            <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${isOpenCvReady ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                OpenCV Status: {isOpenCvReady ? 'Ready' : 'Loading...'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<HakliSymbolRecognizer />);
+    </script>
+</body>
+</html>

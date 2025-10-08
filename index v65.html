@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hakli Symbol Recognizer - OpenCV Enhanced</title>
+    <script src="https://docs.opencv.org/4.8.0/opencv.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useCallback, useEffect } = React;
+
+        const Eye = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+            </svg>
+        );
+
+        const Upload = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7,10 12,15 17,10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+        );
+
+        const FileText = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+            </svg>
+        );
+
+        const Settings = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
+            </svg>
+        );
+
+        const Zap = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="13,2 3,14 12,14 11,22 21,10 12,10 13,2"/>
+            </svg>
+        );
+
+        const Camera = () => (
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+            </svg>
+        );
+
+        const CheckCircle = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                <polyline points="22,4 12,14.01 9,11.01"/>
+            </svg>
+        );
+
+        const AlertCircle = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+        );
+
+        const ImageIcon = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21,15 16,10 5,21"/>
+            </svg>
+        );
+
+        const HakliSymbolRecognizer = () => {
+            const [equivalenceChart, setEquivalenceChart] = useState(null);
+            const [uploadedImage, setUploadedImage] = useState(null);
+            const [recognitionResults, setRecognitionResults] = useState([]);
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [imageAnalysis, setImageAnalysis] = useState(null);
+            const [chartLoadStatus, setChartLoadStatus] = useState('ready');
+            const [jsonInput, setJsonInput] = useState('');
+            const [showJsonInput, setShowJsonInput] = useState(false);
+            const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
+            const [isOpenCVReady, setIsOpenCVReady] = useState(false);
+            const [wordBoundaries, setWordBoundaries] = useState(new Set());
+            const [processingSettings, setProcessingSettings] = useState({
+                contrastThreshold: 127,
+                minSymbolSize: 15,
+                maxSymbolSize: 200,
+                detectionSensitivity: 0.7,
+                variantMatching: true
+            });
+            
+            const canvasRef = useRef(null);
+            const imageRef = useRef(null);
+            const analysisCanvasRef = useRef(null);
+
+            // Check if OpenCV is ready
+            useEffect(() => {
+                const checkOpenCV = () => {
+                    if (typeof cv !== 'undefined' && cv.Mat) {
+                        console.log('✅ OpenCV.js loaded successfully');
+                        setIsOpenCVReady(true);
+                    } else {
+                        console.log('⏳ Waiting for OpenCV.js...');
+                        setTimeout(checkOpenCV, 100);
+                    }
+                };
+                checkOpenCV();
+            }, []);
+
+            // Convert relative paths to full GitHub URLs
+            const convertToGitHubUrl = useCallback((relativePath) => {
+                if (!relativePath) return null;
+                if (relativePath.startsWith('http')) return relativePath;
+                
+                const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/';
+                const fullUrl = baseUrl + relativePath;
+                console.log(`Converting path: "${relativePath}" -> "${fullUrl}"`);
+                return fullUrl;
+            }, []);
+
+            // Load symbol images from URLs
+            const loadSymbolImages = useCallback(async (symbols) => {
+                const imageCache = {};
+                
+                for (const symbol of symbols) {
+                    try {
+                        if (symbol.images) {
+                            // Load primary image
+                            if (symbol.images.primary) {
+                                try {
+                                    const fullUrl = convertToGitHubUrl(symbol.images.primary);
+                                    if (fullUrl) {
+                                        const img = new Image();
+                                        img.crossOrigin = 'anonymous';
+                                        await new Promise((resolve, reject) => {
+                                            img.onload = () => {
+                                                console.log(`✅ Successfully loaded: ${fullUrl}`);
+                                                imageCache[`${symbol.id}_primary`] = img;
+                                                resolve();
+                                            };
+                                            img.onerror = (error) => {
+                                                console.error(`❌ Failed to load: ${fullUrl}`, error);
+                                                reject(error);
+                                            };
+                                            img.src = fullUrl;
+                                        });
+                                    }
+                                } catch (e) {
+                                    console.warn(`Failed to load primary image for ${symbol.name}:`, e);
+                                }
+                            }
+
+                            // Load variant images
+                            if (symbol.images.variants && Array.isArray(symbol.images.variants)) {
+                                for (let i = 0; i < symbol.images.variants.length; i++) {
+                                    try {
+                                        const fullUrl = convertToGitHubUrl(symbol.images.variants[i]);
+                                        if (fullUrl) {
+                                            const img = new Image();
+                                            img.crossOrigin = 'anonymous';
+                                            await new Promise((resolve, reject) => {
+                                                img.onload = () => {
+                                                    imageCache[`${symbol.id}_variant_${i}`] = img;
+                                                    resolve();
+                                                };
+                                                img.onerror = reject;
+                                                img.src = fullUrl;
+                                            });
+                                        }
+                                    } catch (e) {
+                                        console.warn(`Failed to load variant ${i} for ${symbol.name}:`, e);
+                                    }
+                                }
+                            }
+
+                            // Load example images
+                            if (symbol.images.examples && Array.isArray(symbol.images.examples)) {
+                                for (let i = 0; i < symbol.images.examples.length; i++) {
+                                    try {
+                                        const fullUrl = convertToGitHubUrl(symbol.images.examples[i]);
+                                        if (fullUrl) {
+                                            const img = new Image();
+                                            img.crossOrigin = 'anonymous';
+                                            await new Promise((resolve, reject) => {
+                                                img.onload = () => {
+                                                    imageCache[`${symbol.id}_example_${i}`] = img;
+                                                    resolve();
+                                                };
+                                                img.onerror = reject;
+                                                img.src = fullUrl;
+                                            });
+                                        }
+                                    } catch (e) {
+                                        console.warn(`Failed to load example ${i} for ${symbol.name}:`, e);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`Error processing images for symbol ${symbol.name}:`, error);
+                    }
+                }
+                
+                return imageCache;
+            }, [convertToGitHubUrl]);
+
+            // Helper function to categorize symbols
+            const determineSymbolCategory = useCallback((symbolName) => {
+                if (symbolName.includes('-dot')) return "Dotted Letters";
+                if (symbolName.includes('-bar')) return "Barred Letters";
+                if (symbolName.includes('-breve')) return "Modified Letters";
+                if (['(', ')'].includes(symbolName)) return "Punctuation";
+                if (['h', 'l', 'm', 'q', 'w', 's-1', 's-2', 'r', 'b', 't', 'k', 'n', 'f', 'g', 'd', 'y', 'z'].includes(symbolName.replace('-dot', '').replace('-bar', '').replace('-breve', ''))) {
+                    return "Basic Consonants";
+                }
+                return "Other Symbols";
+            }, []);
+
+            // Load chart from manual JSON input
+            const handleJsonLoad = useCallback(async () => {
+                if (!jsonInput.trim()) {
+                    alert('Please paste your JSON chart data');
+                    return;
+                }
+
+                setChartLoadStatus('loading');
+
+                try {
+                    const chartData = JSON.parse(jsonInput);
+                    
+                    const processedChart = {
+                        chart_name: "Hakli Archaeological Script Symbols",
+                        version: "1.0", 
+                        source_image: chartData.source_image || "uploaded_chart",
+                        extraction_date: chartData.extraction_date || new Date().toISOString(),
+                        symbols: chartData.symbols.map(symbol => ({
+                            ...symbol,
+                            english_equivalent: symbol.name,
+                            category: determineSymbolCategory(symbol.name),
+                            confidence_weights: {
+                                primary: 1.0,
+                                variants: 0.9,
+                                examples: 0.8
+                            }
+                        })),
+                        categories: [...new Set(chartData.symbols.map(s => determineSymbolCategory(s.name)))],
+                        metadata: {
+                            created: chartData.extraction_date || new Date().toISOString(),
+                            total_symbols: chartData.symbols.length,
+                            total_images: chartData.symbols.reduce((sum, s) => {
+                                return sum + 1 + (s.images.variants?.length || 0) + (s.images.examples?.length || 0);
+                            }, 0)
+                        }
+                    };
+                    
+                    setEquivalenceChart(processedChart);
+                    setChartLoadStatus('loaded');
+                    setShowJsonInput(false);
+                    
+                    // Load symbol images for real template matching
+                    const imageCache = await loadSymbolImages(processedChart.symbols);
+                    setLoadedSymbolImages(imageCache);
+                    
+                } catch (error) {
+                    console.error('Error parsing chart JSON:', error);
+                    setChartLoadStatus('error');
+                    alert('Error parsing JSON. Please check the format and try again.');
+                }
+            }, [jsonInput, determineSymbolCategory, loadSymbolImages]);
+
+            // Create a reference function for the reload button
+            const loadChart = useCallback(() => {
+                console.log('🔄 Manual reload triggered');
+                
+                const loadChartInternal = async () => {
+                    console.log('🔄 loadChart function started');
+                    setChartLoadStatus('loading');
+                    
+                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
+                    
+                    try {
+                        console.log('📡 Fetching JSON from:', githubJsonUrl);
+                        const response = await fetch(githubJsonUrl);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const chartData = await response.json();
+                        console.log('✅ JSON loaded successfully');
+                        
+                        const processedChart = {
+                            chart_name: "Hakli Archaeological Script Symbols",
+                            version: "1.0", 
+                            source_image: chartData.source_image || "github_chart",
+                            extraction_date: chartData.extraction_date || new Date().toISOString(),
+                            symbols: chartData.symbols.map(symbol => ({
+                                ...symbol,
+                                english_equivalent: symbol.name,
+                                category: determineSymbolCategory(symbol.name),
+                                confidence_weights: {
+                                    primary: 1.0,
+                                    variants: 0.9,
+                                    examples: 0.8
+                                }
+                            })),
+                            categories: [...new Set(chartData.symbols.map(s => determineSymbolCategory(s.name)))],
+                            metadata: {
+                                created: chartData.extraction_date || new Date().toISOString(),
+                                total_symbols: chartData.symbols.length,
+                                total_images: chartData.symbols.reduce((sum, s) => {
+                                    return sum + 1 + (s.images.variants?.length || 0) + (s.images.examples?.length || 0);
+                                }, 0)
+                            }
+                        };
+                        
+                        setEquivalenceChart(processedChart);
+                        setChartLoadStatus('loaded');
+                        
+                        console.log('🖼️ Starting to load symbol images...');
+                        const imageCache = await loadSymbolImages(processedChart.symbols);
+                        console.log('✅ Image loading complete. Loaded count:', Object.keys(imageCache).length);
+                        setLoadedSymbolImages(imageCache);
+                        
+                    } catch (error) {
+                        console.error('❌ Error loading chart from GitHub:', error);
+                        setEquivalenceChart({
+                            chart_name: "Demo Hakli Symbols (GitHub Load Failed)",
+                            version: "1.0",
+                            symbols: [],
+                            categories: [],
+                            metadata: { created: new Date().toISOString(), total_symbols: 0, total_images: 0 }
+                        });
+                        setChartLoadStatus('error');
+                    }
+                };
+                
+                loadChartInternal();
+            }, [loadSymbolImages, determineSymbolCategory]);
+
+            // Auto-load chart on startup
+            useEffect(() => {
+                console.log('⚡ useEffect triggered - about to load chart from GitHub');
+                loadChart();
+            }, []);
+
+            // Handle image upload
+            const handleImageUpload = useCallback((event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        setUploadedImage(e.target.result);
+                        setRecognitionResults([]);
+                        setImageAnalysis(null);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }, []);
+
+            // Analyze image preprocessing
+            const analyzeImage = useCallback((imageElement) => {
+                if (!analysisCanvasRef.current || !imageElement) return null;
+
+                const canvas = analysisCanvasRef.current;
+                const ctx = canvas.getContext('2d');
+                
+                canvas.width = Math.min(imageElement.naturalWidth, 800);
+                canvas.height = Math.min(imageElement.naturalHeight, 600);
+                
+                ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                const { contrastThreshold } = processingSettings;
+                let darkPixels = 0;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    
+                    const gray = (r + g + b) / 3;
+                    const binary = gray < contrastThreshold ? 0 : 255;
+                    
+                    if (binary === 0) darkPixels++;
+                    
+                    data[i] = data[i + 1] = data[i + 2] = binary;
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                
+                return {
+                    width: canvas.width,
+                    height: canvas.height,
+                    darkPixelRatio: darkPixels / (canvas.width * canvas.height),
+                    processedDataUrl: canvas.toDataURL()
+                };
+            }, [processingSettings]);
+
+            // Symbol isolation using OpenCV contour detection
+            const isolateSymbols = useCallback((imageElement) => {
+                if (!isOpenCVReady || !imageElement) {
+                    console.warn('OpenCV not ready or no image');
+                    return [];
+                }
+
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = imageElement.naturalWidth;
+                    canvas.height = imageElement.naturalHeight;
+                    ctx.drawImage(imageElement, 0, 0);
+
+                    const src = cv.imread(canvas);
+                    const gray = new cv.Mat();
+                    const binary = new cv.Mat();
+                    const morphKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+                    const contours = new cv.MatVector();
+                    const hierarchy = new cv.Mat();
+
+                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                    cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+                    cv.morphologyEx(binary, binary, cv.MORPH_CLOSE, morphKernel);
+                    cv.morphologyEx(binary, binary, cv.MORPH_OPEN, morphKernel);
+                    cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                    const isolatedSymbols = [];
+                    const minArea = processingSettings.minSymbolSize * processingSettings.minSymbolSize;
+                    const maxArea = processingSettings.maxSymbolSize * processingSettings.maxSymbolSize;
+
+                    for (let i = 0; i < contours.size(); i++) {
+                        const contour = contours.get(i);
+                        const boundingRect = cv.boundingRect(contour);
+                        const area = cv.contourArea(contour);
+
+                        if (area > minArea && area < maxArea) {
+                            const aspectRatio = boundingRect.width / boundingRect.height;
+                            
+                            if (aspectRatio > 0.2 && aspectRatio < 5.0) {
+                                const padding = 5;
+                                const x = Math.max(0, boundingRect.x - padding);
+                                const y = Math.max(0, boundingRect.y - padding);
+                                const width = Math.min(src.cols - x, boundingRect.width + 2 * padding);
+                                const height = Math.min(src.rows - y, boundingRect.height + 2 * padding);
+
+                                isolatedSymbols.push({
+                                    x: x,
+                                    y: y,
+                                    width: width,
+                                    height: height,
+                                    area: area,
+                                    contour: contour.clone()
+                                });
+                            }
+                        }
+                        contour.delete();
+                    }
+
+                    src.delete();
+                    gray.delete();
+                    binary.delete();
+                    morphKernel.delete();
+                    contours.delete();
+                    hierarchy.delete();
+
+                    isolatedSymbols.sort((a, b) => a.x - b.x);
+                    console.log(`🔍 Isolated ${isolatedSymbols.length} potential symbols`);
+                    return isolatedSymbols;
+
+                } catch (error) {
+                    console.error('Error in symbol isolation:', error);
+                    return [];
+                }
+            }, [isOpenCVReady, processingSettings]);
+
+            // Enhanced template matching with isolated symbols
+            const templateMatchIsolated = useCallback((isolatedSymbol, templateImg, threshold = 0.7) => {
+                if (!isOpenCVReady || !templateImg) return null;
+
+                try {
+                    const symbolCanvas = document.createElement('canvas');
+                    const symbolCtx = symbolCanvas.getContext('2d');
+                    symbolCanvas.width = isolatedSymbol.width;
+                    symbolCanvas.height = isolatedSymbol.height;
+                    
+                    symbolCtx.drawImage(
+                        imageRef.current,
+                        isolatedSymbol.x, isolatedSymbol.y, isolatedSymbol.width, isolatedSymbol.height,
+                        0, 0, isolatedSymbol.width, isolatedSymbol.height
+                    );
+
+                    const symbolMat = cv.imread(symbolCanvas);
+                    const templateCanvas = document.createElement('canvas');
+                    const templateCtx = templateCanvas.getContext('2d');
+                    templateCanvas.width = templateImg.width;
+                    templateCanvas.height = templateImg.height;
+                    templateCtx.drawImage(templateImg, 0, 0);
+                    const templateMat = cv.imread(templateCanvas);
+
+                    const result = new cv.Mat();
+                    const resizedTemplate = new cv.Mat();
+                    const symbolSize = new cv.Size(isolatedSymbol.width, isolatedSymbol.height);
+                    cv.resize(templateMat, resizedTemplate, symbolSize);
+
+                    const symbolGray = new cv.Mat();
+                    const templateGray = new cv.Mat();
+                    cv.cvtColor(symbolMat, symbolGray, cv.COLOR_RGBA2GRAY);
+                    cv.cvtColor(resizedTemplate, templateGray, cv.COLOR_RGBA2GRAY);
+
+                    cv.matchTemplate(symbolGray, templateGray, result, cv.TM_CCOEFF_NORMED);
+                    
+                    const minMaxLoc = cv.minMaxLoc(result);
+                    const confidence = minMaxLoc.maxVal;
+
+                    symbolMat.delete();
+                    templateMat.delete();
+                    resizedTemplate.delete();
+                    symbolGray.delete();
+                    templateGray.delete();
+                    result.delete();
+
+                    return confidence > threshold ? {
+                        confidence: confidence,
+                        position: {
+                            x: isolatedSymbol.x,
+                            y: isolatedSymbol.y,
+                            width: isolatedSymbol.width,
+                            height: isolatedSymbol.height
+                        }
+                    } : null;
+
+                } catch (error) {
+                    console.error('Template matching error:', error);
+                    return null;
+                }
+            }, [isOpenCVReady]);
+
+            // Enhanced symbol detection with isolation
+            const detectSymbols = useCallback(async () => {
+                if (!uploadedImage || !equivalenceChart || !imageRef.current) return;
+                
+                setIsProcessing(true);
+                
+                const analysis = analyzeImage(imageRef.current);
+                setImageAnalysis(analysis);
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                console.log('🔍 Starting symbol isolation...');
+                const isolatedSymbols = isolateSymbols(imageRef.current);
+                
+                if (isolatedSymbols.length === 0) {
+                    console.warn('No symbols isolated');
+                    setIsProcessing(false);
+                    return;
+                }
+
+                console.log(`📊 Found ${isolatedSymbols.length} isolated symbols, now matching...`);
+                
+                const detectionResults = [];
+                
+                for (let i = 0; i < isolatedSymbols.length; i++) {
+                    const isolatedSymbol = isolatedSymbols[i];
+                    let bestMatch = null;
+                    
+                    for (const symbol of equivalenceChart.symbols) {
+                        const primaryImg = loadedSymbolImages[`${symbol.id}_primary`];
+                        if (primaryImg) {
+                            const match = templateMatchIsolated(isolatedSymbol, primaryImg, processingSettings.detectionSensitivity);
+                            if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
+                                bestMatch = {
+                                    ...match,
+                                    symbol: symbol,
+                                    matchType: 'primary',
+                                    confidence: match.confidence * (symbol.confidence_weights?.primary || 1.0)
+                                };
+                            }
+                        }
+                        
+                        if (processingSettings.variantMatching && symbol.images.variants) {
+                            symbol.images.variants.forEach((variantPath, index) => {
+                                const variantImg = loadedSymbolImages[`${symbol.id}_variant_${index}`];
+                                if (variantImg) {
+                                    const match = templateMatchIsolated(isolatedSymbol, variantImg, processingSettings.detectionSensitivity * 0.9);
+                                    if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
+                                        bestMatch = {
+                                            ...match,
+                                            symbol: symbol,
+                                            matchType: 'variant',
+                                            variantIndex: index,
+                                            confidence: match.confidence * (symbol.confidence_weights?.variants || 0.9)
+                                        };
+                                    }
+                                }
+                            });
+                        }
+                        
+                        if (symbol.images.examples) {
+                            symbol.images.examples.forEach((examplePath, index) => {
+                                const exampleImg = loadedSymbolImages[`${symbol.id}_example_${index}`];
+                                if (exampleImg) {
+                                    const match = templateMatchIsolated(isolatedSymbol, exampleImg, processingSettings.detectionSensitivity * 0.8);
+                                    if (match && (!bestMatch || match.confidence > bestMatch.confidence)) {
+                                        bestMatch = {
+                                            ...match,
+                                            symbol: symbol,
+                                            matchType: 'example',
+                                            exampleIndex: index,
+                                            confidence: match.confidence * (symbol.confidence_weights?.examples || 0.7)
+                                        };
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    
+                    if (bestMatch && bestMatch.confidence > processingSettings.detectionSensitivity * 0.7) {
+                        detectionResults.push({
+                            symbol: bestMatch.symbol,
+                            confidence: Math.min(0.95, bestMatch.confidence),
+                            position: bestMatch.position,
+                            matchDetails: {
+                                type: bestMatch.matchType,
+                                variantIndex: bestMatch.variantIndex,
+                                exampleIndex: bestMatch.exampleIndex,
+                                scale: 1.0,
+                                isolatedIndex: i
+                            },
+                            characteristics: `${bestMatch.matchType} match (${bestMatch.symbol.name}) - isolated symbol #${i + 1}`
+                        });
+                    }
+                }
+                
+                isolatedSymbols.forEach(symbol => {
+                    if (symbol.contour) {
+                        symbol.contour.delete();
+                    }
+                });
+                
+                console.log(`✅ Detection complete: ${detectionResults.length} symbols matched`);
+                
+                setRecognitionResults(detectionResults);
+                setIsProcessing(false);
+            }, [uploadedImage, equivalenceChart, loadedSymbolImages, processingSettings, isolateSymbols, templateMatchIsolated, analyzeImage]);
+
+            // Draw detection results with exact alignment
+            const drawDetectionResults = useCallback(() => {
+                if (!canvasRef.current || !imageRef.current || recognitionResults.length === 0) return;
+                
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const img = imageRef.current;
+                
+                if (img.offsetWidth === 0 || img.offsetHeight === 0) {
+                    setTimeout(drawDetectionResults, 100);
+                    return;
+                }
+                
+                canvas.width = img.offsetWidth;
+                canvas.height = img.offsetHeight;
+                
+                canvas.style.width = img.offsetWidth + 'px';
+                canvas.style.height = img.offsetHeight + 'px';
+                canvas.style.left = '0px';
+                canvas.style.top = '0px';
+                
+                const scaleX = img.offsetWidth / img.naturalWidth;
+                const scaleY = img.offsetHeight / img.naturalHeight;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                recognitionResults.forEach((result) => {
+                    const { position, confidence, symbol, matchDetails } = result;
+                    
+                    const x = position.x * scaleX;
+                    const y = position.y * scaleY;
+                    const width = position.width * scaleX;
+                    const height = position.height * scaleY;
+                    
+                    let color = '#ef4444';
+                    if (confidence > 0.8) color = '#10b981';
+                    else if (confidence > 0.7) color = '#f59e0b';
+                    
+                    if (matchDetails.type === 'variant') {
+                        ctx.setLineDash([6, 6]);
+                        color = '#8b5cf6';
+                    } else if (matchDetails.type === 'example') {
+                        ctx.setLineDash([10, 3]);
+                        color = '#06b6d4';
+                    } else {
+                        ctx.setLineDash([]);
+                    }
+                    
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x, y, width, height);
+                    ctx.setLineDash([]);
+                    
+                    const matchTypeText = matchDetails.type.toUpperCase();
+                    ctx.font = 'bold 10px Arial';
+                    const typeWidth = ctx.measureText(matchTypeText).width + 8;
+                    
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x, Math.max(0, y - 20), typeWidth, 16);
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(matchTypeText, x + 4, Math.max(12, y - 8));
+                    
+                    const labelText = `${symbol.name} (${(confidence * 100).toFixed(0)}%)`;
+                    ctx.font = '11px Arial';
+                    const labelWidth = ctx.measureText(labelText).width + 8;
+                    
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                    ctx.fillRect(x, Math.min(canvas.height - 18, y + height + 2), labelWidth, 16);
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(labelText, x + 4, Math.min(canvas.height - 6, y + height + 14));
+                });
+            }, [recognitionResults]);
+
+            const toggleWordBoundary = useCallback((symbolIndex) => {
+                setWordBoundaries(prev => {
+                    const newBoundaries = new Set(prev);
+                    if (newBoundaries.has(symbolIndex)) {
+                        newBoundaries.delete(symbolIndex);
+                    } else {
+                        newBoundaries.add(symbolIndex);
+                    }
+                    return newBoundaries;
+                });
+            }, []);
+
+            const formatInscriptionWithBoundaries = useCallback((results) => {
+                const sortedResults = results.sort((a, b) => a.position.x - b.position.x);
+                const parts = [];
+                
+                sortedResults.forEach((result, index) => {
+                    if (index === 0 || wordBoundaries.has(index)) {
+                        if (parts.length > 0) parts.push(' | ');
+                    }
+                    parts.push(result.symbol.name);
+                    if (index < sortedResults.length - 1 && !wordBoundaries.has(index + 1)) {
+                        parts.push('-');
+                    }
+                });
+                
+                return parts.join('');
+            }, [wordBoundaries]);
+
+            const formatArabicWithBoundaries = useCallback((results) => {
+                const sortedResults = results.sort((a, b) => a.position.x - b.position.x);
+                const parts = [];
+                
+                sortedResults.forEach((result, index) => {
+                    if (index === 0 || wordBoundaries.has(index)) {
+                        if (parts.length > 0) parts.push(' ');
+                    }
+                    parts.push(result.symbol.arabic || result.symbol.name);
+                });
+                
+                return parts.join('');
+            }, [wordBoundaries]);
+
+            useEffect(() => {
+                if (uploadedImage && recognitionResults.length > 0) {
+                    const timer = setTimeout(drawDetectionResults, 200);
+                    return () => clearTimeout(timer);
+                }
+            }, [uploadedImage, recognitionResults, drawDetectionResults]);
+
+            return (
+                <div className="max-w-7xl mx-auto p-4 bg-gray-50 min-h-screen">
+                    <div className="bg-white rounded-lg shadow-lg p-6">
+                        <h1 className="text-3xl font-bold text-gray-800 mb-4 flex items-center gap-3">
+                            <Eye />
+                            Hakli Symbol Recognizer
+                            <span className="text-sm font-normal text-gray-500 ml-2">based on Ahmad Al Jallad, The Decipherment of the Dhofari Script (2025)</span>
+                        </h1>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="space-y-4">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2 text-sm">
+                                        <FileText />
+                                        Auto-Load: hytra3:Hakli_symbols.JSON
+                                    </h3>
+                                    
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={loadChart}
+                                            className="flex-1 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+                                            disabled={chartLoadStatus === 'loading'}
+                                        >
+                                            {chartLoadStatus === 'loading' ? 'Loading...' : 'Reload'}
+                                        </button>
+                                        
+                                        {!showJsonInput ? (
+                                            <button
+                                                onClick={() => setShowJsonInput(true)}
+                                                className="flex-1 bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 transition-colors text-sm"
+                                            >
+                                                Override
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => {
+                                                    setShowJsonInput(false);
+                                                    setJsonInput('');
+                                                }}
+                                                className="flex-1 bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 text-sm"
+                                            >
+                                                Cancel
+                                            </button>
+                                        )}
+                                    </div>
+                                    
+                                    {showJsonInput && (
+                                        <div className="mt-3">
+                                            <textarea
+                                                value={jsonInput}
+                                                onChange={(e) => setJsonInput(e.target.value)}
+                                                placeholder="Paste JSON override..."
+                                                className="w-full h-16 p-2 border border-gray-300 rounded text-xs font-mono resize-none"
+                                            />
+                                            <button
+                                                onClick={handleJsonLoad}
+                                                className="w-full mt-2 bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-xs"
+                                                disabled={!jsonInput.trim()}
+                                            >
+                                                Load Override
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h3 className="font-semibold text-green-800 text-sm">Status</h3>
+                                        {chartLoadStatus === 'loaded' && equivalenceChart && (
+                                            <div className="flex items-center gap-1 text-green-700">
+                                                <CheckCircle className="w-3 h-3" />
+                                                <span className="text-xs">Loaded</span>
+                                            </div>
+                                        )}
+                                        {chartLoadStatus === 'loading' && (
+                                            <div className="flex items-center gap-1 text-green-700">
+                                                <div className="w-3 h-3 border border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                                                <span className="text-xs">Loading</span>
+                                            </div>
+                                        )}
+                                        {chartLoadStatus === 'error' && (
+                                            <div className="flex items-center gap-1 text-red-700">
+                                                <AlertCircle className="w-3 h-3" />
+                                                <span className="text-xs">Error</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {chartLoadStatus === 'loaded' && equivalenceChart && (
+                                        <div className="grid grid-cols-2 gap-3 text-xs text-green-600">
+                                            <div className="text-center p-2 bg-white rounded">
+                                                <div className="font-bold text-lg text-green-800">{equivalenceChart.symbols?.length || 0}</div>
+                                                <div>symbols</div>
+                                            </div>
+                                            <div className="text-center p-2 bg-white rounded">
+                                                <div className="font-bold text-lg text-green-800">{Object.keys(loadedSymbolImages).length}</div>
+                                                <div>images</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                    <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2 text-sm">
+                                        <Settings />
+                                        Detection Settings
+                                    </h3>
+                                    <div className="space-y-2">
+                                        <div>
+                                            <div className="flex justify-between text-xs">
+                                                <span>Sensitivity</span>
+                                                <span>{processingSettings.detectionSensitivity}</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min="0.3"
+                                                max="0.9"
+                                                step="0.1"
+                                                value={processingSettings.detectionSensitivity}
+                                                onChange={(e) => setProcessingSettings(prev => ({
+                                                    ...prev,
+                                                    detectionSensitivity: parseFloat(e.target.value)
+                                                }))}
+                                                className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                            />
+                                        </div>
+                                        <div>
+                                            <div className="flex justify-between text-xs">
+                                                <span>Contrast</span>
+                                                <span>{processingSettings.contrastThreshold}</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min="50"
+                                                max="200"
+                                                value={processingSettings.contrastThreshold}
+                                                onChange={(e) => setProcessingSettings(prev => ({
+                                                    ...prev,
+                                                    contrastThreshold: parseInt(e.target.value)
+                                                }))}
+                                                className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                id="variantMatching"
+                                                checked={processingSettings.variantMatching}
+                                                onChange={(e) => setProcessingSettings(prev => ({
+                                                    ...prev,
+                                                    variantMatching: e.target.checked
+                                                }))}
+                                                className="w-3 h-3"
+                                            />
+                                            <label htmlFor="variantMatching" className="text-xs text-gray-700">
+                                                Include variants
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <label className="block text-sm font-medium text-gray-700">
+                                        Upload Inscription Image
+                                    </label>
+                                    <div className="flex items-center justify-center w-full">
+                                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                                            <div className="flex flex-col items-center justify-center pt-3 pb-3">
+                                                <Upload />
+                                                <p className="text-xs text-gray-500 mt-1">Click to upload inscription</p>
+                                            </div>
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                accept="image/*"
+                                                onChange={handleImageUpload}
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={detectSymbols}
+                                    disabled={!uploadedImage || !equivalenceChart || isProcessing || !isOpenCVReady}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {!isOpenCVReady ? (
+                                        <>
+                                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            Loading OpenCV...
+                                        </>
+                                    ) : isProcessing ? (
+                                        <>
+                                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            Isolating & Analyzing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Zap />
+                                            Isolate & Detect Symbols
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+
+                            <div className="lg:col-span-2 space-y-4">
+                                <div>
+                                    <h3 className="font-semibold text-gray-800 mb-3">Analysis Workspace</h3>
+                                    
+                                    <div className="relative bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200" style={{minHeight: '500px'}}>
+                                        {uploadedImage ? (
+                                            <div className="relative w-full h-full flex items-center justify-center p-4">
+                                                <img
+                                                    ref={imageRef}
+                                                    src={uploadedImage}
+                                                    alt="Hakli inscription"
+                                                    className="max-w-full max-h-full object-contain"
+                                                    style={{maxHeight: '480px', width: 'auto'}}
+                                                    onLoad={() => {
+                                                        if (recognitionResults.length > 0) {
+                                                            setTimeout(drawDetectionResults, 100);
+                                                        }
+                                                    }}
+                                                />
+                                                <canvas
+                                                    ref={canvasRef}
+                                                    className="absolute pointer-events-none"
+                                                    style={{ 
+                                                        display: recognitionResults.length > 0 ? 'block' : 'none'
+                                                    }}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="text-center text-gray-500 p-8">
+                                                <Camera />
+                                                <p className="text-lg font-medium mb-2 mt-4">Upload Hakli Inscription</p>
+                                                <p className="text-sm">OpenCV symbol isolation will identify individual symbols</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {recognitionResults.length > 0 && (
+                                        <div className="mt-3 bg-gray-50 rounded-lg p-3">
+                                            <h4 className="font-semibold text-gray-800 mb-2 text-sm">Match Types:</h4>
+                                            <div className="grid grid-cols-3 gap-3 text-xs">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-1 bg-green-500"></div>
+                                                    <span>Primary</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-1 bg-purple-500" style={{background: 'repeating-linear-gradient(90deg, #8b5cf6 0, #8b5cf6 3px, transparent 3px, transparent 6px)'}}></div>
+                                                    <span>Variant</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-1 bg-cyan-500" style={{background: 'repeating-linear-gradient(90deg, #06b6d4 0, #06b6d4 5px, transparent 5px, transparent 8px)'}}></div>
+                                                    <span>Example</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {recognitionResults.length > 0 && (
+                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                        <h3 className="font-semibold text-green-800 mb-3">
+                                            Detection Results ({recognitionResults.length} matches found)
+                                        </h3>
+                                        
+                                        <div className="mb-4 p-4 bg-white rounded-lg border">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h4 className="font-semibold text-gray-800">Reconstructed Inscription:</h4>
+                                                <button
+                                                    onClick={() => setWordBoundaries(new Set())}
+                                                    className="text-xs bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600"
+                                                >
+                                                    Clear Boundaries
+                                                </button>
+                                            </div>
+                                            <div className="text-lg font-mono">
+                                                <div className="mb-2">
+                                                    <span className="text-sm text-gray-600 mr-2">Latin:</span>
+                                                    <span className="text-blue-800">
+                                                        {formatInscriptionWithBoundaries(recognitionResults)}
+                                                    </span>
+                                                </div>
+                                                
+                                                {recognitionResults.some(r => r.symbol.arabic) && (
+                                                    <div className="mb-2" dir="rtl">
+                                                        <span className="text-sm text-gray-600 ml-2">Arabic:</span>
+                                                        <span className="text-lg text-green-800">
+                                                            {formatArabicWithBoundaries(recognitionResults)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                
+                                                <div className="text-xs text-gray-500">
+                                                    Average confidence: {(recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length * 100).toFixed(0)}% 
+                                                    | Reading direction: Left → Right
+                                                    {wordBoundaries.size > 0 && ` | ${wordBoundaries.size} word boundaries`}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="space-y-3 max-h-64 overflow-y-auto">
+                                            {recognitionResults
+                                                .sort((a, b) => a.position.x - b.position.x)
+                                                .map((result, index) => (
+                                                <div key={index} className="bg-white rounded-lg p-3 shadow-sm border-l-4" 
+                                                     style={{borderColor: result.confidence > 0.8 ? '#10b981' : result.confidence > 0.7 ? '#f59e0b' : '#ef4444'}}>
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div className="flex-1">
+                                                            <p className="font-medium text-gray-800 flex items-center gap-2">
+                                                                <ImageIcon />
+                                                                <span className="text-lg">{result.symbol.name}</span>
+                                                                {result.symbol.arabic && <span className="text-lg">({result.symbol.arabic})</span>}
+                                                                <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                                                                    #{index + 1}
+                                                                </span>
+                                                            </p>
+                                                            <p className="text-sm text-gray-600">{result.symbol.description}</p>
+                                                            <p className="text-xs text-gray-500 mt-1">
+                                                                Category: <strong>{result.symbol.category}</strong> | 
+                                                                Match: <strong>{result.matchDetails.type}</strong>
+                                                                {result.matchDetails.variantIndex !== undefined && ` (variant ${result.matchDetails.variantIndex + 1})`}
+                                                                {result.matchDetails.exampleIndex !== undefined && ` (example ${result.matchDetails.exampleIndex + 1})`}
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-right ml-3">
+                                                            <div className="flex flex-col gap-2">
+                                                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                                                    result.confidence > 0.8 
+                                                                        ? 'bg-green-100 text-green-800' 
+                                                                        : result.confidence > 0.7
+                                                                            ? 'bg-yellow-100 text-yellow-800'
+                                                                            : 'bg-red-100 text-red-800'
+                                                                }`}>
+                                                                    {(result.confidence * 100).toFixed(0)}%
+                                                                </span>
+                                                                <button
+                                                                    onClick={() => toggleWordBoundary(index)}
+                                                                    className={`text-xs px-2 py-1 rounded transition-colors ${
+                                                                        wordBoundaries.has(index)
+                                                                            ? 'bg-purple-500 text-white'
+                                                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                                    }`}
+                                                                    title={wordBoundaries.has(index) ? "Remove word boundary" : "Add word boundary before this symbol"}
+                                                                >
+                                                                    {wordBoundaries.has(index) ? '| Word' : '+ Word'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {result.characteristics && (
+                                                        <div className="text-xs text-blue-600 bg-blue-50 rounded p-2">
+                                                            <strong>Analysis:</strong> {result.characteristics}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {imageAnalysis && (
+                                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-purple-800 mb-3">Processing Analysis</h4>
+                                        <div className="grid grid-cols-2 gap-4 text-sm">
+                                            <div>
+                                                <span className="text-purple-700">Dimensions:</span> {imageAnalysis.width} × {imageAnalysis.height}
+                                            </div>
+                                            <div>
+                                                <span className="text-purple-700">Symbol Density:</span> {(imageAnalysis.darkPixelRatio * 100).toFixed(1)}%
+                                            </div>
+                                            <div>
+                                                <span className="text-purple-700">Chart Symbols:</span> {equivalenceChart?.symbols?.length || 0}
+                                            </div>
+                                            <div>
+                                                <span className="text-purple-700">Mode:</span> 
+                                                {processingSettings.variantMatching ? ' Multi-variant' : ' Primary only'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <canvas ref={analysisCanvasRef} style={{ display: 'none' }} />
+
+                        <div className="mt-6 bg-gray-50 rounded-lg p-6">
+                            <h3 className="font-semibold text-gray-800 mb-4">Multi-Image Recognition Technology</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+                                <div>
+                                    <h4 className="font-medium text-gray-800 mb-2">Symbol Isolation</h4>
+                                    <p>Uses OpenCV contour detection to identify individual symbols before template matching for higher accuracy.</p>
+                                </div>
+                                <div>
+                                    <h4 className="font-medium text-gray-800 mb-2">Multi-Image Analysis</h4>
+                                    <p>Matches against primary images, variants, and real examples to handle different carving styles and conditions.</p>
+                                </div>
+                                <div>
+                                    <h4 className="font-medium text-gray-800 mb-2">Inscription Reconstruction</h4>
+                                    <p>Automatically orders detected symbols and allows manual word boundary insertion for readable transcriptions.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<HakliSymbolRecognizer />);
+    </script>
+</body>
+</html>

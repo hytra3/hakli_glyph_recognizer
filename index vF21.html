@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hakli Symbol Recognizer</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        var isOpenCvReady = false;
+        function onOpenCvReady() {
+            isOpenCvReady = true;
+            console.log('OpenCV.js is ready');
+        }
+    </script>
+    <script async src="https://docs.opencv.org/4.5.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+    <style>
+        .detection-box {
+            position: absolute;
+            pointer-events: auto;
+            z-index: 10;
+            border: 3px solid;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .detection-box.validated-correct { border-color: #10b981; background: rgba(16, 185, 129, 0.25); }
+        .detection-box.validated-incorrect { border-color: #ef4444; background: rgba(239, 68, 68, 0.25); }
+        .detection-box.unvalidated { border-color: #3b82f6; background: rgba(59, 130, 246, 0.25); }
+        .detection-box.selected { border-color: #f59e0b; background: rgba(245, 158, 11, 0.3); border-width: 4px; }
+        
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+        }
+        
+        .manual-selection-box {
+            position: absolute;
+            border: 2px dashed #f59e0b;
+            background: rgba(245, 158, 11, 0.1);
+            pointer-events: none;
+            z-index: 5;
+        }
+        
+        .region-boundary {
+            position: absolute;
+            border: 1px solid rgba(156, 163, 175, 0.5);
+            background: rgba(156, 163, 175, 0.05);
+            pointer-events: none;
+            z-index: 3;
+        }
+        
+        .merge-indicator {
+            position: absolute;
+            border: 3px solid #8b5cf6;
+            background: rgba(139, 92, 246, 0.15);
+            border-radius: 8px;
+            pointer-events: none;
+            z-index: 15;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function HakliSymbolRecognizer() {
+            const [image, setImage] = useState(null);
+            const [recognitionResults, setRecognitionResults] = useState([]);
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [equivalenceChart, setEquivalenceChart] = useState(null);
+            const [chartLoadStatus, setChartLoadStatus] = useState('not-loaded');
+            const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
+            const [manualDetectionMode, setManualDetectionMode] = useState(false);
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [drawStart, setDrawStart] = useState(null);
+            const [drawCurrent, setDrawCurrent] = useState(null);
+            const [selectedRegions, setSelectedRegions] = useState(new Set());
+            const [validations, setValidations] = useState({});
+            const [actionHistory, setActionHistory] = useState([]);
+            const [isolatedSymbols, setIsolatedSymbols] = useState([]);
+            const [showRegionBoundaries, setShowRegionBoundaries] = useState(false);
+            const [mergeIndicator, setMergeIndicator] = useState(null);
+
+            const imageRef = useRef(null);
+            const imageContainerRef = useRef(null);
+
+            const convertToGitHubUrl = (githubUrl) => {
+                if (!githubUrl) return null;
+                if (githubUrl.indexOf('http') === 0) {
+                    if (githubUrl.indexOf('github.com') !== -1 && githubUrl.indexOf('/blob/') !== -1) {
+                        return githubUrl.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+                    }
+                    return githubUrl;
+                }
+                if (typeof githubUrl === 'string' && githubUrl.length > 0) {
+                    const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/';
+                    const cleanPath = githubUrl.indexOf('/') === 0 ? githubUrl.substring(1) : githubUrl;
+                    return baseUrl + cleanPath;
+                }
+                return null;
+            };
+
+            const recordAction = (actionType, actionData) => {
+                const action = {
+                    type: actionType,
+                    data: actionData,
+                    timestamp: new Date().toISOString(),
+                    id: Date.now()
+                };
+                setActionHistory(prev => [...prev, action].slice(-50));
+                console.log('Action recorded:', action);
+            };
+
+            const validateDetection = (detectionIndex, isCorrect) => {
+                recordAction('validation', {
+                    detectionIndex,
+                    isCorrect,
+                    detectionData: recognitionResults[detectionIndex]
+                });
+                setValidations(prev => ({
+                    ...prev,
+                    [detectionIndex]: {
+                        isCorrect,
+                        timestamp: new Date().toISOString(),
+                        detectionData: recognitionResults[detectionIndex]
+                    }
+                }));
+            };
+
+            const deleteDetection = (detectionIndex) => {
+                recordAction('delete_detection', {
+                    index: detectionIndex,
+                    detection: recognitionResults[detectionIndex]
+                });
+                setRecognitionResults(prev => prev.filter((_, i) => i !== detectionIndex));
+                setValidations(prev => {
+                    const newValidations = { ...prev };
+                    delete newValidations[detectionIndex];
+                    const shifted = {};
+                    Object.keys(newValidations).forEach(key => {
+                        const numKey = parseInt(key);
+                        shifted[numKey > detectionIndex ? numKey - 1 : numKey] = newValidations[key];
+                    });
+                    return shifted;
+                });
+            };
+
+            const mergeSelectedDetections = () => {
+                const selectedIndices = Array.from(selectedRegions).sort((a, b) => a - b);
+                if (selectedIndices.length < 2) {
+                    alert('Please select at least 2 detections to merge');
+                    return;
+                }
+                const detectionsToMerge = selectedIndices.map(i => recognitionResults[i]);
+                const minX = Math.min(...detectionsToMerge.map(d => d.position.x));
+                const minY = Math.min(...detectionsToMerge.map(d => d.position.y));
+                const maxX = Math.max(...detectionsToMerge.map(d => d.position.x + d.position.width));
+                const maxY = Math.max(...detectionsToMerge.map(d => d.position.y + d.position.height));
+                const baseDetection = detectionsToMerge.reduce((best, current) => 
+                    current.confidence > best.confidence ? current : best
+                );
+                const mergedDetection = {
+                    ...baseDetection,
+                    position: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+                    confidence: detectionsToMerge.reduce((sum, d) => sum + d.confidence, 0) / detectionsToMerge.length,
+                    mergedFrom: detectionsToMerge.length,
+                    isMerged: true
+                };
+                recordAction('merge_detections', { indices: selectedIndices, detections: detectionsToMerge, mergedResult: mergedDetection });
+                let newResults = recognitionResults.slice();
+                for (let i = selectedIndices.length - 1; i >= 0; i--) {
+                    newResults.splice(selectedIndices[i], 1);
+                }
+                newResults.push(mergedDetection);
+                setRecognitionResults(newResults);
+                setSelectedRegions(new Set());
+                setMergeIndicator(null);
+            };
+
+            const getImageCoordinates = (event) => {
+                if (!imageRef.current) return null;
+                const rect = imageRef.current.getBoundingClientRect();
+                const scaleX = imageRef.current.naturalWidth / rect.width;
+                const scaleY = imageRef.current.naturalHeight / rect.height;
+                return {
+                    x: (event.clientX - rect.left) * scaleX,
+                    y: (event.clientY - rect.top) * scaleY
+                };
+            };
+
+            const handleImageMouseDown = (event) => {
+                if (!manualDetectionMode) return;
+                const coords = getImageCoordinates(event);
+                if (!coords) return;
+                setIsDrawing(true);
+                setDrawStart(coords);
+                setDrawCurrent(coords);
+            };
+
+            const handleImageMouseMove = (event) => {
+                if (!manualDetectionMode || !isDrawing) return;
+                const coords = getImageCoordinates(event);
+                if (coords) setDrawCurrent(coords);
+            };
+
+            const handleImageMouseUp = (event) => {
+                if (!manualDetectionMode || !isDrawing || !drawStart) return;
+                const coords = getImageCoordinates(event);
+                if (!coords) return;
+                const bounds = {
+                    x: Math.min(drawStart.x, coords.x),
+                    y: Math.min(drawStart.y, coords.y),
+                    width: Math.abs(coords.x - drawStart.x),
+                    height: Math.abs(coords.y - drawStart.y)
+                };
+                if (bounds.width > 10 && bounds.height > 10) {
+                    const manualDetection = {
+                        symbol: { id: 'unknown', name: 'Unknown', transliteration: '?' },
+                        confidence: 0.5,
+                        position: bounds,
+                        matchType: 'manual',
+                        isManual: true
+                    };
+                    setRecognitionResults(prev => [...prev, manualDetection]);
+                }
+                setIsDrawing(false);
+                setDrawStart(null);
+                setDrawCurrent(null);
+            };
+
+            const toggleRegionSelection = (regionIndex) => {
+                setSelectedRegions(prev => {
+                    const newSet = new Set(prev);
+                    newSet.has(regionIndex) ? newSet.delete(regionIndex) : newSet.add(regionIndex);
+                    return newSet;
+                });
+            };
+
+            const handleDetectionClick = (event, index) => {
+                if (event.ctrlKey || event.metaKey) {
+                    event.stopPropagation();
+                    toggleRegionSelection(index);
+                }
+            };
+
+            useEffect(() => {
+                if (selectedRegions.size >= 2) {
+                    const selectedDetections = Array.from(selectedRegions).map(i => recognitionResults[i]);
+                    if (selectedDetections.length > 0) {
+                        const minX = Math.min(...selectedDetections.map(d => d.position.x));
+                        const minY = Math.min(...selectedDetections.map(d => d.position.y));
+                        const maxX = Math.max(...selectedDetections.map(d => d.position.x + d.position.width));
+                        const maxY = Math.max(...selectedDetections.map(d => d.position.y + d.position.height));
+                        setMergeIndicator({ x: minX, y: minY, width: maxX - minX, height: maxY - minY });
+                    }
+                } else {
+                    setMergeIndicator(null);
+                }
+            }, [selectedRegions, recognitionResults]);
+
+            const isolateSymbols = (inputImage) => {
+                if (!isOpenCvReady) return [];
+                try {
+                    const src = cv.imread(inputImage);
+                    const gray = new cv.Mat();
+                    const binary = new cv.Mat();
+                    const morphKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(2, 2));
+                    const processed = new cv.Mat();
+                    if (src.channels() > 1) {
+                        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                    } else {
+                        gray = src.clone();
+                    }
+                    cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+                    cv.morphologyEx(binary, processed, cv.MORPH_CLOSE, morphKernel);
+                    const contours = new cv.MatVector();
+                    const hierarchy = new cv.Mat();
+                    cv.findContours(processed, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+                    const isolatedRegions = [];
+                    for (let i = 0; i < contours.size(); i++) {
+                        const contour = contours.get(i);
+                        const boundingRect = cv.boundingRect(contour);
+                        const area = boundingRect.width * boundingRect.height;
+                        const aspectRatio = boundingRect.width / boundingRect.height;
+                        if (area >= 100 && area <= 10000 && aspectRatio >= 0.2 && aspectRatio <= 5.0) {
+                            const padding = 5;
+                            isolatedRegions.push({
+                                bounds: {
+                                    x: Math.max(0, boundingRect.x - padding),
+                                    y: Math.max(0, boundingRect.y - padding),
+                                    width: Math.min(src.cols - boundingRect.x + padding, boundingRect.width + 2 * padding),
+                                    height: Math.min(src.rows - boundingRect.y + padding, boundingRect.height + 2 * padding)
+                                },
+                                area,
+                                aspectRatio
+                            });
+                        }
+                    }
+                    isolatedRegions.sort((a, b) => a.bounds.x - b.bounds.x);
+                    src.delete(); gray.delete(); binary.delete(); morphKernel.delete(); processed.delete();
+                    contours.delete(); hierarchy.delete();
+                    return isolatedRegions;
+                } catch (error) {
+                    console.error('Symbol isolation error:', error);
+                    return [];
+                }
+            };
+
+            const performTemplateMatchingOnRegion = (inputImage, templateImage, region) => {
+                if (!isOpenCvReady) return [];
+                try {
+                    const src = cv.imread(inputImage);
+                    const regionMat = src.roi(new cv.Rect(region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height));
+                    const templ = cv.imread(templateImage);
+                    const dst = new cv.Mat();
+                    const matches = [];
+                    if (templ.cols <= regionMat.cols && templ.rows <= regionMat.rows) {
+                        cv.matchTemplate(regionMat, templ, dst, cv.TM_CCOEFF_NORMED);
+                        const result = cv.minMaxLoc(dst);
+                        if (result.maxVal >= 0.6) {
+                            matches.push({ confidence: result.maxVal, position: region.bounds });
+                        }
+                        dst.delete();
+                    }
+                    src.delete(); regionMat.delete(); templ.delete();
+                    return matches;
+                } catch (error) {
+                    console.error('Template matching error:', error);
+                    return [];
+                }
+            };
+
+            const calculateIoU = (box1, box2) => {
+                const x1 = Math.max(box1.x, box2.x);
+                const y1 = Math.max(box1.y, box2.y);
+                const x2 = Math.min(box1.x + box1.width, box2.x + box2.width);
+                const y2 = Math.min(box1.y + box1.height, box2.y + box2.height);
+                
+                const intersectionArea = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+                const box1Area = box1.width * box1.height;
+                const box2Area = box2.width * box2.height;
+                const unionArea = box1Area + box2Area - intersectionArea;
+                
+                return unionArea > 0 ? intersectionArea / unionArea : 0;
+            };
+
+            const applyNonMaximumSuppression = (detections, iouThreshold = 0.3) => {
+                if (detections.length === 0) return detections;
+                
+                // Sort by confidence (highest first)
+                const sorted = [...detections].sort((a, b) => b.confidence - a.confidence);
+                const keep = [];
+                
+                while (sorted.length > 0) {
+                    const current = sorted.shift();
+                    keep.push(current);
+                    
+                    // Remove detections that overlap too much with current
+                    for (let i = sorted.length - 1; i >= 0; i--) {
+                        const iou = calculateIoU(current.position, sorted[i].position);
+                        if (iou > iouThreshold) {
+                            sorted.splice(i, 1);
+                        }
+                    }
+                }
+                
+                return keep;
+            };
+
+            const recognizeSymbols = () => {
+                if (!image || !equivalenceChart || !isOpenCvReady) return;
+                setIsProcessing(true);
+                setRecognitionResults([]);
+                console.log('Starting recognition with', equivalenceChart.symbols.length, 'symbols and', Object.keys(loadedSymbolImages).length, 'loaded images');
+                try {
+                    const tempImg = new Image();
+                    tempImg.onload = () => {
+                        const isolated = isolateSymbols(tempImg);
+                        setIsolatedSymbols(isolated);
+                        console.log('Isolated', isolated.length, 'regions');
+                        if (isolated.length === 0) {
+                            console.log('No regions found - check image contrast and size');
+                            setIsProcessing(false);
+                            return;
+                        }
+                        const results = [];
+                        let totalMatches = 0;
+                        for (const region of isolated) {
+                            let bestMatch = null;
+                            
+                            for (const symbol of equivalenceChart.symbols) {
+                                // Check primary image
+                                if (loadedSymbolImages[symbol.id]) {
+                                    const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region);
+                                    totalMatches += matches.length;
+                                    for (const match of matches) {
+                                        if (!bestMatch || match.confidence > bestMatch.confidence) {
+                                            bestMatch = {
+                                                symbol,
+                                                confidence: match.confidence,
+                                                position: region.bounds,
+                                                matchType: 'primary'
+                                            };
+                                        }
+                                    }
+                                }
+                                
+                                // Check variant images
+                                if (symbol.images && symbol.images.variants) {
+                                    for (let i = 0; i < symbol.images.variants.length; i++) {
+                                        const variantKey = `${symbol.id}_variant_${i}`;
+                                        if (loadedSymbolImages[variantKey]) {
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[variantKey], region);
+                                            for (const match of matches) {
+                                                const weightedConfidence = match.confidence * 0.9;
+                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                                    bestMatch = {
+                                                        symbol,
+                                                        confidence: weightedConfidence,
+                                                        position: region.bounds,
+                                                        matchType: 'variant',
+                                                        variantIndex: i
+                                                    };
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Check example images
+                                if (symbol.images && symbol.images.examples) {
+                                    for (let i = 0; i < symbol.images.examples.length; i++) {
+                                        const exampleKey = `${symbol.id}_example_${i}`;
+                                        if (loadedSymbolImages[exampleKey]) {
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[exampleKey], region);
+                                            for (const match of matches) {
+                                                const weightedConfidence = match.confidence * 0.8;
+                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                                    bestMatch = {
+                                                        symbol,
+                                                        confidence: weightedConfidence,
+                                                        position: region.bounds,
+                                                        matchType: 'example',
+                                                        exampleIndex: i
+                                                    };
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (bestMatch && bestMatch.confidence > 0.4) {
+                                results.push(bestMatch);
+                                console.log(`Region ${isolated.indexOf(region)}: Matched ${bestMatch.symbol.name} with ${(bestMatch.confidence * 100).toFixed(1)}% confidence`);
+                            }
+                        }
+                                                    console.log(`Recognition complete: ${results.length} symbols detected from ${isolated.length} regions (${totalMatches} total template matches tested)`);
+                        
+                        // Apply non-maximum suppression to remove overlapping detections
+                        const filteredResults = applyNonMaximumSuppression(results, 0.3);
+                        console.log(`After NMS: ${filteredResults.length} detections (removed ${results.length - filteredResults.length} overlapping)`);
+                        
+                        setRecognitionResults(filteredResults);
+                        setIsProcessing(false);
+                    };
+                    tempImg.src = image;
+                } catch (error) {
+                    console.error('Recognition error:', error);
+                    setIsProcessing(false);
+                }
+            };
+
+            const handleFileUpload = (event) => {
+                const file = event.target.files[0];
+                if (file && file.type.indexOf('image/') === 0) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        setImage(e.target.result);
+                        setRecognitionResults([]);
+                        setValidations({});
+                        setActionHistory([]);
+                        setIsolatedSymbols([]);
+                        setSelectedRegions(new Set());
+                        setMergeIndicator(null);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const getDetectionBoxStyle = (index) => {
+                const detection = recognitionResults[index];
+                if (!detection || !imageRef.current) return {};
+                const imageRect = imageRef.current.getBoundingClientRect();
+                const scaleX = imageRect.width / imageRef.current.naturalWidth;
+                const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                return {
+                    left: detection.position.x * scaleX + 'px',
+                    top: detection.position.y * scaleY + 'px',
+                    width: detection.position.width * scaleX + 'px',
+                    height: detection.position.height * scaleY + 'px'
+                };
+            };
+
+            const getDetectionBoxClass = (index) => {
+                let classes = ['detection-box'];
+                if (validations[index]) {
+                    classes.push(validations[index].isCorrect ? 'validated-correct' : 'validated-incorrect');
+                } else {
+                    classes.push('unvalidated');
+                }
+                if (selectedRegions.has(index)) classes.push('selected');
+                return classes.join(' ');
+            };
+
+            useEffect(() => {
+                if (chartLoadStatus === 'not-loaded') {
+                    setChartLoadStatus('loading');
+                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
+                    fetch(githubJsonUrl)
+                        .then(response => response.json())
+                        .then(chartData => {
+                            setEquivalenceChart(chartData);
+                            const imageCache = {};
+                            const loadPromises = [];
+                            
+                            for (const symbol of chartData.symbols) {
+                                // Load primary image
+                                if (symbol.images && symbol.images.primary) {
+                                    const fullUrl = convertToGitHubUrl(symbol.images.primary);
+                                    if (fullUrl) {
+                                        const promise = new Promise((resolve) => {
+                                            const img = new Image();
+                                            img.crossOrigin = 'anonymous';
+                                            img.onload = () => {
+                                                imageCache[symbol.id] = img;
+                                                resolve();
+                                            };
+                                            img.onerror = () => resolve();
+                                            img.src = fullUrl;
+                                        });
+                                        loadPromises.push(promise);
+                                    }
+                                }
+                                
+                                // Load variant images
+                                if (symbol.images && symbol.images.variants) {
+                                    for (let i = 0; i < symbol.images.variants.length; i++) {
+                                        const fullUrl = convertToGitHubUrl(symbol.images.variants[i]);
+                                        if (fullUrl) {
+                                            const variantKey = `${symbol.id}_variant_${i}`;
+                                            const promise = new Promise((resolve) => {
+                                                const img = new Image();
+                                                img.crossOrigin = 'anonymous';
+                                                img.onload = () => {
+                                                    imageCache[variantKey] = img;
+                                                    resolve();
+                                                };
+                                                img.onerror = () => resolve();
+                                                img.src = fullUrl;
+                                            });
+                                            loadPromises.push(promise);
+                                        }
+                                    }
+                                }
+                                
+                                // Load example images
+                                if (symbol.images && symbol.images.examples) {
+                                    for (let i = 0; i < symbol.images.examples.length; i++) {
+                                        const fullUrl = convertToGitHubUrl(symbol.images.examples[i]);
+                                        if (fullUrl) {
+                                            const exampleKey = `${symbol.id}_example_${i}`;
+                                            const promise = new Promise((resolve) => {
+                                                const img = new Image();
+                                                img.crossOrigin = 'anonymous';
+                                                img.onload = () => {
+                                                    imageCache[exampleKey] = img;
+                                                    resolve();
+                                                };
+                                                img.onerror = () => resolve();
+                                                img.src = fullUrl;
+                                            });
+                                            loadPromises.push(promise);
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            Promise.all(loadPromises).then(() => {
+                                console.log(`Loaded ${Object.keys(imageCache).length} total images`);
+                                setLoadedSymbolImages(imageCache);
+                                setChartLoadStatus('loaded');
+                            });
+                        })
+                        .catch(() => setChartLoadStatus('error'));
+                }
+            }, [chartLoadStatus]);
+
+            return (
+                <div className="max-w-6xl mx-auto p-6 bg-white">
+                    <div className="mb-8">
+                        <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Symbol Recognizer</h1>
+                        <p className="text-gray-600">Enhanced with Manual Detection and Merge Features</p>
+                    </div>
+
+                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="font-semibold text-gray-900">Equivalence Chart Status</h3>
+                                <div className="flex items-center gap-2 mt-1">
+                                    {chartLoadStatus === 'loading' && <span className="text-blue-600">Loading...</span>}
+                                    {chartLoadStatus === 'loaded' && <span className="text-green-600">Loaded ({equivalenceChart?.symbols?.length || 0} symbols, {Object.keys(loadedSymbolImages).length} images)</span>}
+                                    {chartLoadStatus === 'error' && <span className="text-red-600">Error loading chart</span>}
+                                </div>
+                            </div>
+                            <button onClick={() => setChartLoadStatus('not-loaded')} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" disabled={chartLoadStatus === 'loading'}>
+                                Reload Chart
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="mb-6">
+                        <input type="file" accept="image/*" onChange={handleFileUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                    </div>
+
+                    {image && (
+                        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                            <div className="flex flex-wrap gap-3 items-center mb-4">
+                                <button onClick={recognizeSymbols} disabled={isProcessing || !equivalenceChart} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50">
+                                    {isProcessing ? 'Processing...' : 'Recognize Symbols'}
+                                </button>
+                                <button onClick={() => setManualDetectionMode(!manualDetectionMode)} className={`px-4 py-2 rounded ${manualDetectionMode ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+                                    {manualDetectionMode ? 'Exit Manual Mode' : 'Manual Detection'}
+                                </button>
+                                <button onClick={() => setShowRegionBoundaries(!showRegionBoundaries)} className={`px-4 py-2 rounded ${showRegionBoundaries ? 'bg-purple-500 text-white hover:bg-purple-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+                                    Region Boundaries
+                                </button>
+                                <span className="text-sm text-gray-600">{recognitionResults.length} detections</span>
+                            </div>
+                            
+                            {selectedRegions.size > 0 && (
+                                <div className="flex flex-wrap gap-3 items-center pt-3 border-t border-gray-200">
+                                    <span className="text-sm text-gray-600">{selectedRegions.size} selected</span>
+                                    {selectedRegions.size >= 2 && (
+                                        <button onClick={mergeSelectedDetections} className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
+                                            Merge Selected
+                                        </button>
+                                    )}
+                                    <button onClick={() => setSelectedRegions(new Set())} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+                                        Clear Selection
+                                    </button>
+                                </div>
+                            )}
+                            
+                            {manualDetectionMode && (
+                                <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded text-sm text-orange-800">
+                                    Manual Mode: Click and drag to create detections. Ctrl/Cmd+Click to select for merging.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {image && (
+                        <div className="mb-6">
+                            <div className="canvas-container relative" ref={imageContainerRef}>
+                                <img
+                                    ref={imageRef}
+                                    src={image}
+                                    alt="Uploaded inscription"
+                                    className="max-w-full h-auto border border-gray-300 rounded"
+                                    onMouseDown={handleImageMouseDown}
+                                    onMouseMove={handleImageMouseMove}
+                                    onMouseUp={handleImageMouseUp}
+                                    style={{ cursor: manualDetectionMode ? 'crosshair' : 'default' }}
+                                />
+                                
+                                {showRegionBoundaries && isolatedSymbols.map((region, index) => {
+                                    if (!imageRef.current) return null;
+                                    const imageRect = imageRef.current.getBoundingClientRect();
+                                    const scaleX = imageRect.width / imageRef.current.naturalWidth;
+                                    const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                                    return (
+                                        <div key={`region-${index}`} className="region-boundary" style={{
+                                            left: region.bounds.x * scaleX + 'px',
+                                            top: region.bounds.y * scaleY + 'px',
+                                            width: region.bounds.width * scaleX + 'px',
+                                            height: region.bounds.height * scaleY + 'px'
+                                        }} />
+                                    );
+                                })}
+                                
+                                {recognitionResults.map((detection, index) => (
+                                    <div key={`detection-${index}`} className={getDetectionBoxClass(index)} style={getDetectionBoxStyle(index)} onClick={(e) => handleDetectionClick(e, index)}>
+                                        <div className="absolute top-1 left-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded" style={{ pointerEvents: 'none' }}>
+                                            {detection.symbol.name}
+                                        </div>
+                                        {selectedRegions.has(index) && (
+                                            <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded" style={{ pointerEvents: 'none' }}>
+                                                {Math.round(detection.confidence * 100)}%
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                
+                                {isDrawing && drawStart && drawCurrent && imageRef.current && (() => {
+                                    const imageRect = imageRef.current.getBoundingClientRect();
+                                    const scaleX = imageRect.width / imageRef.current.naturalWidth;
+                                    const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                                    return (
+                                        <div className="manual-selection-box" style={{
+                                            left: Math.min(drawStart.x, drawCurrent.x) * scaleX + 'px',
+                                            top: Math.min(drawStart.y, drawCurrent.y) * scaleY + 'px',
+                                            width: Math.abs(drawCurrent.x - drawStart.x) * scaleX + 'px',
+                                            height: Math.abs(drawCurrent.y - drawStart.y) * scaleY + 'px'
+                                        }} />
+                                    );
+                                })()}
+                                
+                                {mergeIndicator && imageRef.current && (() => {
+                                    const imageRect = imageRef.current.getBoundingClientRect();
+                                    const scaleX = imageRect.width / imageRef.current.naturalWidth;
+                                    const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                                    return (
+                                        <div className="merge-indicator" style={{
+                                            left: mergeIndicator.x * scaleX + 'px',
+                                            top: mergeIndicator.y * scaleY + 'px',
+                                            width: mergeIndicator.width * scaleX + 'px',
+                                            height: mergeIndicator.height * scaleY + 'px'
+                                        }} />
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                    )}
+
+                    {recognitionResults.length > 0 && (
+                        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                            <h3 className="font-semibold text-gray-900 mb-3">Detection Results</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {recognitionResults.map((result, index) => (
+                                    <div key={`result-${index}`} className={`p-3 bg-white rounded border ${selectedRegions.has(index) ? 'ring-2 ring-amber-400' : ''} ${validations[index] ? (validations[index].isCorrect ? 'border-green-300' : 'border-red-300') : 'border-gray-200'}`}>
+                                        <div className="flex items-start justify-between mb-2">
+                                            <div>
+                                                <div className="font-medium text-gray-900">
+                                                    {result.symbol.name}{result.isMerged ? ' (merged)' : ''}{result.isManual ? ' (manual)' : ''}
+                                                </div>
+                                                <div className="text-sm text-gray-600">{result.symbol.transliteration || result.symbol.name}</div>
+                                                <div className="text-xs text-gray-500">Confidence: {Math.round(result.confidence * 100)}%</div>
+                                            </div>
+                                            <button onClick={() => deleteDetection(index)} className="text-red-500 hover:text-red-700 text-sm">✕</button>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => validateDetection(index, true)} className={`px-3 py-1 text-xs rounded ${validations[index]?.isCorrect ? 'bg-green-500 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
+                                                ✓ Correct
+                                            </button>
+                                            <button onClick={() => validateDetection(index, false)} className={`px-3 py-1 text-xs rounded ${validations[index] && !validations[index].isCorrect ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>
+                                                ✗ Incorrect
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="mt-8 p-4 bg-gray-50 rounded-lg">
+                        <div className="text-sm text-gray-600">
+                            <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${isOpenCvReady ? 'bg-green-500' : 'bg-red-500'}`} />
+                                OpenCV Status: {isOpenCvReady ? 'Ready' : 'Loading...'}
+                                {actionHistory.length > 0 && <span className="ml-4 text-xs text-gray-500">{actionHistory.length} actions recorded</span>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<HakliSymbolRecognizer />);
+    </script>
+</body>
+</html>

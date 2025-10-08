@@ -1,0 +1,447 @@
+{
+  "source_image": "Jallad-2025.jpg",
+  "extraction_date": "2025-09-15T21:20:14.597Z",
+  "symbols": [
+    {
+      "id": 10,
+      "name": "h",
+      "arabic": "ح",
+           "images": 
+        {
+          "primary": "symbols/h_00.png",
+          "variants": [
+            "symbols/h_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "ح or h"
+    },
+    {
+      "id": 11,
+      "name": "l",
+      "arabic": "ل",
+           "images": 
+        {
+          "primary": "symbols/l_00.png",
+          "variants": [
+            "symbols/l_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 12,
+      "name": "h-dot",
+      "arabic": "ه",
+           "images": 
+        {
+          "primary": "symbols/h-dot_00.png",
+          "variants": [
+            "symbols/h-dot_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 13,
+      "name": "m",
+      "arabic": "م",
+           "images": 
+        {
+          "primary": "symbols/m_00.png",
+          "variants": [
+            "symbols/m_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 14,
+      "name": "q",
+      "arabic": "ق",
+           "images": 
+        {
+          "primary": "symbols/q_00.png",
+          "variants": [
+            "symbols/q_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 15,
+      "name": "w",
+      "arabic": "و",
+           "images": 
+        {
+          "primary": "symbols/w_00.png",
+          "variants": [
+            "symbols/w_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 16,
+      "name": "s-2",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/s-2_00.png",
+          "variants": [
+            "symbols/s-2_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 17,
+      "name": "r",
+      "arabic": "ر",
+           "images": 
+        {
+          "primary": "symbols/r_00.png",
+          "variants": [
+            "symbols/r_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 18,
+      "name": "b",
+      "arabic": "ب",
+           "images": 
+        {
+          "primary": "symbols/b_00.png",
+          "variants": [
+            "symbols/b_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 19,
+      "name": "t",
+      "arabic": "ت",
+           "images": 
+        {
+          "primary": "symbols/t_00.png",
+          "variants": [
+            "symbols/t_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 20,
+      "name": "s-1",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/s-1_00.png",
+          "variants": [
+            "symbols/s-1_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 21,
+      "name": "k",
+      "arabic": "ك",
+           "images": 
+        {
+          "primary": "symbols/k_00.png",
+          "variants": [
+            "symbols/k_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 22,
+      "name": "n",
+      "arabic": "ن",
+           "images": 
+        {
+          "primary": "symbols/n_00.png",
+          "variants": [
+            "symbols/n_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 23,
+      "name": "h-breve",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/h-breve_00.png",
+          "variants": [
+            
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 24,
+      "name": "f",
+      "arabic": "ف",
+           "images": 
+        {
+          "primary": "symbols/f_00.png",
+          "variants": [
+            
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 25,
+      "name": ")",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/)_00.png",
+          "variants": [
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 26,
+      "name": "(",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/(_00.png",
+          "variants": [
+            "symbols/(_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 27,
+      "name": "d-dot",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/d-dot_00.png",
+          "variants": [
+            "symbols/d-dot_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 28,
+      "name": "g",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/g_00.png",
+          "variants": [
+            "symbols/g_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 29,
+      "name": "d",
+      "arabic": "د",
+           "images": 
+        {
+          "primary": "symbols/d_00.png",
+          "variants": [
+            "symbols/d_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 30,
+      "name": "g-dot",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/g-dot_00.png",
+          "variants": [
+            "symbols/g-dot_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 31,
+      "name": "t-dot",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/t-dot_00.png",
+          "variants": [
+            "symbols/t-dot_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 32,
+      "name": "d-bar",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/d-bar_00.png",
+          "variants": [
+            "symbols/d-bar_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 33,
+      "name": "y",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/y_00.png",
+          "variants": [
+            "symbols/y_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 34,
+      "name": "t-bar",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/t-bar_00.png",
+          "variants": [
+            "symbols/t-bar_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 37,
+      "name": "z-dot",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/z-dot_00.png",
+          "variants": [
+            "symbols/z-dot_01.png"
+          ],
+          "examples": [
+            "examples/KMD_28-31.png",
+            "examples/KMG_120-126.png"
+          ]
+        },
+      "description": "description"
+    }
+  ]
+}
