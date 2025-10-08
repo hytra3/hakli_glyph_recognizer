@@ -310,31 +310,7 @@
                     return [];
                 }
             };
-
-            const performTemplateMatchingOnRegion = (inputImage, templateImage, region) => {
-    if (!isOpenCvReady) return [];
-    try {
-        const src = cv.imread(inputImage);
-        const regionMat = src.roi(new cv.Rect(region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height));
-        const templ = cv.imread(templateImage);
-        const dst = new cv.Mat();
-        const matches = [];
-        if (templ.cols <= regionMat.cols && templ.rows <= regionMat.rows) {
-            cv.matchTemplate(regionMat, templ, dst, cv.TM_CCOEFF_NORMED);
-            const result = cv.minMaxLoc(dst);
-            if (result.maxVal >= 0.6) {
-                matches.push({ confidence: result.maxVal, position: region.bounds });
-            }
-            dst.delete();
-        }
-        src.delete(); regionMat.delete(); templ.delete();
-        return matches;
-    } catch (error) {
-        console.error('Template matching error:', error);
-        return [];
-    }
-};
-
+            
             const performTemplateMatchingOnRegion = (inputImage, templateImage, region) => {
                 if (!isOpenCvReady) return [];
                 try {
