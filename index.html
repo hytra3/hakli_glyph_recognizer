@@ -719,16 +719,42 @@
                                 
                                 {recognitionResults.map((detection, index) => (
                                     <div key={`detection-${index}`} className={getDetectionBoxClass(index)} style={getDetectionBoxStyle(index)} onClick={(e) => handleDetectionClick(e, index)}>
-                                        <div className="absolute top-1 left-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded" style={{ pointerEvents: 'none' }}>
-                                            {detection.symbol.name}
-                                        </div>
-                                        {selectedRegions.has(index) && (
-                                            <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded" style={{ pointerEvents: 'none' }}>
-                                                {Math.round(detection.confidence * 100)}%
-                                            </div>
-                                        )}
+                                    <div className="absolute top-1 left-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded" style={{ pointerEvents: 'none' }}>
+                                     {detection.symbol.name}
                                     </div>
-                                ))}
+                                    {selectedRegions.has(index) && (
+                                     <>
+                                        <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded" style={{ pointerEvents: 'none' }}>
+                                            {Math.round(detection.confidence * 100)}%
+                                        </div>
+                                        <div className="absolute top-1 right-1 flex gap-1" style={{ pointerEvents: 'auto' }}>
+                                        <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteDetection(index);
+                                        }}
+                                        className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                                        title="Delete this detection"
+                                    >
+                                        ✕
+                                    </button>
+                                    {selectedRegions.size >= 2 && (
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                mergeSelectedDetections();
+                                            }}
+                                            className="px-2 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600"
+                                            title="Merge selected detections"
+                                        >
+                                            ⚡
+                                        </button>
+                                      )}
+                                    </div>
+                                     </>
+                                      )}
+                                   </div>
+                                 ))}
                                 
                                 {isDrawing && drawStart && drawCurrent && imageRef.current && (() => {
                                     const imageRect = imageRef.current.getBoundingClientRect();
