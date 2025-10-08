@@ -311,7 +311,7 @@
                 }
             };
 
-            javascriptconst performTemplateMatchingOnRegion = (inputImage, templateImage, region) => {
+            const performTemplateMatchingOnRegion = (inputImage, templateImage, region) => {
     if (!isOpenCvReady) return [];
     try {
         const src = cv.imread(inputImage);
