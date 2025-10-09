@@ -243,10 +243,15 @@
                 setDrawCurrent(coords);
             };
 
-            const handleImageMouseMove = (event) => {
-                if (!manualDetectionMode || !isDrawing) return;
+           const handleImageMouseMove = (event) => {
+                if (!manualDetectionMode) return;
+                if (!isDrawing) return;
+                
+                event.preventDefault(); // Prevent default drag behavior
                 const coords = getImageCoordinates(event);
-                if (coords) setDrawCurrent(coords);
+                if (coords) {
+                    setDrawCurrent(coords);
+                }
             };
 
             const handleImageMouseUp = (event) => {
@@ -1245,16 +1250,23 @@
 
                     {image && (
                         <div className="mb-6">
-                            <div className="canvas-container relative" ref={imageContainerRef}>
+                            <div className="canvas-container relative" ref={imageContainerRef}
+                                onMouseMove={handleImageMouseMove}
+                                onMouseUp={handleImageMouseUp}
+                                onMouseLeave={handleImageMouseUp}
+                            >
                                 <img
                                     ref={imageRef}
                                     src={image}
                                     alt="Uploaded inscription"
                                     className="max-w-full h-auto border border-gray-300 rounded"
                                     onMouseDown={handleImageMouseDown}
-                                    onMouseMove={handleImageMouseMove}
-                                    onMouseUp={handleImageMouseUp}
-                                    style={{ cursor: manualDetectionMode ? 'crosshair' : 'default' }}
+                                    style={{ 
+                                        cursor: manualDetectionMode ? 'crosshair' : 'default',
+                                        userSelect: 'none',
+                                        pointerEvents: 'auto'
+                                    }}
+                                    draggable={false}
                                 />
                                 
                                 {showRegionBoundaries && isolatedSymbols.map((region, index) => {
