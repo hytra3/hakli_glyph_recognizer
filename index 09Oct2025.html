@@ -97,9 +97,6 @@
             const [correctionMode, setCorrectionMode] = useState(null); // Index of detection being corrected, or null
             const [historyIndex, setHistoryIndex] = useState(-1);
             const [stateHistory, setStateHistory] = useState([]);
-            const [confidenceThreshold, setConfidenceThreshold] = useState(0);
-            const [useConfidenceFilter, setUseConfidenceFilter] = useState(false);
-
 
             const convertToGitHubUrl = (githubUrl) => {
                 if (!githubUrl) return null;
@@ -320,13 +317,6 @@
                 return sorted.map(item => item.result);
             };
 
-        const getFilteredResults = () => {
-                if (!useConfidenceFilter) {
-                    return recognitionResults;
-                }
-            return recognitionResults.filter(result => result.confidence >= confidenceThreshold / 100);
-         };   
-
         const getReadingOrderIndex = (detectionIndex) => {
             const orderedResults = getReadingOrderedResults();
                 return orderedResults.findIndex(result => 
@@ -374,12 +364,6 @@
             };
 
             const handleDragStart = (e, index) => {
-                // Prevent dragging in detection order mode
-                if (readingDirection === 'detection') {
-                    e.preventDefault();
-                    alert('⚠️ Cannot reorder in Detection Order mode.\n\nPlease select a reading direction (LTR, RTL, or TTB) to manually reorder symbols.');
-                    return;
-                }
                 setDraggedItem(index);
                 e.dataTransfer.effectAllowed = 'move';
             };
@@ -1132,7 +1116,6 @@
                                 <button onClick={recognizeSymbols} disabled={isProcessing || !equivalenceChart} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50">
                                     {isProcessing ? 'Processing...' : 'Recognize Symbols'}
                                 </button>
-
                                 <button onClick={() => setManualDetectionMode(!manualDetectionMode)} className={`px-4 py-2 rounded ${manualDetectionMode ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
                                     {manualDetectionMode ? 'Exit Manual Mode' : 'Manual Detection'}
                                 </button>
@@ -1141,64 +1124,10 @@
                                 </button>
                                 <span className="text-sm text-gray-600">{recognitionResults.length} detections</span>
                             </div>
-
-                            {recognitionResults.length > 0 && (
-                                <div className="mt-4 p-4 bg-white border-2 border-gray-300 rounded-lg">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-3">
-                                            <h4 className="font-semibold text-gray-900">Confidence Filter</h4>
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={useConfidenceFilter}
-                                                    onChange={(e) => setUseConfidenceFilter(e.target.checked)}
-                                                    className="w-4 h-4"
-                                                />
-                                                <span className="text-sm text-gray-700">Enable</span>
-                                            </label>
-                                        </div>
-                                        <div className="text-sm">
-                                            {useConfidenceFilter ? (
-                                                <span className="text-blue-600 font-semibold">
-                                                    Showing {getFilteredResults().length} of {recognitionResults.length} detections
-                                                    {recognitionResults.length - getFilteredResults().length > 0 && (
-                                                        <span className="text-gray-500 ml-2">
-                                                            ({recognitionResults.length - getFilteredResults().length} hidden)
-                                                        </span>
-                                                    )}
-                                                </span>
-                                            ) : (
-                                                <span className="text-gray-600">Showing all {recognitionResults.length} detections</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-4">
-                                        <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                                            Min Confidence: {confidenceThreshold}%
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="100"
-                                            value={confidenceThreshold}
-                                            onChange={(e) => setConfidenceThreshold(parseInt(e.target.value))}
-                                            disabled={!useConfidenceFilter}
-                                            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                            style={{
-                                                background: useConfidenceFilter 
-                                                    ? `linear-gradient(to right, #ef4444 0%, #f59e0b ${confidenceThreshold / 2}%, #10b981 ${confidenceThreshold}%, #e5e7eb ${confidenceThreshold}%, #e5e7eb 100%)`
-                                                    : '#e5e7eb'
-                                            }}
-                                        />
-                                        <span className="text-xs text-gray-500 whitespace-nowrap">
-                                            {confidenceThreshold < 40 && '🔴 Low'}
-                                            {confidenceThreshold >= 40 && confidenceThreshold < 70 && '🟡 Medium'}
-                                            {confidenceThreshold >= 70 && '🟢 High'}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
+                            
+                            <button onClick={() => setShowRegionBoundaries(!showRegionBoundaries)} className={`px-4 py-2 rounded ${showRegionBoundaries ? 'bg-purple-500 text-white hover:bg-purple-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+                                    Region Boundaries
+                                </button>
                                 <button 
                                     onClick={undo}
                                     disabled={historyIndex <= 0}
@@ -1272,10 +1201,8 @@
                                     );
                                 })}
                                 
-                                {getFilteredResults().map((detection) => {
-                                    const index = recognitionResults.indexOf(detection);
-                                    return (
-                                    <div key={`detection-${index}`} className={getDetectionBoxClass(index)} style={getDetectionBoxStyle(index)} onClick={(e) => handleDetectionClick(e, index)}>               
+                                {recognitionResults.map((detection, index) => (
+                                    <div key={`detection-${index}`} className={getDetectionBoxClass(index)} style={getDetectionBoxStyle(index)} onClick={(e) => handleDetectionClick(e, index)}>
                                         {viewMode === 'reading' && (
                                             <div className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-yellow-400 border-2 border-yellow-600 text-xs font-bold flex items-center justify-center shadow-lg" style={{ pointerEvents: 'none' }}>
                                                 {getReadingOrderIndex(index)}
@@ -1329,8 +1256,7 @@
                                         </>
                                     )}
                                     </div>
-                                );
-                                })}
+                                ))}
                                 
                                 {isDrawing && drawStart && drawCurrent && imageRef.current && (() => {
                                     const imageRect = imageRef.current.getBoundingClientRect();
@@ -1492,7 +1418,7 @@
                             </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {(viewMode === 'detection' ? getFilteredResults() : getReadingOrderedResults().filter(r => getFilteredResults().includes(r))).map((result, displayIndex) => {
+                        {(viewMode === 'detection' ? recognitionResults : getReadingOrderedResults()).map((result, displayIndex) => {
                             const originalIndex = viewMode === 'detection' ? displayIndex : recognitionResults.indexOf(result);
                             const readingOrderNum = viewMode === 'reading' ? displayIndex + 1 : null;
                             
