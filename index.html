@@ -899,22 +899,29 @@
             };
 
             useEffect(() => {
-            const handleKeyDown = (e) => {
-                // Undo: Ctrl+Z (or Cmd+Z on Mac)
-                if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-                    e.preventDefault();
-                    undo();
-                }
-                // Redo: Ctrl+Shift+Z or Ctrl+Y (or Cmd equivalents on Mac)
-                if ((e.ctrlKey || e.metaKey) && (e.shiftKey && e.key === 'z' || e.key === 'y')) {
-                    e.preventDefault();
-                    redo();
-                }
-            };
-                
+                const handleKeyDown = (e) => {
+                    // Escape: Close correction modal
+                    if (e.key === 'Escape' && correctionMode !== null) {
+                        e.preventDefault();
+                        cancelCorrection();
+                        return;
+                    }
+                    
+                    // Undo: Ctrl+Z (or Cmd+Z on Mac)
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                        e.preventDefault();
+                        undo();
+                    }
+                    // Redo: Ctrl+Shift+Z or Ctrl+Y (or Cmd equivalents on Mac)
+                    if ((e.ctrlKey || e.metaKey) && (e.shiftKey && e.key === 'z' || e.key === 'y')) {
+                        e.preventDefault();
+                        redo();
+                    }
+                };
+                    
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [historyIndex, stateHistory]);
+            }, [historyIndex, stateHistory, correctionMode]);
 
                         useEffect(() => {
                 if (chartLoadStatus === 'not-loaded') {
@@ -1201,9 +1208,12 @@
                                                 {getReadingOrderIndex(index)}
                                             </div>
                                         )}
-                                        <div className="absolute top-1 left-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded" style={{ pointerEvents: 'none' }}>
-                                            {detection.symbol.name}
+
+                                        <div className="absolute top-1 left-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded flex items-center gap-1" style={{ pointerEvents: 'none' }}>
+                                             {detection.corrected && <span title="Corrected symbol">✏️</span>}
+                                                <span>{detection.symbol.name}</span>
                                         </div>
+
                                         {selectedRegions.has(index) && (
                                         <>
                                             <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded" style={{ pointerEvents: 'none' }}>
@@ -1280,26 +1290,89 @@
                     )}
 
                     {correctionMode !== null && equivalenceChart && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={cancelCorrection}>
-                            <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={cancelCorrection}>
+                            <div className="bg-white rounded-lg p-6 max-w-5xl w-full max-h-[85vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-xl font-bold">Select Correct Symbol</h3>
-                                    <button onClick={cancelCorrection} className="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                                    <h3 className="text-2xl font-bold text-gray-900">Select Correct Symbol</h3>
+                                    <button 
+                                        onClick={cancelCorrection} 
+                                        className="text-gray-400 hover:text-gray-600 text-3xl leading-none w-8 h-8 flex items-center justify-center"
+                                        title="Close (Esc)"
+                                    >
+                                        &times;
+                                    </button>
                                 </div>
-                                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-                                    <span className="font-semibold">Currently detected as:</span> {recognitionResults[correctionMode].symbol.name}
+                                
+                                <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <span className="text-sm text-gray-600">Currently detected as:</span>
+                                            <div className="text-xl font-bold text-gray-900 mt-1">
+                                                {recognitionResults[correctionMode].symbol.name}
+                                                <span className="ml-3 text-base font-normal text-gray-600">
+                                                    ({recognitionResults[correctionMode].symbol.transliteration || recognitionResults[correctionMode].symbol.name})
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="text-sm text-gray-500">
+                                            {Math.round(recognitionResults[correctionMode].confidence * 100)}% confidence
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                                    {equivalenceChart.symbols.map((symbol) => (
-                                        <button
-                                            key={symbol.id}
-                                            onClick={() => applyCorrection(correctionMode, symbol)}
-                                            className="p-3 border-2 border-gray-300 rounded hover:border-blue-500 hover:bg-blue-50 flex flex-col items-center gap-2 transition-colors"
-                                        >
-                                            <div className="font-bold text-lg">{symbol.name}</div>
-                                            <div className="text-xs text-gray-600">{symbol.transliteration || symbol.name}</div>
-                                        </button>
-                                    ))}
+                                
+                                <div className="mb-4">
+                                    <input
+                                        type="text"
+                                        placeholder="Search symbols by name or transliteration..."
+                                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                                        onChange={(e) => {
+                                            const searchTerm = e.target.value.toLowerCase();
+                                            const symbolGrid = e.target.parentElement.nextElementSibling;
+                                            const buttons = symbolGrid.querySelectorAll('button');
+                                            buttons.forEach(btn => {
+                                                const text = btn.textContent.toLowerCase();
+                                                btn.style.display = text.includes(searchTerm) ? '' : 'none';
+                                            });
+                                        }}
+                                    />
+                                </div>
+                                
+                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                                    {equivalenceChart.symbols.map((symbol) => {
+                                        const isCurrentSymbol = symbol.id === recognitionResults[correctionMode].symbol.id;
+                                        return (
+                                            <button
+                                                key={symbol.id}
+                                                onClick={() => applyCorrection(correctionMode, symbol)}
+                                                className={`p-3 border-2 rounded-lg flex flex-col items-center gap-1 transition-all hover:scale-105 ${
+                                                    isCurrentSymbol 
+                                                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-300' 
+                                                        : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50'
+                                                }`}
+                                                title={`${symbol.name} (${symbol.transliteration || symbol.name})`}
+                                            >
+                                                <div className="font-bold text-xl">{symbol.name}</div>
+                                                <div className="text-xs text-gray-600 text-center leading-tight">
+                                                    {symbol.transliteration || symbol.name}
+                                                </div>
+                                                {isCurrentSymbol && (
+                                                    <div className="text-xs text-blue-600 font-semibold mt-1">Current</div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                
+                                <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between">
+                                    <div className="text-sm text-gray-500">
+                                        💡 Tip: You can also search symbols above to find them quickly
+                                    </div>
+                                    <button 
+                                        onClick={cancelCorrection}
+                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                                    >
+                                        Cancel
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1311,66 +1384,129 @@
                                 {viewMode === 'detection' ? 'Detection Results' : 'Reading Order Results'}
                                 {viewMode === 'reading' && <span className="ml-2 text-sm text-gray-600">(drag cards to reorder)</span>}
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {(viewMode === 'detection' ? recognitionResults : getReadingOrderedResults()).map((result, displayIndex) => {
-                                    const originalIndex = viewMode === 'detection' ? displayIndex : recognitionResults.indexOf(result);
-                                    const readingOrderNum = viewMode === 'reading' ? displayIndex + 1 : null;
-                                    
-                                    return (
-                                        <div 
-                                            key={`result-${originalIndex}`} 
-                                            className={`p-3 bg-white rounded border ${selectedRegions.has(originalIndex) ? 'ring-2 ring-amber-400' : ''} ${validations[originalIndex] ? (validations[originalIndex].isCorrect ? 'border-green-300' : 'border-red-300') : 'border-gray-200'} ${viewMode === 'reading' ? 'cursor-move' : ''}`}
-                                            draggable={viewMode === 'reading'}
-                                            onDragStart={(e) => viewMode === 'reading' && handleDragStart(e, displayIndex)}
-                                            onDragOver={(e) => viewMode === 'reading' && handleDragOver(e, displayIndex)}
-                                            onDrop={(e) => viewMode === 'reading' && handleDrop(e, displayIndex)}
-                                        >
-                                            <div className="flex items-start justify-between mb-2">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2">
-                                                        {viewMode === 'reading' && (
-                                                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-yellow-400 border-2 border-yellow-600 text-xs font-bold flex items-center justify-center">
-                                                                {readingOrderNum}
-                                                            </div>
-                                                        )}
-                                                        <div className="font-medium text-gray-900">
-                                                            {result.symbol.name}{result.isMerged ? ' (merged)' : ''}{result.isManual ? ' (manual)' : ''}
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-sm text-gray-600 mt-1">{result.symbol.transliteration || result.symbol.name}</div>
-                                                    <div className="text-xs text-gray-500">Confidence: {Math.round(result.confidence * 100)}%</div>
-                                                </div>
-                                                <button onClick={() => deleteDetection(originalIndex)} className="text-red-500 hover:text-red-700 text-sm ml-2">✕</button>
-                                            </div>
-                                            <div className="flex gap-2 flex-wrap">
-                                                <button 
-                                                    onClick={() => validateDetection(originalIndex, true)} 
-                                                    className={`px-3 py-1 text-xs rounded ${validations[originalIndex]?.isCorrect ? 'bg-green-500 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
-                                                >
-                                                    ✓ Correct
-                                                </button>
-                                                <button 
-                                                    onClick={() => validateDetection(originalIndex, false)} 
-                                                    className={`px-3 py-1 text-xs rounded ${validations[originalIndex] && !validations[originalIndex].isCorrect ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
-                                                >
-                                                    ✗ Incorrect
-                                                </button>
-                                                {viewMode === 'reading' && (
-                                                    <button 
-                                                        onClick={() => toggleWordBoundary(displayIndex)} 
-                                                        className={`px-3 py-1 text-xs rounded ${wordBoundaries.has(displayIndex) ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-                                                        title="Mark word boundary after this symbol"
-                                                    >
-                                                        | Word Break
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                            
+                            {/* Validation Statistics */}
+                            <div className="mb-4 flex flex-wrap gap-4 text-sm">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-gray-600">Total:</span>
+                                    <span className="font-semibold text-gray-900">{recognitionResults.length}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-green-600">✓ Validated Correct:</span>
+                                    <span className="font-semibold text-green-700">
+                                        {Object.values(validations).filter(v => v.isCorrect).length}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-red-600">✗ Validated Incorrect:</span>
+                                    <span className="font-semibold text-red-700">
+                                        {Object.values(validations).filter(v => !v.isCorrect).length}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-orange-600">✏️ Corrected:</span>
+                                    <span className="font-semibold text-orange-700">
+                                        {recognitionResults.filter(r => r.corrected).length}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-gray-600">Unvalidated:</span>
+                                    <span className="font-semibold text-gray-700">
+                                        {recognitionResults.length - Object.keys(validations).length}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {(viewMode === 'detection' ? recognitionResults : getReadingOrderedResults()).map((result, displayIndex) => {
+                            const originalIndex = viewMode === 'detection' ? displayIndex : recognitionResults.indexOf(result);
+                            const readingOrderNum = viewMode === 'reading' ? displayIndex + 1 : null;
+                            
+                            return (
+                                <div 
+                                    key={`result-${originalIndex}`} 
+                                    className={`p-3 bg-white rounded border ${selectedRegions.has(originalIndex) ? 'ring-2 ring-amber-400' : ''} ${validations[originalIndex] ? (validations[originalIndex].isCorrect ? 'border-green-300' : 'border-red-300') : 'border-gray-200'} ${viewMode === 'reading' ? 'cursor-move' : ''}`}
+                                    draggable={viewMode === 'reading'}
+                                    onDragStart={(e) => viewMode === 'reading' && handleDragStart(e, displayIndex)}
+                                    onDragOver={(e) => viewMode === 'reading' && handleDragOver(e, displayIndex)}
+                                    onDrop={(e) => viewMode === 'reading' && handleDrop(e, displayIndex)}
+                                >
+                                    <div className="flex items-start justify-between mb-2">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                {viewMode === 'reading' && (
+                                                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-yellow-400 border-2 border-yellow-600 text-xs font-bold flex items-center justify-center">
+                                                        {readingOrderNum}
+                                                    </div>
+                                                )}
+                                                <div className="flex-1">
+                                                    <div className="font-medium text-gray-900 flex items-center gap-2">
+                                                        {result.symbol.name}
+                                                        {result.corrected && (
+                                                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-300">
+                                                                ✏️ Corrected
+                                                            </span>
+                                                        )}
+                                                        {result.isMerged && <span className="text-xs text-gray-500">(merged)</span>}
+                                                        {result.isManual && <span className="text-xs text-gray-500">(manual)</span>}
+                                                    </div>
+                                                    {result.corrected && result.originalSymbol && (
+                                                        <div className="text-xs text-gray-500 mt-0.5">
+                                                            Originally: <span className="line-through">{result.originalSymbol.name}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="text-sm text-gray-600 mt-1">{result.symbol.transliteration || result.symbol.name}</div>
+                                            <div className="text-xs text-gray-500">Confidence: {Math.round(result.confidence * 100)}%</div>
+                                        </div>
+                                        <div className="flex gap-1">
+                                            <button 
+                                                onClick={() => startCorrection(originalIndex)} 
+                                                className="text-orange-500 hover:text-orange-700 text-sm"
+                                                title="Change symbol"
+                                            >
+                                                ✏️
+                                            </button>
+                                            <button 
+                                                onClick={() => deleteDetection(originalIndex)} 
+                                                className="text-red-500 hover:text-red-700 text-sm"
+                                                title="Delete detection"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 flex-wrap">
+                                        <button 
+                                            onClick={() => validateDetection(originalIndex, true)} 
+                                            className={`px-3 py-1 text-xs rounded ${validations[originalIndex]?.isCorrect ? 'bg-green-500 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                                        >
+                                            ✓ Correct
+                                        </button>
+                                        <button 
+                                            onClick={() => validateDetection(originalIndex, false)} 
+                                            className={`px-3 py-1 text-xs rounded ${validations[originalIndex] && !validations[originalIndex].isCorrect ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                        >
+                                            ✗ Incorrect
+                                        </button>
+                                        {viewMode === 'reading' && (
+                                            <button 
+                                                onClick={() => toggleWordBoundary(displayIndex)} 
+                                                className={`px-3 py-1 text-xs rounded ${wordBoundaries.has(displayIndex) ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                                title="Mark word boundary after this symbol"
+                                            >
+                                                | Word Break
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    </div>
                     )}
+
 
                     {viewMode === 'reading' && recognitionResults.length > 0 && (
                         <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
@@ -1404,9 +1540,10 @@
                                     ))}
                                 </div>
                             </div>
+
                             <div className="mt-3 text-xs text-gray-600">
-                   dir             <span className="text-blue-600 font-bold">|</span> = word boundary · 
-                                <span className="text-gray-400">·</span> = symbol separator
+                                <span className="text-blue-600 font-bold">|</span> = word boundary &middot; 
+                                <span className="text-gray-400">&middot;</span> = symbol separator
                             </div>
                         </div>
                     )}
