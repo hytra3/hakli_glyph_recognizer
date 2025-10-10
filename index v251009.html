@@ -178,11 +178,7 @@
                     index: detectionIndex,
                     detection: recognitionResults[detectionIndex]
                 });
-
-                // Update recognition results
                 setRecognitionResults(prev => prev.filter((_, i) => i !== detectionIndex));
-
-                // Update validations with shifted indices
                 setValidations(prev => {
                     const newValidations = { ...prev };
                     delete newValidations[detectionIndex];
@@ -193,21 +189,6 @@
                     });
                     return shifted;
                 });
-
-                // Update selected regions - remove deleted index and shift others
-                setSelectedRegions(prev => {
-                    const newSet = new Set();
-                    prev.forEach(idx => {
-                        if (idx !== detectionIndex) {
-                            // Shift down indices that come after the deleted one
-                            newSet.add(idx > detectionIndex ? idx - 1 : idx);
-                        }
-                    });
-                    return newSet;
-                });
-
-                // Clear merge indicator if it existed
-                setMergeIndicator(null);
             };
 
             const mergeSelectedDetections = () => {
@@ -485,25 +466,6 @@
                     src.delete(); gray.delete(); binary.delete(); morphKernel.delete(); processed.delete();
                     contours.delete(); hierarchy.delete();
                     return isolatedRegions;
-                    const extractRegionThumbnail = (inputImage, region) => {
-                        try {
-                            const canvas = document.createElement('canvas');
-                            const ctx = canvas.getContext('2d');
-                            canvas.width = region.bounds.width;
-                            canvas.height = region.bounds.height;
-
-                            ctx.drawImage(
-                                inputImage,
-                                region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height,
-                                0, 0, region.bounds.width, region.bounds.height
-                            );
-
-                            return canvas.toDataURL();
-                        } catch (error) {
-                            console.error('Thumbnail extraction error:', error);
-                            return null;
-                        }
-                    };
                 } catch (error) {
                     console.error('Symbol isolation error:', error);
                     return [];
@@ -820,11 +782,7 @@
                     const tempImg = new Image();
                     tempImg.onload = () => {
                         const isolated = isolateSymbols(tempImg);
-                        const isolatedWithThumbnails = isolated.map(region => ({
-                            ...region,
-                            thumbnail: extractRegionThumbnail(tempImg, region)
-                        }));
-                        setIsolatedSymbols(isolatedWithThumbnails);
+                        setIsolatedSymbols(isolated);
                         console.log('Isolated', isolated.length, 'regions');
                         if (isolated.length === 0) {
                             console.log('No regions found - check image contrast and size');
@@ -1186,14 +1144,6 @@
                                 <button onClick={() => setShowRegionBoundaries(!showRegionBoundaries)} className={`px-4 py-2 rounded ${showRegionBoundaries ? 'bg-purple-500 text-white hover:bg-purple-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
                                     Region Boundaries
                                 </button>
-                                {isolatedSymbols.length > 0 && (
-                                    <button
-                                        onClick={() => setShowRegionBoundaries(!showRegionBoundaries)}
-                                        className="px-4 py-2 bg-teal-500 text-white rounded hover:bg-teal-600"
-                                    >
-                                        {showRegionBoundaries ? 'Hide' : 'Show'} Isolated Regions ({isolatedSymbols.length})
-                                    </button>
-                                )}
                                 <span className="text-sm text-gray-600">{recognitionResults.length} detections</span>
                             </div>
 
@@ -1424,22 +1374,6 @@
                             </div>
                         </div>
                     )}
-                        {isolatedSymbols.length > 0 && showRegionBoundaries && (
-                            <div className="mt-4 p-4 bg-gray-50 border-2 border-teal-300 rounded-lg">
-                                <h4 className="font-semibold text-gray-900 mb-3">Isolated Symbol Regions ({isolatedSymbols.length})</h4>
-                                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
-                                    {isolatedSymbols.map((region, index) => (
-                                        <div key={`thumb-${index}`} className="flex flex-col items-center p-2 bg-white border border-gray-300 rounded">
-                                            {region.thumbnail && (
-                                                <img src={region.thumbnail} alt={`Region ${index}`} className="w-full h-auto border border-gray-200" />
-                                            )}
-                                            <div className="text-xs text-gray-600 mt-1">#{index + 1}</div>
-                                            <div className="text-xs text-gray-500">{region.bounds.width}×{region.bounds.height}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
 
                     {correctionMode !== null && equivalenceChart && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={cancelCorrection}>
