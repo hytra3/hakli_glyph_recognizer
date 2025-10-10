@@ -776,18 +776,12 @@
             };
 
             const applyCorrection = (detectionIndex, newSymbol) => {
-                const oldSymbol = recognitionResults[detectionIndex].symbol;
-                const confidence = recognitionResults[detectionIndex].confidence;
-
                 recordAction('correct_symbol', {
                     detectionIndex: detectionIndex,
-                    oldSymbol: oldSymbol,
+                    oldSymbol: recognitionResults[detectionIndex].symbol,
                     newSymbol: newSymbol
                 });
-
-                // Save to correction memory
-                saveCorrectionToMemory(oldSymbol, newSymbol, confidence);
-
+                
                 setRecognitionResults(prev => prev.map((result, index) => {
                     if (index === detectionIndex) {
                         return {
@@ -799,123 +793,12 @@
                     }
                     return result;
                 }));
-
+                
                 setCorrectionMode(null);
             };
 
             const cancelCorrection = () => {
                 setCorrectionMode(null);
-            };
-
-            // Correction Memory Functions
-            const saveCorrectionToMemory = (originalSymbol, correctedSymbol, confidence) => {
-                try {
-                    const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
-                    const key = originalSymbol.id;
-
-                    if (!corrections[key]) {
-                        corrections[key] = {
-                            originalSymbol: originalSymbol,
-                            corrections: []
-                        };
-                    }
-
-                    // Find if this correction already exists
-                    const existingIndex = corrections[key].corrections.findIndex(c => c.to.id === correctedSymbol.id);
-
-                    if (existingIndex >= 0) {
-                        corrections[key].corrections[existingIndex].count++;
-                        corrections[key].corrections[existingIndex].lastUsed = new Date().toISOString();
-                    } else {
-                        corrections[key].corrections.push({
-                            to: correctedSymbol,
-                            count: 1,
-                            firstUsed: new Date().toISOString(),
-                            lastUsed: new Date().toISOString(),
-                            avgConfidence: confidence
-                        });
-                    }
-
-                    localStorage.setItem('hakliCorrections', JSON.stringify(corrections));
-                    console.log('Correction saved to memory:', originalSymbol.name, '→', correctedSymbol.name);
-                } catch (error) {
-                    console.error('Failed to save correction:', error);
-                }
-            };
-
-            const getCorrectionSuggestion = (symbolId) => {
-                try {
-                    const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
-                    if (corrections[symbolId] && corrections[symbolId].corrections.length > 0) {
-                        // Return most frequently used correction
-                        const sorted = [...corrections[symbolId].corrections].sort((a, b) => b.count - a.count);
-                        return sorted[0];
-                    }
-                    return null;
-                } catch (error) {
-                    console.error('Failed to get correction suggestion:', error);
-                    return null;
-                }
-            };
-
-            const exportCorrectionMemory = () => {
-                try {
-                    const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
-                    const exportData = {
-                        version: '1.0',
-                        exportDate: new Date().toISOString(),
-                        corrections: corrections,
-                        stats: {
-                            totalSymbols: Object.keys(corrections).length,
-                            totalCorrections: Object.values(corrections).reduce((sum, c) => sum + c.corrections.reduce((s, cor) => s + cor.count, 0), 0)
-                        }
-                    };
-
-                    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `hakli_corrections_${new Date().toISOString().slice(0, 10)}.json`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-
-                    alert(`Exported ${exportData.stats.totalCorrections} corrections for ${exportData.stats.totalSymbols} symbols!`);
-                } catch (error) {
-                    console.error('Export failed:', error);
-                    alert('Failed to export corrections');
-                }
-            };
-
-            const importCorrectionMemory = (jsonData) => {
-                try {
-                    const imported = JSON.parse(jsonData);
-                    const existing = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
-
-                    // Merge imported with existing
-                    Object.keys(imported.corrections).forEach(key => {
-                        if (existing[key]) {
-                            // Merge correction counts
-                            imported.corrections[key].corrections.forEach(importedCorr => {
-                                const existingCorr = existing[key].corrections.find(c => c.to.id === importedCorr.to.id);
-                                if (existingCorr) {
-                                    existingCorr.count += importedCorr.count;
-                                } else {
-                                    existing[key].corrections.push(importedCorr);
-                                }
-                            });
-                        } else {
-                            existing[key] = imported.corrections[key];
-                        }
-                    });
-
-                    localStorage.setItem('hakliCorrections', JSON.stringify(existing));
-                    alert(`Imported corrections successfully! Total symbols in memory: ${Object.keys(existing).length}`);
-                } catch (error) {
-                    console.error('Import failed:', error);
-                    alert('Failed to import corrections - invalid file format');
-                }
             };
             
             const undo = () => {
@@ -1639,31 +1522,6 @@
                                     />
                                 </div>
                                 
-                                {(() => {
-                                    const suggestion = getCorrectionSuggestion(recognitionResults[correctionMode].symbol.id);
-                                    if (suggestion) {
-                                        return (
-                                            <div className="mb-4 p-3 bg-green-50 border-2 border-green-300 rounded-lg">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-green-700 font-semibold">💡 Suggestion:</span>
-                                                        <span className="text-gray-700">
-                                                            You've corrected this to <strong>{suggestion.to.name}</strong> {suggestion.count} time{suggestion.count > 1 ? 's' : ''} before
-                                                        </span>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => applyCorrection(correctionMode, suggestion.to)}
-                                                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold"
-                                                    >
-                                                        Apply Suggestion
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                })()}
-
                                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                                     {equivalenceChart.symbols.map((symbol) => {
                                         const isCurrentSymbol = symbol.id === recognitionResults[correctionMode].symbol.id;
@@ -1919,12 +1777,6 @@
                                         📝 Export Transcription (TXT)
                                     </button>
                                 )}
-                                <button
-                                    onClick={exportCorrectionMemory}
-                                    className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 flex items-center gap-2"
-                                >
-                                    🧠 Export Correction Memory
-                                </button>
                             </div>
                             <div className="mt-3 text-xs text-gray-600">
                                 Export your work in different formats: JSON for data analysis, annotated images for presentations, or plain text transcriptions.
