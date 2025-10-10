@@ -509,6 +509,26 @@
                     return [];
                 }
             };
+
+              const extractRegionThumbnail = (inputImage, region) => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = region.bounds.width;
+                    canvas.height = region.bounds.height;
+
+                    ctx.drawImage(
+                        inputImage,
+                        region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height,
+                        0, 0, region.bounds.width, region.bounds.height
+                    );
+
+                    return canvas.toDataURL();
+                } catch (error) {
+                    console.error('Thumbnail extraction error:', error);
+                    return null;
+                }
+            };
             
             const performTemplateMatchingOnRegion = (inputImage, templateImage, region) => {
                 if (!isOpenCvReady) return [];
