@@ -428,7 +428,7 @@
     },
     {
       "id": 37,
-      "name": "ẓ)",
+      "name": "ẓ",
       "arabic": "x",
            "images": 
         {
@@ -442,6 +442,22 @@
           ]
         },
       "description": "description"
+    },
+    {
+      "id": 37,
+      "name": "?",
+      "arabic": "؟",
+      "images": {
+        "primary": "symbols/z-dot_00.png",
+        "variants": [
+          "symbols/z-dot_01.png"
+        ],
+        "examples": [
+          "examples/KMD_28-31.png",
+          "examples/KMG_120-126.png"
+        ]
+      },
+      "description": "unknown"
     }
   ]
 }
