@@ -1076,6 +1076,31 @@
                 }
             };
 
+            const getDetectionBoxStyle = (index) => {
+                const detection = recognitionResults[index];
+                if (!detection || !imageRef.current) return {};
+                const imageRect = imageRef.current.getBoundingClientRect();
+                const scaleX = imageRect.width / imageRef.current.naturalWidth;
+                const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                return {
+                    left: detection.position.x * scaleX + 'px',
+                    top: detection.position.y * scaleY + 'px',
+                    width: detection.position.width * scaleX + 'px',
+                    height: detection.position.height * scaleY + 'px'
+                };
+            };
+
+            const getDetectionBoxClass = (index) => {
+                let classes = ['detection-box'];
+                if (validations[index]) {
+                    classes.push(validations[index].isCorrect ? 'validated-correct' : 'validated-incorrect');
+                } else {
+                    classes.push('unvalidated');
+                }
+                if (selectedRegions.has(index)) classes.push('selected');
+                return classes.join(' ');
+            };
+
             // Cloud Sync Functions using GitHub Gist
             const uploadCorrectionsToCloud = async () => {
                 try {
@@ -1200,38 +1225,28 @@
             };
 
             const showCloudSyncDialog = () => {
-                const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
-                const [cloudSyncAction, setCloudSyncAction] = useState(null); // 'upload' or 'download'
-                const [customGistUrl, setCustomGistUrl] = useState('');
+                const lastGistUrl = localStorage.getItem('hakliLastGistUrl');
 
-                // Add this constant at the top of your component (around line 70)
-                const MASTER_GIST_URL = 'https://gist.github.com/hytra3/YOUR_MASTER_GIST_ID'; // You'll update this after first upload
-                const MASTER_GIST_RAW_URL = 'https://gist.githubusercontent.com/hytra3/YOUR_MASTER_GIST_ID/raw/hakli_corrections.json';
-            };
+                let message = '☁️ Cloud Sync Options:\n\n';
+                message += '1. Upload your corrections to share with community\n';
+                message += '2. Download community corrections to improve recognition\n\n';
 
-            const getDetectionBoxStyle = (index) => {
-                const detection = recognitionResults[index];
-                if (!detection || !imageRef.current) return {};
-                const imageRect = imageRef.current.getBoundingClientRect();
-                const scaleX = imageRect.width / imageRef.current.naturalWidth;
-                const scaleY = imageRect.height / imageRef.current.naturalHeight;
-                return {
-                    left: detection.position.x * scaleX + 'px',
-                    top: detection.position.y * scaleY + 'px',
-                    width: detection.position.width * scaleX + 'px',
-                    height: detection.position.height * scaleY + 'px'
-                };
-            };
-
-            const getDetectionBoxClass = (index) => {
-                let classes = ['detection-box'];
-                if (validations[index]) {
-                    classes.push(validations[index].isCorrect ? 'validated-correct' : 'validated-incorrect');
-                } else {
-                    classes.push('unvalidated');
+                if (lastGistUrl) {
+                    message += `Your last upload:\n${lastGistUrl}\n\n`;
                 }
-                if (selectedRegions.has(index)) classes.push('selected');
-                return classes.join(' ');
+
+                const action = prompt(message + 'Enter:\n"upload" to share your corrections\n"download" to get community corrections\n"url" to see your last upload URL');
+
+                if (action === 'upload') {
+                    uploadCorrectionsToCloud();
+                } else if (action === 'download') {
+                    const gistUrl = prompt('Enter the Gist URL or Raw URL to download corrections from:');
+                    if (gistUrl) {
+                        downloadCorrectionsFromCloud(gistUrl);
+                    }
+                } else if (action === 'url' && lastGistUrl) {
+                    alert(`Your last upload URL:\n${lastGistUrl}`);
+                }
             };
 
             useEffect(() => {
@@ -2053,12 +2068,6 @@
                                         📥 Export Memory
                                     </button>
                                     <button
-                                        onClick={() => setShowCloudSyncModal(true)}
-                                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                        >
-                                        ☁️ Cloud Sync
-                                    </button>
-                                    <button
                                         onClick={() => {
                                             if (confirm('Clear all correction memory? This cannot be undone.')) {
                                                 localStorage.removeItem('hakliCorrections');
@@ -2111,111 +2120,7 @@
                             </div>
                         </div>
                     )}
-                    
-                    {showCloudSyncModal && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowCloudSyncModal(false)}>
-                            <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-2xl font-bold text-gray-900">☁️ Cloud Sync</h3>
-                                    <button
-                                        onClick={() => setShowCloudSyncModal(false)}
-                                        className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
-                                    >
-                                        &times;
-                                    </button>
-                                </div>
 
-                                <div className="space-y-4">
-                                    {/* Download from Master */}
-                                    <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
-                                        <h4 className="font-semibold text-blue-900 mb-2">📥 Download Community Corrections</h4>
-                                        <p className="text-sm text-gray-700 mb-3">
-                                            Get the latest corrections from the community master collection
-                                        </p>
-                                        <button
-                                            onClick={async () => {
-                                                setShowCloudSyncModal(false);
-                                                await downloadCorrectionsFromCloud(MASTER_GIST_RAW_URL);
-                                            }}
-                                            className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold"
-                                        >
-                                            Download from Master Collection
-                                        </button>
-                                    </div>
-
-                                    {/* Download from Custom URL */}
-                                    <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-lg">
-                                        <h4 className="font-semibold text-gray-900 mb-2">🔗 Download from Custom URL</h4>
-                                        <p className="text-sm text-gray-700 mb-3">
-                                            Import corrections from a specific Gist URL
-                                        </p>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                placeholder="Paste Gist URL here..."
-                                                value={customGistUrl}
-                                                onChange={(e) => setCustomGistUrl(e.target.value)}
-                                                className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
-                                            />
-                                            <button
-                                                onClick={async () => {
-                                                    if (customGistUrl) {
-                                                        setShowCloudSyncModal(false);
-                                                        await downloadCorrectionsFromCloud(customGistUrl);
-                                                        setCustomGistUrl('');
-                                                    }
-                                                }}
-                                                disabled={!customGistUrl}
-                                                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                                Download
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Upload Your Corrections */}
-                                    <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
-                                        <h4 className="font-semibold text-green-900 mb-2">📤 Share Your Corrections</h4>
-                                        <p className="text-sm text-gray-700 mb-3">
-                                            Upload your corrections to create a shareable Gist URL
-                                        </p>
-                                        <button
-                                            onClick={async () => {
-                                                setShowCloudSyncModal(false);
-                                                await uploadCorrectionsToCloud();
-                                            }}
-                                            className="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold"
-                                        >
-                                            Upload My Corrections
-                                        </button>
-                                        {localStorage.getItem('hakliLastGistUrl') && (
-                                            <div className="mt-3 p-2 bg-white rounded border border-green-300">
-                                                <p className="text-xs text-gray-600">Your last upload:</p>
-                                                <a
-                                                    href={localStorage.getItem('hakliLastGistUrl')}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-xs text-blue-600 hover:underline break-all"
-                                                >
-                                                    {localStorage.getItem('hakliLastGistUrl')}
-                                                </a>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="mt-4 pt-4 border-t border-gray-200">
-                                    <button
-                                        onClick={() => setShowCloudSyncModal(false)}
-                                        className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-                                    >
-                                        Close
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    
                 </div>
             );
         }
