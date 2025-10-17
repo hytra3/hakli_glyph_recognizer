@@ -102,8 +102,8 @@
             const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
             const [customGistUrl, setCustomGistUrl] = useState('');
 
-            const MASTER_BIN_URL = ''; // Will update after first upload
-            const MASTER_BIN_RAW_URL = ''; // Will update after first upload
+            const MASTER_PASTE_URL = ''; // Will update after first upload
+            const MASTER_PASTE_RAW_URL = ''; // Will update after first upload
 
             const convertToGitHubUrl = (githubUrl) => {
                 if (!githubUrl) return null;
@@ -1200,37 +1200,6 @@
                 }
             };
 
-                localStorage.setItem('hakliCorrections', JSON.stringify(existing));
-
-                alert(`✅ Cloud corrections imported!\n\n` +
-                    `${newCorrections} new corrections added\n` +
-                    `${updatedCorrections} existing corrections updated\n\n` +
-                    `Total symbols in memory: ${Object.keys(existing).length}`);
-
-                recordAction('download_from_cloud', {
-                    source: url,
-                    newCorrections,
-                    updatedCorrections
-                });
-
-                return { newCorrections, updatedCorrections };
-                } catch (error) {
-                    console.error('Download from cloud failed:', error);
-                    alert('❌ Failed to download corrections from cloud. Check the URL and try again.');
-                    return null;
-                }
-            };
-
-            const showCloudSyncDialog = () => {
-                const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
-                const [cloudSyncAction, setCloudSyncAction] = useState(null); // 'upload' or 'download'
-                const [customGistUrl, setCustomGistUrl] = useState('');
-
-                // Add this constant at the top of your component (around line 70)
-                const MASTER_GIST_URL = 'https://gist.github.com/hytra3/YOUR_MASTER_GIST_ID'; // You'll update this after first upload
-                const MASTER_GIST_RAW_URL = 'https://gist.githubusercontent.com/hytra3/YOUR_MASTER_GIST_ID/raw/hakli_corrections.json';
-            };
-
             const getDetectionBoxStyle = (index) => {
                 const detection = recognitionResults[index];
                 if (!detection || !imageRef.current) return {};
@@ -2157,7 +2126,7 @@
                                         <button
                                             onClick={async () => {
                                                 setShowCloudSyncModal(false);
-                                                await downloadCorrectionsFromCloud(MASTER_GIST_RAW_URL);
+                                                await downloadCorrectionsFromCloud(MASTER_PASTE_RAW_URL);
                                             }}
                                             className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold"
                                         >
@@ -2210,16 +2179,16 @@
                                         >
                                             Upload My Corrections
                                         </button>
-                                        {localStorage.getItem('hakliLastGistUrl') && (
+                                        {localStorage.getItem('hakliLastPasteUrl') && (
                                             <div className="mt-3 p-2 bg-white rounded border border-green-300">
                                                 <p className="text-xs text-gray-600">Your last upload:</p>
                                                 <a
-                                                    href={localStorage.getItem('hakliLastBinUrl')}
+                                                    href={localStorage.getItem('hakliLastPasteUrl')}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="text-xs text-blue-600 hover:underline break-all"
                                                 >
-                                                    {localStorage.getItem('hakliLastBinUrl')}
+                                                    {localStorage.getItem('hakliLastPasteUrl')}
                                                 </a>
                                             </div>
                                         )}
