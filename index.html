@@ -104,7 +104,7 @@
 
             const MASTER_BIN_URL = ''; // Will update after first upload
             const MASTER_BIN_RAW_URL = ''; // Will update after first upload
-            
+
             const convertToGitHubUrl = (githubUrl) => {
                 if (!githubUrl) return null;
                 if (githubUrl.indexOf('http') === 0) {
@@ -1080,7 +1080,7 @@
                 }
             };
 
-            // Cloud Sync Functions using JSONbin.io
+            // Cloud Sync Functions using Pastebin
             const uploadCorrectionsToCloud = async () => {
                 try {
                     const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
@@ -1096,31 +1096,42 @@
                         source: 'hakli-recognizer-community'
                     };
 
-                    // Use JSONBin.io - free, no auth required for public bins
-                    const response = await fetch('https://api.jsonbin.io/v3/b', {
+                    // Use Pastebin - anonymous posting allowed
+                    const formData = new URLSearchParams();
+                    formData.append('api_dev_key', '1hVHahr7-FJJrx2o8_4gPQk7jTGcMail'); // Public dev key for anonymous pastes
+                    formData.append('api_option', 'paste');
+                    formData.append('api_paste_code', JSON.stringify(exportData, null, 2));
+                    formData.append('api_paste_name', `Hakli Corrections ${new Date().toLocaleDateString()}`);
+                    formData.append('api_paste_expire_date', 'N'); // Never expire
+                    formData.append('api_paste_private', '1'); // Unlisted (not completely public)
+                    formData.append('api_paste_format', 'json');
+
+                    const response = await fetch('https://pastebin.com/api/api_post.php', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Bin-Name': `hakli_corrections_${new Date().toISOString().slice(0, 10)}`
-                        },
-                        body: JSON.stringify(exportData)
+                        body: formData
                     });
 
                     if (!response.ok) throw new Error('Failed to upload to cloud');
 
-                    const result = await response.json();
-                    const binUrl = `https://jsonbin.io/${result.metadata.id}`;
-                    const rawUrl = `https://api.jsonbin.io/v3/b/${result.metadata.id}/latest`;
+                    const pasteUrl = await response.text();
+
+                    if (pasteUrl.includes('Bad API request')) {
+                        throw new Error(pasteUrl);
+                    }
+
+                    // Convert to raw URL
+                    const pasteId = pasteUrl.split('/').pop();
+                    const rawUrl = `https://pastebin.com/raw/${pasteId}`;
 
                     // Store the URLs for future reference
-                    localStorage.setItem('hakliLastBinUrl', binUrl);
-                    localStorage.setItem('hakliLastBinRawUrl', rawUrl);
+                    localStorage.setItem('hakliLastPasteUrl', pasteUrl);
+                    localStorage.setItem('hakliLastPasteRawUrl', rawUrl);
 
-                    alert(`✅ Corrections uploaded to cloud!\n\nShare this URL with others:\n${binUrl}\n\nRaw data URL (for importing):\n${rawUrl}`);
+                    alert(`✅ Corrections uploaded to cloud!\n\nShare this URL with others:\n${pasteUrl}\n\nRaw data URL (for importing):\n${rawUrl}`);
 
-                    recordAction('upload_to_cloud', { binUrl, rawUrl, stats: exportData.stats });
+                    recordAction('upload_to_cloud', { pasteUrl, rawUrl, stats: exportData.stats });
 
-                    return { binUrl, rawUrl };
+                    return { pasteUrl, rawUrl };
                 } catch (error) {
                     console.error('Upload to cloud failed:', error);
                     alert('❌ Failed to upload corrections to cloud. Check console for details.');
@@ -1130,23 +1141,19 @@
 
             const downloadCorrectionsFromCloud = async (url) => {
                 try {
-                    // Handle different URL formats
+                    // Convert Pastebin URL to raw if needed
                     let rawUrl = url;
 
-                    if (url.includes('jsonbin.io')) {
-                        // Extract bin ID and construct API URL
-                        const binId = url.split('/').pop();
-                        rawUrl = `https://api.jsonbin.io/v3/b/${binId}/latest`;
+                    if (url.includes('pastebin.com') && !url.includes('/raw/')) {
+                        const pasteId = url.split('/').pop();
+                        rawUrl = `https://pastebin.com/raw/${pasteId}`;
                     }
 
                     // Fetch the corrections data
                     const response = await fetch(rawUrl);
                     if (!response.ok) throw new Error('Failed to download corrections');
 
-                    const responseData = await response.json();
-
-                    // JSONBin wraps data in a 'record' field
-                    const cloudData = responseData.record || responseData;
+                    const cloudData = await response.json();
 
                     // Merge with existing corrections
                     const existing = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
@@ -1186,6 +1193,27 @@
                     });
 
                     return { newCorrections, updatedCorrections };
+                } catch (error) {
+                    console.error('Download from cloud failed:', error);
+                    alert('❌ Failed to download corrections from cloud. Check the URL and try again.');
+                    return null;
+                }
+            };
+
+                localStorage.setItem('hakliCorrections', JSON.stringify(existing));
+
+                alert(`✅ Cloud corrections imported!\n\n` +
+                    `${newCorrections} new corrections added\n` +
+                    `${updatedCorrections} existing corrections updated\n\n` +
+                    `Total symbols in memory: ${Object.keys(existing).length}`);
+
+                recordAction('download_from_cloud', {
+                    source: url,
+                    newCorrections,
+                    updatedCorrections
+                });
+
+                return { newCorrections, updatedCorrections };
                 } catch (error) {
                     console.error('Download from cloud failed:', error);
                     alert('❌ Failed to download corrections from cloud. Check the URL and try again.');
