@@ -1665,11 +1665,11 @@
                                 })()}
 
                                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                                    {equivalenceChart.symbols.map((symbol) => {
+                                    {equivalenceChart.symbols.map((symbol, index) => {
                                         const isCurrentSymbol = symbol.id === recognitionResults[correctionMode].symbol.id;
                                         return (
                                             <button
-                                                key={symbol.id}
+                                                key={`symbol-${symbol.id}-${index}`}
                                                 onClick={() => applyCorrection(correctionMode, symbol)}
                                                 className={`p-3 border-2 rounded-lg flex flex-col items-center gap-1 transition-all hover:scale-105 ${
                                                     isCurrentSymbol 
