@@ -99,7 +99,12 @@
             const [stateHistory, setStateHistory] = useState([]);
             const [confidenceThreshold, setConfidenceThreshold] = useState(0);
             const [useConfidenceFilter, setUseConfidenceFilter] = useState(false);
+            const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
+            const [customGistUrl, setCustomGistUrl] = useState('');
 
+            // Also add these constants
+            const MASTER_GIST_URL = 'https://gist.github.com/hytra3/YOUR_MASTER_GIST_ID';
+            const MASTER_GIST_RAW_URL = 'https://gist.githubusercontent.com/hytra3/YOUR_MASTER_GIST_ID/raw/hakli_corrections.json';
 
             const convertToGitHubUrl = (githubUrl) => {
                 if (!githubUrl) return null;
@@ -2215,7 +2220,7 @@
                             </div>
                         </div>
                     )}
-                    
+
                 </div>
             );
         }
