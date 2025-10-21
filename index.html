@@ -453,25 +453,55 @@
                     const src = cv.imread(inputImage);
                     const gray = new cv.Mat();
                     const binary = new cv.Mat();
-                    const morphKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(2, 2));
+                    const denoised = new cv.Mat();
                     const processed = new cv.Mat();
+
+                    // Convert to grayscale
                     if (src.channels() > 1) {
                         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
                     } else {
-                        gray = src.clone();
+                        src.copyTo(gray);
                     }
+
+                    // Adaptive thresholding
                     cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
-                    cv.morphologyEx(binary, processed, cv.MORPH_CLOSE, morphKernel);
+
+                    // Remove noise with opening (erosion then dilation)
+                    const smallKernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(2, 2));
+                    cv.morphologyEx(binary, denoised, cv.MORPH_OPEN, smallKernel);
+
+                    // Connect broken strokes with closing (dilation then erosion)
+                    const largeKernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
+                    cv.morphologyEx(denoised, processed, cv.MORPH_CLOSE, largeKernel);
+
+                    // Find contours
                     const contours = new cv.MatVector();
                     const hierarchy = new cv.Mat();
                     cv.findContours(processed, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
                     const isolatedRegions = [];
+
+                    // Calculate dynamic thresholds based on image size
+                    const imageArea = src.rows * src.cols;
+                    const minArea = imageArea * 0.0001; // 0.01% of image
+                    const maxArea = imageArea * 0.05;   // 5% of image
+
                     for (let i = 0; i < contours.size(); i++) {
                         const contour = contours.get(i);
                         const boundingRect = cv.boundingRect(contour);
                         const area = boundingRect.width * boundingRect.height;
                         const aspectRatio = boundingRect.width / boundingRect.height;
-                        if (area >= 100 && area <= 10000 && aspectRatio >= 0.2 && aspectRatio <= 5.0) {
+
+                        // Calculate solidity (ratio of contour area to bounding box area)
+                        const contourArea = cv.contourArea(contour);
+                        const solidity = contourArea / area;
+
+                        // Filter criteria
+                        const sizeOk = area >= minArea && area <= maxArea;
+                        const aspectOk = aspectRatio >= 0.2 && aspectRatio <= 5.0;
+                        const solidityOk = solidity >= 0.3; // Reject very sparse/noisy regions
+
+                        if (sizeOk && aspectOk && solidityOk) {
                             const padding = 5;
                             isolatedRegions.push({
                                 bounds: {
@@ -481,33 +511,33 @@
                                     height: Math.min(src.rows - boundingRect.y + padding, boundingRect.height + 2 * padding)
                                 },
                                 area,
-                                aspectRatio
+                                aspectRatio,
+                                solidity
                             });
                         }
                     }
-                    isolatedRegions.sort((a, b) => a.bounds.x - b.bounds.x);
-                    src.delete(); gray.delete(); binary.delete(); morphKernel.delete(); processed.delete();
-                    contours.delete(); hierarchy.delete();
+
+                    // Sort by position (left to right, top to bottom)
+                    isolatedRegions.sort((a, b) => {
+                        const rowDiff = a.bounds.y - b.bounds.y;
+                        if (Math.abs(rowDiff) > 20) return rowDiff; // Different rows
+                        return a.bounds.x - b.bounds.x; // Same row, sort by x
+                    });
+
+                    console.log(`Isolated ${isolatedRegions.length} regions (min area: ${minArea.toFixed(0)}, max area: ${maxArea.toFixed(0)})`);
+
+                    // Cleanup
+                    src.delete();
+                    gray.delete();
+                    binary.delete();
+                    denoised.delete();
+                    processed.delete();
+                    smallKernel.delete();
+                    largeKernel.delete();
+                    contours.delete();
+                    hierarchy.delete();
+
                     return isolatedRegions;
-                    const extractRegionThumbnail = (inputImage, region) => {
-                        try {
-                            const canvas = document.createElement('canvas');
-                            const ctx = canvas.getContext('2d');
-                            canvas.width = region.bounds.width;
-                            canvas.height = region.bounds.height;
-
-                            ctx.drawImage(
-                                inputImage,
-                                region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height,
-                                0, 0, region.bounds.width, region.bounds.height
-                            );
-
-                            return canvas.toDataURL();
-                        } catch (error) {
-                            console.error('Thumbnail extraction error:', error);
-                            return null;
-                        }
-                    };
                 } catch (error) {
                     console.error('Symbol isolation error:', error);
                     return [];
@@ -534,66 +564,187 @@
                 }
             };
             
-            const performTemplateMatchingOnRegion = (inputImage, templateImage, region) => {
+            const performTemplateMatchingOnRegion = (inputImage, templateImage, region, symbolId) => {
                 if (!isOpenCvReady) return [];
-                try {
-                    const src = cv.imread(inputImage);
-                    const regionMat = src.roi(new cv.Rect(region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height));
-                    const templ = cv.imread(templateImage);
-                    const matches = [];
-                    
-                    // Try multiple scales if template doesn't fit
-                    const scales = [1.0, 0.8, 0.6, 0.4, 0.2];
-                    
-                    for (const scale of scales) {
-                        const scaledTempl = new cv.Mat();
-                        const newSize = new cv.Size(Math.floor(templ.cols * scale), Math.floor(templ.rows * scale));
-                        
-                        // Skip if scaled template is invalid size
-                        if (newSize.width < 10 || newSize.height < 10 || newSize.width > regionMat.cols || newSize.height > regionMat.rows) {
-                            continue;
-                        }
-                        
-                        cv.resize(templ, scaledTempl, newSize, 0, 0, cv.INTER_AREA);
-                        const dst = new cv.Mat();
-                        cv.matchTemplate(regionMat, scaledTempl, dst, cv.TM_CCOEFF_NORMED);
-                        const result = cv.minMaxLoc(dst);
-                        
-                        if (result.maxVal >= 0.5) {
-                            matches.push({ 
-                                confidence: result.maxVal * (1.0 - Math.abs(1.0 - scale) * 0.1),
-                                position: region.bounds,
-                                scale: scale
-                            });
-                        }
-                        
-                        dst.delete();
-                        scaledTempl.delete();
-                    }
-                    
-                    src.delete(); 
-                    regionMat.delete(); 
-                    templ.delete();
-                    return matches;
-                } catch (error) {
-                    console.error('Template matching error:', error);
-                    return [];
-                }
-            };
+                    try {
+                        const src = cv.imread(inputImage);
+                        const regionMat = src.roi(new cv.Rect(region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height));
+                        const templ = cv.imread(templateImage);
+                        const matches = [];
 
-            const calculateIoU = (box1, box2) => {
-                const x1 = Math.max(box1.x, box2.x);
-                const y1 = Math.max(box1.y, box2.y);
-                const x2 = Math.min(box1.x + box1.width, box2.x + box2.width);
-                const y2 = Math.min(box1.y + box1.height, box2.y + box2.height);
-                
-                const intersectionArea = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
-                const box1Area = box1.width * box1.height;
-                const box2Area = box2.width * box2.height;
-                const unionArea = box1Area + box2Area - intersectionArea;
-                
-                return unionArea > 0 ? intersectionArea / unionArea : 0;
-            };
+                        // Preprocess both region and template for better matching
+                        const preprocessImage = (img) => {
+                            const gray = new cv.Mat();
+                            const binary = new cv.Mat();
+                            const processed = new cv.Mat();
+
+                            if (img.channels() > 1) {
+                                cv.cvtColor(img, gray, cv.COLOR_RGBA2GRAY);
+                            } else {
+                                gray = img.clone();
+                            }
+
+                            // Adaptive thresholding
+                            cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+
+                            // Denoise
+                            const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
+                            cv.morphologyEx(binary, processed, cv.MORPH_CLOSE, kernel);
+                            cv.morphologyEx(processed, processed, cv.MORPH_OPEN, kernel);
+
+                            kernel.delete();
+                            gray.delete();
+                            binary.delete();
+
+                            return processed;
+                        };
+
+                        const processedRegion = preprocessImage(regionMat);
+                        const processedTemplate = preprocessImage(templ);
+
+                        // Method 1: Template Matching with multiple scales
+                        const scales = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4];
+                        let bestTemplateScore = 0;
+                        let bestScale = 1.0;
+
+                        for (const scale of scales) {
+                            const scaledTempl = new cv.Mat();
+                            const newSize = new cv.Size(Math.floor(processedTemplate.cols * scale), Math.floor(processedTemplate.rows * scale));
+
+                            // Skip if scaled template is invalid size
+                            if (newSize.width < 10 || newSize.height < 10 ||
+                                newSize.width > processedRegion.cols || newSize.height > processedRegion.rows) {
+                                continue;
+                            }
+
+                            cv.resize(processedTemplate, scaledTempl, newSize, 0, 0, cv.INTER_AREA);
+
+                            const dst = new cv.Mat();
+                            cv.matchTemplate(processedRegion, scaledTempl, dst, cv.TM_CCOEFF_NORMED);
+                            const result = cv.minMaxLoc(dst);
+
+                            // Penalize extreme scales less
+                            const scalePenalty = 1.0 - (Math.abs(1.0 - scale) * 0.15);
+                            const adjustedScore = result.maxVal * scalePenalty;
+
+                            if (adjustedScore > bestTemplateScore) {
+                                bestTemplateScore = adjustedScore;
+                                bestScale = scale;
+                            }
+
+                            dst.delete();
+                            scaledTempl.delete();
+                        }
+
+                        // Method 2: ORB Feature Matching
+                        let featureScore = 0;
+                        try {
+                            const orb = new cv.ORB(500); // Detect up to 500 features
+                            const keypointsRegion = new cv.KeyPointVector();
+                            const keypointsTemplate = new cv.KeyPointVector();
+                            const descriptorsRegion = new cv.Mat();
+                            const descriptorsTemplate = new cv.Mat();
+
+                            orb.detectAndCompute(processedRegion, new cv.Mat(), keypointsRegion, descriptorsRegion);
+                            orb.detectAndCompute(processedTemplate, new cv.Mat(), keypointsTemplate, descriptorsTemplate);
+
+                            if (descriptorsRegion.rows > 0 && descriptorsTemplate.rows > 0) {
+                                const bf = new cv.BFMatcher(cv.NORM_HAMMING, true); // crossCheck = true
+                                const matches = new cv.DMatchVector();
+                                bf.match(descriptorsRegion, descriptorsTemplate, matches);
+
+                                // Calculate match quality
+                                if (matches.size() > 0) {
+                                    let totalDistance = 0;
+                                    for (let i = 0; i < matches.size(); i++) {
+                                        totalDistance += matches.get(i).distance;
+                                    }
+                                    const avgDistance = totalDistance / matches.size();
+                                    const maxDistance = 100; // Hamming distance threshold
+
+                                    // More matches with low distance = higher score
+                                    const matchRatio = matches.size() / Math.min(keypointsRegion.size(), keypointsTemplate.size());
+                                    const distanceScore = Math.max(0, 1 - (avgDistance / maxDistance));
+                                    featureScore = matchRatio * distanceScore;
+                                }
+
+                                matches.delete();
+                                bf.delete();
+                            }
+
+                            keypointsRegion.delete();
+                            keypointsTemplate.delete();
+                            descriptorsRegion.delete();
+                            descriptorsTemplate.delete();
+                            orb.delete();
+                        } catch (orbError) {
+                            console.log(`ORB matching skipped for symbol ${symbolId}:`, orbError);
+                        }
+
+                        // Method 3: Hu Moments (shape-based)
+                        let huScore = 0;
+                        try {
+                            const momentsRegion = cv.moments(processedRegion);
+                            const momentsTemplate = cv.moments(processedTemplate);
+                            const huRegion = cv.HuMoments(momentsRegion);
+                            const huTemplate = cv.HuMoments(momentsTemplate);
+
+                            // Calculate distance between Hu moments (lower = more similar)
+                            let huDistance = 0;
+                            for (let i = 0; i < 7; i++) {
+                                const diff = Math.abs(huRegion.data64F[i] - huTemplate.data64F[i]);
+                                huDistance += diff;
+                            }
+
+                            // Convert distance to similarity score (0-1)
+                            huScore = Math.max(0, 1 - (huDistance / 10)); // Normalize
+
+                            huRegion.delete();
+                            huTemplate.delete();
+                        } catch (huError) {
+                            console.log(`Hu moments skipped for symbol ${symbolId}:`, huError);
+                        }
+
+                        // Combine scores with weights
+                        const weights = {
+                            template: 0.50,  // Template matching is still primary
+                            features: 0.30,  // ORB features catch distinctive patterns
+                            shape: 0.20      // Hu moments provide rotation invariance
+                        };
+
+                        const combinedScore = (bestTemplateScore * weights.template) +
+                            (featureScore * weights.features) +
+                            (huScore * weights.shape);
+
+                        // Only return if combined score is decent
+                        if (combinedScore >= 0.35) { // Lowered threshold since we're combining methods
+                            matches.push({
+                                confidence: combinedScore,
+                                position: region.bounds,
+                                scale: bestScale,
+                                debug: {
+                                    templateScore: bestTemplateScore,
+                                    featureScore: featureScore,
+                                    huScore: huScore
+                                }
+                            });
+
+                            console.log(`Symbol ${symbolId}: Template=${(bestTemplateScore * 100).toFixed(1)}% Features=${(featureScore * 100).toFixed(1)}% Shape=${(huScore * 100).toFixed(1)}% Combined=${(combinedScore * 100).toFixed(1)}%`);
+                        }
+
+                        // Cleanup
+                        processedRegion.delete();
+                        processedTemplate.delete();
+                        src.delete();
+                        regionMat.delete();
+                        templ.delete();
+
+                        return matches;
+                    } catch (error) {
+                        console.error('Enhanced matching error:', error);
+                        return [];
+                    }
+                };
 
             const applyNonMaximumSuppression = (detections, iouThreshold = 0.3) => {
                 if (detections.length === 0) return detections;
