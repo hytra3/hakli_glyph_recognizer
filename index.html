@@ -574,7 +574,7 @@
 
                     // Preprocess both region and template for better matching
                     const preprocessImage = (img) => {
-                        const gray = new cv.Mat();
+                        let gray = new cv.Mat();
                         const binary = new cv.Mat();
                         const processed = new cv.Mat();
 
@@ -611,21 +611,13 @@
                         const scaledTempl = new cv.Mat();
                         const newSize = new cv.Size(Math.floor(processedTemplate.cols * scale), Math.floor(processedTemplate.rows * scale));
 
-                        // Skip if scaled template is invalid size
-                        if (newSize.width < 10 || newSize.height < 10 ||
-                            newSize.width > processedRegion.cols || newSize.height > processedRegion.rows) {
+                        if (newSize.width < 10 || newSize.height < 10 || newSize.width > processedRegion.cols || newSize.height > processedRegion.rows) {
                             continue;
                         }
 
                         cv.resize(processedTemplate, scaledTempl, newSize, 0, 0, cv.INTER_AREA);
 
-                        // Try multiple matching methods and take the best
-                        const methods = [
-                            cv.TM_CCOEFF_NORMED,
-                            cv.TM_CCORR_NORMED,
-                            cv.TM_SQDIFF_NORMED
-                        ];
-
+                        const methods = [cv.TM_CCOEFF_NORMED, cv.TM_CCORR_NORMED, cv.TM_SQDIFF_NORMED];
                         let bestMethodScore = 0;
 
                         for (const method of methods) {
@@ -633,7 +625,6 @@
                             cv.matchTemplate(processedRegion, scaledTempl, dst, method);
                             const result = cv.minMaxLoc(dst);
 
-                            // For TM_SQDIFF_NORMED, lower is better, so invert it
                             let score = (method === cv.TM_SQDIFF_NORMED) ? (1 - result.minVal) : result.maxVal;
 
                             if (score > bestMethodScore) {
@@ -643,7 +634,6 @@
                             dst.delete();
                         }
 
-                        // Penalize extreme scales slightly
                         const scalePenalty = 1.0 - (Math.abs(1.0 - scale) * 0.1);
                         const adjustedScore = bestMethodScore * scalePenalty;
 
@@ -663,31 +653,122 @@
                         const keypointsRegion = new cv.KeyPointVector();
                         const keypointsTemplate = new cv.KeyPointVector();
                         const descriptorsRegion = new cv.Mat();
+                        const descriptorsTemplate = new cv.Mat();
 
-            const exportTranscription = () => {
-                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
-                let transcription = '';
-                
-                orderedResults.forEach((result, index) => {
-                    transcription += result.symbol.transliteration || result.symbol.name;
-                    if (viewMode === 'reading' && wordBoundaries.has(index)) {
-                        transcription += ' | ';
-                    } else if (index < orderedResults.length - 1) {
-                        transcription += ' ';
+                        orb.detectAndCompute(processedRegion, new cv.Mat(), keypointsRegion, descriptorsRegion);
+                        orb.detectAndCompute(processedTemplate, new cv.Mat(), keypointsTemplate, descriptorsTemplate);
+
+                        if (descriptorsRegion.rows > 0 && descriptorsTemplate.rows > 0) {
+                            const bf = new cv.BFMatcher(cv.NORM_HAMMING, true);
+                            const matchesVector = new cv.DMatchVector();
+                            bf.match(descriptorsRegion, descriptorsTemplate, matchesVector);
+
+                            featureMatchCount = matchesVector.size();
+
+                            if (featureMatchCount > 0) {
+                                let totalDistance = 0;
+                                for (let i = 0; i < featureMatchCount; i++) {
+                                    totalDistance += matchesVector.get(i).distance;
+                                }
+                                const avgDistance = totalDistance / featureMatchCount;
+                                const maxDistance = 80;
+
+                                const maxPossibleMatches = Math.min(keypointsRegion.size(), keypointsTemplate.size());
+                                const matchRatio = maxPossibleMatches > 0 ? featureMatchCount / maxPossibleMatches : 0;
+                                const distanceScore = Math.max(0, 1 - (avgDistance / maxDistance));
+                                featureScore = matchRatio * distanceScore;
+                            }
+
+                            matchesVector.delete();
+                            bf.delete();
+                        }
+
+                        keypointsRegion.delete();
+                        keypointsTemplate.delete();
+                        descriptorsRegion.delete();
+                        descriptorsTemplate.delete();
+                        orb.delete();
+                    } catch (orbError) {
+                        featureScore = 0;
                     }
-                });
-                
-                const blob = new Blob([transcription], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `hakli_transcription_${new Date().toISOString().slice(0,10)}.txt`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                recordAction('export_transcription', { transcription });
+
+                    // Method 3: Contour-based shape matching
+                    let shapeScore = 0;
+                    try {
+                        const contoursRegion = new cv.MatVector();
+                        const contoursTemplate = new cv.MatVector();
+                        const hierarchy = new cv.Mat();
+
+                        cv.findContours(processedRegion, contoursRegion, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+                        cv.findContours(processedTemplate, contoursTemplate, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                        if (contoursRegion.size() > 0 && contoursTemplate.size() > 0) {
+                            let maxAreaRegion = 0;
+                            let maxContourRegion = 0;
+                            for (let i = 0; i < contoursRegion.size(); i++) {
+                                const area = cv.contourArea(contoursRegion.get(i));
+                                if (area > maxAreaRegion) {
+                                    maxAreaRegion = area;
+                                    maxContourRegion = i;
+                                }
+                            }
+
+                            let maxAreaTemplate = 0;
+                            let maxContourTemplate = 0;
+                            for (let i = 0; i < contoursTemplate.size(); i++) {
+                                const area = cv.contourArea(contoursTemplate.get(i));
+                                if (area > maxAreaTemplate) {
+                                    maxAreaTemplate = area;
+                                    maxContourTemplate = i;
+                                }
+                            }
+
+                            const shapeDiff = cv.matchShapes(contoursRegion.get(maxContourRegion), contoursTemplate.get(maxContourTemplate), cv.CONTOURS_MATCH_I1, 0);
+                            shapeScore = Math.max(0, 1 - (shapeDiff / 5));
+                        }
+
+                        contoursRegion.delete();
+                        contoursTemplate.delete();
+                        hierarchy.delete();
+                    } catch (shapeError) {
+                        shapeScore = 0;
+                    }
+
+                    // Combine scores
+                    const hasGoodFeatures = featureMatchCount >= 5;
+                    const weights = hasGoodFeatures ?
+                        { template: 0.45, features: 0.40, shape: 0.15 } :
+                        { template: 0.65, features: 0.10, shape: 0.25 };
+
+                    const combinedScore = (bestTemplateScore * weights.template) + (featureScore * weights.features) + (shapeScore * weights.shape);
+
+                    console.log(`Symbol ${symbolId}: Template=${(bestTemplateScore * 100).toFixed(1)}% Features=${(featureScore * 100).toFixed(1)}% (${featureMatchCount} matches) Shape=${(shapeScore * 100).toFixed(1)}% → Combined=${(combinedScore * 100).toFixed(1)}%`);
+
+                    if (combinedScore >= 0.35) {
+                        matches.push({
+                            confidence: combinedScore,
+                            position: region.bounds,
+                            scale: bestScale,
+                            debug: {
+                                templateScore: bestTemplateScore,
+                                featureScore: featureScore,
+                                featureMatches: featureMatchCount,
+                                shapeScore: shapeScore
+                            }
+                        });
+                    }
+
+                    processedRegion.delete();
+                    processedTemplate.delete();
+                    src.delete();
+                    regionMat.delete();
+                    templ.delete();
+
+                    return matches;
+                } catch (error) {
+                    console.error('Enhanced matching error:', error);
+                    return [];
+                }
             };
 
             const exportDetectionData = () => {
