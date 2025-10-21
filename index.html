@@ -566,208 +566,103 @@
             
             const performTemplateMatchingOnRegion = (inputImage, templateImage, region, symbolId) => {
                 if (!isOpenCvReady) return [];
-                    try {
-                        const src = cv.imread(inputImage);
-                        const regionMat = src.roi(new cv.Rect(region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height));
-                        const templ = cv.imread(templateImage);
-                        const matches = [];
+                try {
+                    const src = cv.imread(inputImage);
+                    const regionMat = src.roi(new cv.Rect(region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height));
+                    const templ = cv.imread(templateImage);
+                    const matches = [];
 
-                        // Preprocess both region and template for better matching
-                        const preprocessImage = (img) => {
-                            const gray = new cv.Mat();
-                            const binary = new cv.Mat();
-                            const processed = new cv.Mat();
+                    // Preprocess both region and template for better matching
+                    const preprocessImage = (img) => {
+                        const gray = new cv.Mat();
+                        const binary = new cv.Mat();
+                        const processed = new cv.Mat();
 
-                            if (img.channels() > 1) {
-                                cv.cvtColor(img, gray, cv.COLOR_RGBA2GRAY);
-                            } else {
-                                gray = img.clone();
-                            }
+                        if (img.channels() > 1) {
+                            cv.cvtColor(img, gray, cv.COLOR_RGBA2GRAY);
+                        } else {
+                            img.copyTo(gray);
+                        }
 
-                            // Adaptive thresholding
-                            cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+                        // Adaptive thresholding
+                        cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
 
-                            // Denoise
-                            const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
-                            cv.morphologyEx(binary, processed, cv.MORPH_CLOSE, kernel);
-                            cv.morphologyEx(processed, processed, cv.MORPH_OPEN, kernel);
+                        // Denoise
+                        const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
+                        cv.morphologyEx(binary, processed, cv.MORPH_CLOSE, kernel);
+                        cv.morphologyEx(processed, processed, cv.MORPH_OPEN, kernel);
 
-                            kernel.delete();
-                            gray.delete();
-                            binary.delete();
+                        kernel.delete();
+                        gray.delete();
+                        binary.delete();
 
-                            return processed;
-                        };
+                        return processed;
+                    };
 
-                        const processedRegion = preprocessImage(regionMat);
-                        const processedTemplate = preprocessImage(templ);
+                    const processedRegion = preprocessImage(regionMat);
+                    const processedTemplate = preprocessImage(templ);
 
-                        // Method 1: Template Matching with multiple scales
-                        const scales = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4];
-                        let bestTemplateScore = 0;
-                        let bestScale = 1.0;
+                    // Method 1: Multi-Method Template Matching
+                    const scales = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4];
+                    let bestTemplateScore = 0;
+                    let bestScale = 1.0;
 
-                        for (const scale of scales) {
-                            const scaledTempl = new cv.Mat();
-                            const newSize = new cv.Size(Math.floor(processedTemplate.cols * scale), Math.floor(processedTemplate.rows * scale));
+                    for (const scale of scales) {
+                        const scaledTempl = new cv.Mat();
+                        const newSize = new cv.Size(Math.floor(processedTemplate.cols * scale), Math.floor(processedTemplate.rows * scale));
 
-                            // Skip if scaled template is invalid size
-                            if (newSize.width < 10 || newSize.height < 10 ||
-                                newSize.width > processedRegion.cols || newSize.height > processedRegion.rows) {
-                                continue;
-                            }
+                        // Skip if scaled template is invalid size
+                        if (newSize.width < 10 || newSize.height < 10 ||
+                            newSize.width > processedRegion.cols || newSize.height > processedRegion.rows) {
+                            continue;
+                        }
 
-                            cv.resize(processedTemplate, scaledTempl, newSize, 0, 0, cv.INTER_AREA);
+                        cv.resize(processedTemplate, scaledTempl, newSize, 0, 0, cv.INTER_AREA);
 
+                        // Try multiple matching methods and take the best
+                        const methods = [
+                            cv.TM_CCOEFF_NORMED,
+                            cv.TM_CCORR_NORMED,
+                            cv.TM_SQDIFF_NORMED
+                        ];
+
+                        let bestMethodScore = 0;
+
+                        for (const method of methods) {
                             const dst = new cv.Mat();
-                            cv.matchTemplate(processedRegion, scaledTempl, dst, cv.TM_CCOEFF_NORMED);
+                            cv.matchTemplate(processedRegion, scaledTempl, dst, method);
                             const result = cv.minMaxLoc(dst);
 
-                            // Penalize extreme scales less
-                            const scalePenalty = 1.0 - (Math.abs(1.0 - scale) * 0.15);
-                            const adjustedScore = result.maxVal * scalePenalty;
+                            // For TM_SQDIFF_NORMED, lower is better, so invert it
+                            let score = (method === cv.TM_SQDIFF_NORMED) ? (1 - result.minVal) : result.maxVal;
 
-                            if (adjustedScore > bestTemplateScore) {
-                                bestTemplateScore = adjustedScore;
-                                bestScale = scale;
+                            if (score > bestMethodScore) {
+                                bestMethodScore = score;
                             }
 
                             dst.delete();
-                            scaledTempl.delete();
                         }
 
-                        // Method 2: ORB Feature Matching
-                        let featureScore = 0;
-                        try {
-                            const orb = new cv.ORB(500); // Detect up to 500 features
-                            const keypointsRegion = new cv.KeyPointVector();
-                            const keypointsTemplate = new cv.KeyPointVector();
-                            const descriptorsRegion = new cv.Mat();
-                            const descriptorsTemplate = new cv.Mat();
+                        // Penalize extreme scales slightly
+                        const scalePenalty = 1.0 - (Math.abs(1.0 - scale) * 0.1);
+                        const adjustedScore = bestMethodScore * scalePenalty;
 
-                            orb.detectAndCompute(processedRegion, new cv.Mat(), keypointsRegion, descriptorsRegion);
-                            orb.detectAndCompute(processedTemplate, new cv.Mat(), keypointsTemplate, descriptorsTemplate);
-
-                            if (descriptorsRegion.rows > 0 && descriptorsTemplate.rows > 0) {
-                                const bf = new cv.BFMatcher(cv.NORM_HAMMING, true); // crossCheck = true
-                                const matches = new cv.DMatchVector();
-                                bf.match(descriptorsRegion, descriptorsTemplate, matches);
-
-                                // Calculate match quality
-                                if (matches.size() > 0) {
-                                    let totalDistance = 0;
-                                    for (let i = 0; i < matches.size(); i++) {
-                                        totalDistance += matches.get(i).distance;
-                                    }
-                                    const avgDistance = totalDistance / matches.size();
-                                    const maxDistance = 100; // Hamming distance threshold
-
-                                    // More matches with low distance = higher score
-                                    const matchRatio = matches.size() / Math.min(keypointsRegion.size(), keypointsTemplate.size());
-                                    const distanceScore = Math.max(0, 1 - (avgDistance / maxDistance));
-                                    featureScore = matchRatio * distanceScore;
-                                }
-
-                                matches.delete();
-                                bf.delete();
-                            }
-
-                            keypointsRegion.delete();
-                            keypointsTemplate.delete();
-                            descriptorsRegion.delete();
-                            descriptorsTemplate.delete();
-                            orb.delete();
-                        } catch (orbError) {
-                            console.log(`ORB matching skipped for symbol ${symbolId}:`, orbError);
+                        if (adjustedScore > bestTemplateScore) {
+                            bestTemplateScore = adjustedScore;
+                            bestScale = scale;
                         }
 
-                        // Method 3: Hu Moments (shape-based)
-                        let huScore = 0;
-                        try {
-                            const momentsRegion = cv.moments(processedRegion);
-                            const momentsTemplate = cv.moments(processedTemplate);
-                            const huRegion = cv.HuMoments(momentsRegion);
-                            const huTemplate = cv.HuMoments(momentsTemplate);
-
-                            // Calculate distance between Hu moments (lower = more similar)
-                            let huDistance = 0;
-                            for (let i = 0; i < 7; i++) {
-                                const diff = Math.abs(huRegion.data64F[i] - huTemplate.data64F[i]);
-                                huDistance += diff;
-                            }
-
-                            // Convert distance to similarity score (0-1)
-                            huScore = Math.max(0, 1 - (huDistance / 10)); // Normalize
-
-                            huRegion.delete();
-                            huTemplate.delete();
-                        } catch (huError) {
-                            console.log(`Hu moments skipped for symbol ${symbolId}:`, huError);
-                        }
-
-                        // Combine scores with weights
-                        const weights = {
-                            template: 0.50,  // Template matching is still primary
-                            features: 0.30,  // ORB features catch distinctive patterns
-                            shape: 0.20      // Hu moments provide rotation invariance
-                        };
-
-                        const combinedScore = (bestTemplateScore * weights.template) +
-                            (featureScore * weights.features) +
-                            (huScore * weights.shape);
-
-                        // Only return if combined score is decent
-                        if (combinedScore >= 0.35) { // Lowered threshold since we're combining methods
-                            matches.push({
-                                confidence: combinedScore,
-                                position: region.bounds,
-                                scale: bestScale,
-                                debug: {
-                                    templateScore: bestTemplateScore,
-                                    featureScore: featureScore,
-                                    huScore: huScore
-                                }
-                            });
-
-                            console.log(`Symbol ${symbolId}: Template=${(bestTemplateScore * 100).toFixed(1)}% Features=${(featureScore * 100).toFixed(1)}% Shape=${(huScore * 100).toFixed(1)}% Combined=${(combinedScore * 100).toFixed(1)}%`);
-                        }
-
-                        // Cleanup
-                        processedRegion.delete();
-                        processedTemplate.delete();
-                        src.delete();
-                        regionMat.delete();
-                        templ.delete();
-
-                        return matches;
-                    } catch (error) {
-                        console.error('Enhanced matching error:', error);
-                        return [];
+                        scaledTempl.delete();
                     }
-                };
 
-            const applyNonMaximumSuppression = (detections, iouThreshold = 0.3) => {
-                if (detections.length === 0) return detections;
-                
-                // Sort by confidence (highest first)
-                const sorted = [...detections].sort((a, b) => b.confidence - a.confidence);
-                const keep = [];
-                
-                while (sorted.length > 0) {
-                    const current = sorted.shift();
-                    keep.push(current);
-                    
-                    // Remove detections that overlap too much with current
-                    for (let i = sorted.length - 1; i >= 0; i--) {
-                        const iou = calculateIoU(current.position, sorted[i].position);
-                        if (iou > iouThreshold) {
-                            sorted.splice(i, 1);
-                        }
-                    }
-                }
-                
-                return keep;
-            };
+                    // Method 2: ORB Feature Matching
+                    let featureScore = 0;
+                    let featureMatchCount = 0;
+                    try {
+                        const orb = new cv.ORB(500);
+                        const keypointsRegion = new cv.KeyPointVector();
+                        const keypointsTemplate = new cv.KeyPointVector();
+                        const descriptorsRegion = new cv.Mat();
 
             const exportTranscription = () => {
                 const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
