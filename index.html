@@ -771,6 +771,43 @@
                 }
             };
 
+            const applyNonMaximumSuppression = (detections, iouThreshold = 0.3) => {
+                if (detections.length === 0) return detections;
+
+                // Sort by confidence (highest first)
+                const sorted = [...detections].sort((a, b) => b.confidence - a.confidence);
+                const keep = [];
+
+                while (sorted.length > 0) {
+                    const current = sorted.shift();
+                    keep.push(current);
+
+                    // Remove detections that overlap too much with current
+                    for (let i = sorted.length - 1; i >= 0; i--) {
+                        const iou = calculateIoU(current.position, sorted[i].position);
+                        if (iou > iouThreshold) {
+                            sorted.splice(i, 1);
+                        }
+                    }
+                }
+
+                return keep;
+            };
+
+            const calculateIoU = (box1, box2) => {
+                const x1 = Math.max(box1.x, box2.x);
+                const y1 = Math.max(box1.y, box2.y);
+                const x2 = Math.min(box1.x + box1.width, box2.x + box2.width);
+                const y2 = Math.min(box1.y + box1.height, box2.y + box2.height);
+
+                const intersectionArea = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+                const box1Area = box1.width * box1.height;
+                const box2Area = box2.width * box2.height;
+                const unionArea = box1Area + box2Area - intersectionArea;
+
+                return unionArea > 0 ? intersectionArea / unionArea : 0;
+            };
+
             const exportDetectionData = () => {
                 const data = {
                     timestamp: new Date().toISOString(),
@@ -1470,7 +1507,7 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Symbol Recognizer</h1>
-                        <p className="text-gray-600">beta v251014 ©marty heaton</p>
+                        <p className="text-gray-600">beta v251021 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
