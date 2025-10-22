@@ -101,6 +101,9 @@
             const [useConfidenceFilter, setUseConfidenceFilter] = useState(false);
             const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
             const [customGistUrl, setCustomGistUrl] = useState('');
+            const [trimMode, setTrimMode] = useState(null); // Index of detection being trimmed, or null
+            const [excludeMode, setExcludeMode] = useState(null); // Index of detection being excluded, or null
+            const [excludeRegions, setExcludeRegions] = useState([]); // Array of exclusion boxes
 
             const MASTER_PASTE_URL = ''; // Will update after first upload
             const MASTER_PASTE_RAW_URL = ''; // Will update after first upload
@@ -258,19 +261,41 @@
             };
 
             const handleImageMouseDown = (event) => {
-                if (!manualDetectionMode) return;
-                const coords = getImageCoordinates(event);
-                if (!coords) return;
-                setIsDrawing(true);
-                setDrawStart(coords);
-                setDrawCurrent(coords);
+                // Manual detection mode
+                if (manualDetectionMode) {
+                    const coords = getImageCoordinates(event);
+                    if (!coords) return;
+                    setIsDrawing(true);
+                    setDrawStart(coords);
+                    setDrawCurrent(coords);
+                    return;
+                }
+
+                // Trim mode
+                if (trimMode !== null) {
+                    const coords = getImageCoordinates(event);
+                    if (!coords) return;
+                    setIsDrawing(true);
+                    setDrawStart(coords);
+                    setDrawCurrent(coords);
+                    return;
+                }
+
+                // Exclude mode
+                if (excludeMode !== null) {
+                    const coords = getImageCoordinates(event);
+                    if (!coords) return;
+                    setIsDrawing(true);
+                    setDrawStart(coords);
+                    setDrawCurrent(coords);
+                    return;
+                }
             };
 
-           const handleImageMouseMove = (event) => {
-                if (!manualDetectionMode) return;
+            const handleImageMouseMove = (event) => {
                 if (!isDrawing) return;
-                
-                event.preventDefault(); // Prevent default drag behavior
+
+                event.preventDefault();
                 const coords = getImageCoordinates(event);
                 if (coords) {
                     setDrawCurrent(coords);
@@ -278,7 +303,8 @@
             };
 
             const handleImageMouseUp = (event) => {
-                if (!manualDetectionMode || !isDrawing || !drawStart) return;
+                if (!isDrawing || !drawStart) return;
+
                 const coords = getImageCoordinates(event);
                 if (!coords) return;
 
@@ -289,22 +315,20 @@
                     height: Math.abs(coords.y - drawStart.y)
                 };
 
-                if (bounds.width > 10 && bounds.height > 10) {
-                    // Extract thumbnail for the manually selected region
+                // Manual detection mode
+                if (manualDetectionMode && bounds.width > 10 && bounds.height > 10) {
                     const thumbnail = extractRegionThumbnail(imageRef.current, { bounds: bounds });
 
-                    // Create manual detection with thumbnail
                     const manualDetection = {
                         symbol: { id: 'unknown', name: 'Unknown', transliteration: '?' },
                         confidence: 0.5,
                         position: bounds,
                         matchType: 'manual',
                         isManual: true,
-                        regionIndex: isolatedSymbols.length, // Assign next index
-                        thumbnail: thumbnail // Add thumbnail
+                        regionIndex: isolatedSymbols.length,
+                        thumbnail: thumbnail
                     };
 
-                    // Add to isolated symbols so it can be displayed
                     setIsolatedSymbols(prev => [...prev, {
                         bounds: bounds,
                         thumbnail: thumbnail,
@@ -312,10 +336,19 @@
                         aspectRatio: bounds.width / bounds.height
                     }]);
 
-                    // Add to recognition results
                     setRecognitionResults(prev => [...prev, manualDetection]);
-
                     recordAction('add_manual_detection', { bounds, thumbnail: !!thumbnail });
+                }
+
+                // Trim mode
+                if (trimMode !== null && bounds.width > 10 && bounds.height > 10) {
+                    applyTrim(trimMode, bounds);
+                }
+
+                // Exclude mode
+                if (excludeMode !== null && bounds.width > 10 && bounds.height > 10) {
+                    // Add to exclusion regions
+                    setExcludeRegions(prev => [...prev, bounds]);
                 }
 
                 setIsDrawing(false);
@@ -1035,6 +1068,225 @@
                 }
             };
 
+            const applyTrim = (detectionIndex, newBounds) => {
+                const detection = recognitionResults[detectionIndex];
+                const oldBounds = detection.position;
+
+                // Ensure new bounds are within old bounds
+                const trimmedBounds = {
+                    x: Math.max(oldBounds.x, newBounds.x),
+                    y: Math.max(oldBounds.y, newBounds.y),
+                    width: Math.min(newBounds.x + newBounds.width, oldBounds.x + oldBounds.width) - Math.max(oldBounds.x, newBounds.x),
+                    height: Math.min(newBounds.y + newBounds.height, oldBounds.y + oldBounds.height) - Math.max(oldBounds.y, newBounds.y)
+                };
+
+                if (trimmedBounds.width < 10 || trimmedBounds.height < 10) {
+                    alert('❌ Trimmed region too small. Try again.');
+                    setTrimMode(null);
+                    return;
+                }
+
+                // Extract new thumbnail
+                const thumbnail = extractRegionThumbnail(imageRef.current, { bounds: trimmedBounds });
+
+                // Update the detection
+                const updatedDetection = {
+                    ...detection,
+                    position: trimmedBounds,
+                    thumbnail: thumbnail,
+                    trimmed: true,
+                    originalBounds: oldBounds
+                };
+
+                // Update isolated symbol if it exists
+                if (detection.regionIndex !== undefined) {
+                    setIsolatedSymbols(prev => {
+                        const updated = [...prev];
+                        updated[detection.regionIndex] = {
+                            bounds: trimmedBounds,
+                            thumbnail: thumbnail,
+                            area: trimmedBounds.width * trimmedBounds.height,
+                            aspectRatio: trimmedBounds.width / trimmedBounds.height
+                        };
+                        return updated;
+                    });
+                }
+
+                // Update recognition results
+                setRecognitionResults(prev =>
+                    prev.map((r, i) => i === detectionIndex ? updatedDetection : r)
+                );
+
+                recordAction('trim_detection', {
+                    index: detectionIndex,
+                    oldBounds,
+                    newBounds: trimmedBounds
+                });
+
+                setTrimMode(null);
+                alert('✅ Detection trimmed! You may want to correct the symbol if recognition changed.');
+            };
+
+            const applyExclude = (detectionIndex) => {
+                if (excludeRegions.length === 0) {
+                    alert('❌ No exclusion regions drawn. Draw at least one region to exclude.');
+                    return;
+                }
+
+                const detection = recognitionResults[detectionIndex];
+                const originalBounds = detection.position;
+
+                try {
+                    // Create a mask of the original region
+                    const tempImg = new Image();
+                    tempImg.src = image;
+
+                    tempImg.onload = () => {
+                        const src = cv.imread(tempImg);
+                        const regionMat = src.roi(new cv.Rect(
+                            originalBounds.x,
+                            originalBounds.y,
+                            originalBounds.width,
+                            originalBounds.height
+                        ));
+
+                        // Create mask (white = keep, black = exclude)
+                        const mask = new cv.Mat(regionMat.rows, regionMat.cols, cv.CV_8UC1, new cv.Scalar(255));
+
+                        // Draw exclusion regions on mask
+                        excludeRegions.forEach(exRegion => {
+                            // Convert absolute coords to relative coords within detection
+                            const relX = exRegion.x - originalBounds.x;
+                            const relY = exRegion.y - originalBounds.y;
+                            const relWidth = exRegion.width;
+                            const relHeight = exRegion.height;
+
+                            // Only process if exclusion overlaps with detection
+                            if (relX < regionMat.cols && relY < regionMat.rows &&
+                                relX + relWidth > 0 && relY + relHeight > 0) {
+                                const point1 = new cv.Point(
+                                    Math.max(0, relX),
+                                    Math.max(0, relY)
+                                );
+                                const point2 = new cv.Point(
+                                    Math.min(regionMat.cols, relX + relWidth),
+                                    Math.min(regionMat.rows, relY + relHeight)
+                                );
+                                cv.rectangle(mask, point1, point2, new cv.Scalar(0), -1); // Fill with black
+                            }
+                        });
+
+                        // Apply mask to find remaining contours
+                        const gray = new cv.Mat();
+                        const binary = new cv.Mat();
+
+                        if (regionMat.channels() > 1) {
+                            cv.cvtColor(regionMat, gray, cv.COLOR_RGBA2GRAY);
+                        } else {
+                            regionMat.copyTo(gray);
+                        }
+
+                        cv.threshold(gray, binary, 127, 255, cv.THRESH_BINARY);
+
+                        // Apply mask
+                        const masked = new cv.Mat();
+                        cv.bitwise_and(binary, mask, masked);
+
+                        // Find contours in masked region
+                        const contours = new cv.MatVector();
+                        const hierarchy = new cv.Mat();
+                        cv.findContours(masked, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                        if (contours.size() === 0) {
+                            alert('❌ Exclusion removed all content. Canceling.');
+                            cleanupMats();
+                            return;
+                        }
+
+                        // Get bounding boxes of remaining contours
+                        const newDetections = [];
+                        for (let i = 0; i < contours.size(); i++) {
+                            const boundingRect = cv.boundingRect(contours.get(i));
+                            const area = boundingRect.width * boundingRect.height;
+
+                            if (area > 100) { // Minimum size
+                                const absoluteBounds = {
+                                    x: originalBounds.x + boundingRect.x,
+                                    y: originalBounds.y + boundingRect.y,
+                                    width: boundingRect.width,
+                                    height: boundingRect.height
+                                };
+
+                                const thumbnail = extractRegionThumbnail(tempImg, { bounds: absoluteBounds });
+
+                                newDetections.push({
+                                    symbol: { id: 'unknown', name: 'Unknown', transliteration: '?' },
+                                    confidence: 0.5,
+                                    position: absoluteBounds,
+                                    matchType: 'excluded',
+                                    isExcluded: true,
+                                    thumbnail: thumbnail,
+                                    regionIndex: isolatedSymbols.length + newDetections.length
+                                });
+                            }
+                        }
+
+                        const cleanupMats = () => {
+                            src.delete();
+                            regionMat.delete();
+                            mask.delete();
+                            gray.delete();
+                            binary.delete();
+                            masked.delete();
+                            contours.delete();
+                            hierarchy.delete();
+                        };
+
+                        cleanupMats();
+
+                        if (newDetections.length === 0) {
+                            alert('❌ No valid regions remained after exclusion.');
+                            setExcludeMode(null);
+                            setExcludeRegions([]);
+                            return;
+                        }
+
+                        // Remove old detection and add new ones
+                        setRecognitionResults(prev => {
+                            const updated = [...prev];
+                            updated.splice(detectionIndex, 1); // Remove original
+                            return [...updated, ...newDetections]; // Add new ones
+                        });
+
+                        // Add to isolated symbols
+                        newDetections.forEach(det => {
+                            setIsolatedSymbols(prev => [...prev, {
+                                bounds: det.position,
+                                thumbnail: det.thumbnail,
+                                area: det.position.width * det.position.height,
+                                aspectRatio: det.position.width / det.position.height
+                            }]);
+                        });
+
+                        recordAction('exclude_regions', {
+                            originalIndex: detectionIndex,
+                            exclusions: excludeRegions,
+                            newDetections: newDetections.length
+                        });
+
+                        setExcludeMode(null);
+                        setExcludeRegions([]);
+
+                        alert(`✅ Excluded regions! Created ${newDetections.length} new detection(s). You may want to correct the symbols.`);
+                    };
+                } catch (error) {
+                    console.error('Exclude error:', error);
+                    alert('❌ Failed to apply exclusions. Check console for details.');
+                    setExcludeMode(null);
+                    setExcludeRegions([]);
+                }
+            };
+
             const getCorrectionSuggestion = (symbolId) => {
                 try {
                     const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
@@ -1449,28 +1701,41 @@
 
             useEffect(() => {
                 const handleKeyDown = (e) => {
-                    // Escape: Close correction modal
-                    if (e.key === 'Escape' && correctionMode !== null) {
+                    // Escape: Close correction modal or cancel trim/exclude modes
+                    if (e.key === 'Escape') {
                         e.preventDefault();
-                        cancelCorrection();
+                        if (correctionMode !== null) {
+                            cancelCorrection();
+                        } else if (trimMode !== null) {
+                            setTrimMode(null);
+                            setIsDrawing(false);
+                            setDrawStart(null);
+                            setDrawCurrent(null);
+                        } else if (excludeMode !== null) {
+                            setExcludeMode(null);
+                            setExcludeRegions([]);
+                            setIsDrawing(false);
+                            setDrawStart(null);
+                            setDrawCurrent(null);
+                        }
                         return;
                     }
-                    
-                    // Undo: Ctrl+Z (or Cmd+Z on Mac)
+
+                    // Undo: Ctrl+Z
                     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
                         e.preventDefault();
                         undo();
                     }
-                    // Redo: Ctrl+Shift+Z or Ctrl+Y (or Cmd equivalents on Mac)
+                    // Redo: Ctrl+Shift+Z or Ctrl+Y
                     if ((e.ctrlKey || e.metaKey) && (e.shiftKey && e.key === 'z' || e.key === 'y')) {
                         e.preventDefault();
                         redo();
                     }
                 };
-                    
+
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [historyIndex, stateHistory, correctionMode]);
+            }, [historyIndex, stateHistory, correctionMode, trimMode, excludeMode]);
 
                         useEffect(() => {
                 if (chartLoadStatus === 'not-loaded') {
@@ -1804,6 +2069,100 @@
                                     }}
                                     draggable={false}
                                 />
+
+                                {/* Trim mode indicator */}
+                                {trimMode !== null && recognitionResults[trimMode] && (() => {
+                                    const det = recognitionResults[trimMode];
+                                    const imageRect = imageRef.current.getBoundingClientRect();
+                                    const scaleX = imageRect.width / imageRef.current.naturalWidth;
+                                    const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                                    return (
+                                        <div
+                                            className="absolute border-4 border-dashed border-blue-500 bg-blue-100 bg-opacity-20 pointer-events-none"
+                                            style={{
+                                                left: det.position.x * scaleX + 'px',
+                                                top: det.position.y * scaleY + 'px',
+                                                width: det.position.width * scaleX + 'px',
+                                                height: det.position.height * scaleY + 'px',
+                                                zIndex: 20
+                                            }}
+                                        >
+                                            <div className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                                                ✂️ Draw smaller box to trim
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Exclude mode indicator */}
+                                {excludeMode !== null && recognitionResults[excludeMode] && (() => {
+                                    const det = recognitionResults[excludeMode];
+                                    const imageRect = imageRef.current.getBoundingClientRect();
+                                    const scaleX = imageRect.width / imageRef.current.naturalWidth;
+                                    const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                                    return (
+                                        <>
+                                            <div
+                                                className="absolute border-4 border-dashed border-purple-500 bg-purple-100 bg-opacity-20 pointer-events-none"
+                                                style={{
+                                                    left: det.position.x * scaleX + 'px',
+                                                    top: det.position.y * scaleY + 'px',
+                                                    width: det.position.width * scaleX + 'px',
+                                                    height: det.position.height * scaleY + 'px',
+                                                    zIndex: 20
+                                                }}
+                                            >
+                                                <div className="absolute top-1 left-1 bg-purple-500 text-white text-xs px-2 py-1 rounded">
+                                                    🚫 Draw box(es) to exclude
+                                                </div>
+                                            </div>
+
+                                            {/* Show exclusion regions */}
+                                            {excludeRegions.map((exRegion, idx) => (
+                                                <div
+                                                    key={`exclude-${idx}`}
+                                                    className="absolute border-2 border-red-500 bg-red-500 bg-opacity-30 pointer-events-none"
+                                                    style={{
+                                                        left: exRegion.x * scaleX + 'px',
+                                                        top: exRegion.y * scaleY + 'px',
+                                                        width: exRegion.width * scaleX + 'px',
+                                                        height: exRegion.height * scaleY + 'px',
+                                                        zIndex: 21
+                                                    }}
+                                                />
+                                            ))}
+
+                                            {/* Apply/Cancel buttons for exclude mode */}
+                                            {excludeRegions.length > 0 && (
+                                                <div
+                                                    className="absolute flex gap-2"
+                                                    style={{
+                                                        left: det.position.x * scaleX + 'px',
+                                                        bottom: `calc(100% - ${(det.position.y + det.position.height) * scaleY}px - 40px)`,
+                                                        zIndex: 22,
+                                                        pointerEvents: 'auto'
+                                                    }}
+                                                >
+                                                    <button
+                                                        onClick={() => applyExclude(excludeMode)}
+                                                        className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 font-semibold"
+                                                    >
+                                                        ✓ Apply Exclusions
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setExcludeMode(null);
+                                                            setExcludeRegions([]);
+                                                        }}
+                                                        className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600"
+                                                    >
+                                                        ✕ Cancel
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                                 
                                 {showRegionBoundaries && isolatedSymbols.map((region, index) => {
                                     if (!imageRef.current) return null;
@@ -1836,46 +2195,71 @@
                                         </div>
 
                                         {selectedRegions.has(index) && (
-                                        <>
-                                            <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded" style={{ pointerEvents: 'none' }}>
-                                                {Math.round(detection.confidence * 100)}%
-                                            </div>
-                                            <div className="absolute top-1 right-1 flex gap-1" style={{ pointerEvents: 'auto' }}>
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        startCorrection(index);
-                                                    }}
-                                                    className="px-2 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600"
-                                                    title="Change symbol"
-                                                >
-                                                    ✏️
-                                                </button>
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        deleteDetection(index);
-                                                    }}
-                                                    className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
-                                                    title="Delete this detection"
-                                                >
-                                                    ✕
-                                                </button>
-                                                {selectedRegions.size >= 2 && (
-                                                    <button 
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            mergeSelectedDetections();
-                                                        }}
-                                                        className="px-2 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600"
-                                                        title="Merge selected detections"
-                                                    >
-                                                        ⚡
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </>
-                                    )}
+                                                <>
+                                                    <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 py-0.5 rounded" style={{ pointerEvents: 'none' }}>
+                                                        {Math.round(detection.confidence * 100)}%
+                                                    </div>
+                                                    <div className="absolute top-1 right-1 flex gap-1" style={{ pointerEvents: 'auto' }}>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                startCorrection(index);
+                                                            }}
+                                                            className="px-2 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600"
+                                                            title="Change symbol"
+                                                        >
+                                                            ✏️
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setTrimMode(index);
+                                                                setSelectedRegions(new Set([index])); // Keep selected
+                                                                alert('✂️ Trim Mode: Draw a smaller box inside this detection to crop it.');
+                                                            }}
+                                                            className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                                                            title="Trim detection"
+                                                        >
+                                                            ✂️
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setExcludeMode(index);
+                                                                setExcludeRegions([]);
+                                                                setSelectedRegions(new Set([index])); // Keep selected
+                                                                alert('🚫 Exclude Mode: Draw box(es) over parts to exclude. Click "Apply" when done.');
+                                                            }}
+                                                            className="px-2 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600"
+                                                            title="Exclude regions"
+                                                        >
+                                                            🚫
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                deleteDetection(index);
+                                                            }}
+                                                            className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                                                            title="Delete this detection"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                        {selectedRegions.size >= 2 && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    mergeSelectedDetections();
+                                                                }}
+                                                                className="px-2 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600"
+                                                                title="Merge selected detections"
+                                                            >
+                                                                ⚡
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            )}
                                     </div>
                                 );
                                 })}
@@ -1911,21 +2295,25 @@
                         </div>
                     )}
                         {isolatedSymbols.length > 0 && showRegionBoundaries && (
-                            <div className="mt-4 p-4 bg-gray-50 border-2 border-teal-300 rounded-lg">
-                                <h4 className="font-semibold text-gray-900 mb-3">Isolated Symbol Regions ({isolatedSymbols.length})</h4>
-                                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
-                                    {isolatedSymbols.map((region, index) => (
+                        <div className="mt-4 p-4 bg-gray-50 border-2 border-teal-300 rounded-lg">
+                            <h4 className="font-semibold text-gray-900 mb-3">Isolated Symbol Regions ({isolatedSymbols.length})</h4>
+                            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+                                {isolatedSymbols.map((region, index) => {
+                                    // Convert index to letter (A, B, C, ...)
+                                    const letter = String.fromCharCode(65 + index); // 65 = 'A'
+                                    return (
                                         <div key={`thumb-${index}`} className="flex flex-col items-center p-2 bg-white border border-gray-300 rounded">
                                             {region.thumbnail && (
-                                                <img src={region.thumbnail} alt={`Region ${index}`} className="w-full h-auto border border-gray-200" />
+                                                <img src={region.thumbnail} alt={`Region ${letter}`} className="w-full h-auto border border-gray-200" />
                                             )}
-                                            <div className="text-xs text-gray-600 mt-1">#{index + 1}</div>
+                                            <div className="text-xs font-bold text-teal-600 mt-1">{letter}</div>
                                             <div className="text-xs text-gray-500">{region.bounds.width}×{region.bounds.height}</div>
                                         </div>
-                                    ))}
-                                </div>
+                                    );
+                                })}
                             </div>
-                        )}
+                        </div>
+                    )}
 
                     {correctionMode !== null && equivalenceChart && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={cancelCorrection}>
