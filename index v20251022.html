@@ -1127,7 +1127,7 @@
                 alert('✅ Detection trimmed! You may want to correct the symbol if recognition changed.');
             };
 
-           const applyExclude = (detectionIndex) => {
+            const applyExclude = (detectionIndex) => {
                 if (excludeRegions.length === 0) {
                     alert('❌ No exclusion regions drawn. Draw at least one region to exclude.');
                     return;
@@ -1135,9 +1135,6 @@
 
                 const detection = recognitionResults[detectionIndex];
                 const originalBounds = detection.position;
-
-                console.log('🚫 Starting exclusion for detection:', detectionIndex, detection);
-                console.log('📦 Exclusion regions:', excludeRegions);
 
                 try {
                     // Create a mask of the original region
@@ -1200,23 +1197,9 @@
                         const hierarchy = new cv.Mat();
                         cv.findContours(masked, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-                        // Cleanup function defined BEFORE use
-                        const cleanupMats = () => {
-                            src.delete();
-                            regionMat.delete();
-                            mask.delete();
-                            gray.delete();
-                            binary.delete();
-                            masked.delete();
-                            contours.delete();
-                            hierarchy.delete();
-                        };
-
                         if (contours.size() === 0) {
                             alert('❌ Exclusion removed all content. Canceling.');
                             cleanupMats();
-                            setExcludeMode(null);
-                            setExcludeRegions([]);
                             return;
                         }
 
@@ -1248,6 +1231,17 @@
                             }
                         }
 
+                        const cleanupMats = () => {
+                            src.delete();
+                            regionMat.delete();
+                            mask.delete();
+                            gray.delete();
+                            binary.delete();
+                            masked.delete();
+                            contours.delete();
+                            hierarchy.delete();
+                        };
+
                         cleanupMats();
 
                         if (newDetections.length === 0) {
@@ -1256,8 +1250,6 @@
                             setExcludeRegions([]);
                             return;
                         }
-
-                        const oldSymbol = detection.symbol.name;
 
                         // Remove old detection and add new ones
                         setRecognitionResults(prev => {
@@ -1278,7 +1270,6 @@
 
                         recordAction('exclude_regions', {
                             originalIndex: detectionIndex,
-                            originalSymbol: oldSymbol,
                             exclusions: excludeRegions,
                             newDetections: newDetections.length
                         });
@@ -1286,28 +1277,7 @@
                         setExcludeMode(null);
                         setExcludeRegions([]);
 
-                        alert(`✅ Excluded regions from "${oldSymbol}"!\n\n` +
-                            `Created ${newDetections.length} new detection(s).\n` +
-                            `Original detection removed.\n\n` +
-                            `💡 Tip: The new detections are marked as "Unknown" - correct them using the ✏️ button.`);
-
-                        // Optional: Auto-scroll to show new detections
-                        setTimeout(() => {
-                            const detectionCards = document.querySelectorAll('.p-3.bg-white.rounded.border');
-                            if (detectionCards.length > 0) {
-                                detectionCards[detectionCards.length - 1].scrollIntoView({
-                                    behavior: 'smooth',
-                                    block: 'center'
-                                });
-                            }
-                        }, 200);
-                    };
-
-                    tempImg.onerror = () => {
-                        console.error('❌ Failed to load image');
-                        alert('❌ Failed to load image for exclusion');
-                        setExcludeMode(null);
-                        setExcludeRegions([]);
+                        alert(`✅ Excluded regions! Created ${newDetections.length} new detection(s). You may want to correct the symbols.`);
                     };
                 } catch (error) {
                     console.error('Exclude error:', error);
