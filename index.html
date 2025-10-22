@@ -223,27 +223,58 @@
                     alert('Please select at least 2 detections to merge');
                     return;
                 }
+
                 const detectionsToMerge = selectedIndices.map(i => recognitionResults[i]);
                 const minX = Math.min(...detectionsToMerge.map(d => d.position.x));
                 const minY = Math.min(...detectionsToMerge.map(d => d.position.y));
                 const maxX = Math.max(...detectionsToMerge.map(d => d.position.x + d.position.width));
                 const maxY = Math.max(...detectionsToMerge.map(d => d.position.y + d.position.height));
-                const baseDetection = detectionsToMerge.reduce((best, current) => 
+
+                const baseDetection = detectionsToMerge.reduce((best, current) =>
                     current.confidence > best.confidence ? current : best
                 );
+
+                const mergedBounds = {
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY
+                };
+
+                // Extract new thumbnail for merged region
+                const mergedThumbnail = extractRegionThumbnail(imageRef.current, { bounds: mergedBounds });
+
                 const mergedDetection = {
                     ...baseDetection,
-                    position: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+                    position: mergedBounds,
                     confidence: detectionsToMerge.reduce((sum, d) => sum + d.confidence, 0) / detectionsToMerge.length,
                     mergedFrom: detectionsToMerge.length,
-                    isMerged: true
+                    isMerged: true,
+                    thumbnail: mergedThumbnail,  // Add the new thumbnail
+                    regionIndex: isolatedSymbols.length  // Will be the next index
                 };
-                recordAction('merge_detections', { indices: selectedIndices, detections: detectionsToMerge, mergedResult: mergedDetection });
+
+                recordAction('merge_detections', {
+                    indices: selectedIndices,
+                    detections: detectionsToMerge,
+                    mergedResult: mergedDetection
+                });
+
+                // Remove the merged detections
                 let newResults = recognitionResults.slice();
                 for (let i = selectedIndices.length - 1; i >= 0; i--) {
                     newResults.splice(selectedIndices[i], 1);
                 }
                 newResults.push(mergedDetection);
+
+                // Add merged region to isolated symbols
+                setIsolatedSymbols(prev => [...prev, {
+                    bounds: mergedBounds,
+                    thumbnail: mergedThumbnail,
+                    area: mergedBounds.width * mergedBounds.height,
+                    aspectRatio: mergedBounds.width / mergedBounds.height
+                }]);
+
                 setRecognitionResults(newResults);
                 setSelectedRegions(new Set());
                 setMergeIndicator(null);
