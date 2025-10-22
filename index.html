@@ -1116,6 +1116,34 @@
                 console.log('Redo to state', historyIndex + 1);
             }; 
 
+            const exportTranscription = () => {
+                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
+                let transcription = '';
+
+                orderedResults.forEach((result, index) => {
+                    transcription += result.symbol.transliteration || result.symbol.name;
+                    if (viewMode === 'reading' && wordBoundaries.has(index)) {
+                        transcription += ' | ';
+                    } else if (index < orderedResults.length - 1) {
+                        transcription += ' ';
+                    }
+                });
+
+                const blob = new Blob([transcription], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `hakli_transcription_${new Date().toISOString().slice(0, 10)}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                recordAction('export_transcription', { transcription });
+            };
+
+            
+
             const recognizeSymbols = () => {
                 if (!image || !equivalenceChart || !isOpenCvReady) return;
                 setIsProcessing(true);
