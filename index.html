@@ -85,6 +85,7 @@
             const [isolatedSymbols, setIsolatedSymbols] = useState([]);
             const [showRegionBoundaries, setShowRegionBoundaries] = useState(false);
             const [mergeIndicator, setMergeIndicator] = useState(null);
+            const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
 
             const imageRef = useRef(null);
             const imageContainerRef = useRef(null);
@@ -560,13 +561,21 @@
                         }
                         const results = [];
                         let totalMatches = 0;
-                        for (const region of isolated) {
+                        const totalRegions = isolated.length;
+
+                        // Loop through each region with progress tracking
+                        for (let regionIndex = 0; regionIndex < isolated.length; regionIndex++) {
+                            const region = isolated[regionIndex];
+
+                            // 👇 UPDATE PROGRESS
+                            setProcessingProgress({ current: regionIndex + 1, total: totalRegions });
+
                             let bestMatch = null;
 
                             for (const symbol of equivalenceChart.symbols) {
                                 // Check primary image
                                 if (loadedSymbolImages[symbol.id]) {
-                                    const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region);
+                                    const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region, symbol.name || symbol.id);
                                     totalMatches += matches.length;
                                     for (const match of matches) {
                                         if (!bestMatch || match.confidence > bestMatch.confidence) {
@@ -580,12 +589,12 @@
                                     }
                                 }
 
-                                // Check variant images
-                                if (symbol.images && symbol.images.variants) {
-                                    for (let i = 0; i < symbol.images.variants.length; i++) {
-                                        const variantKey = `${symbol.id}_variant_${i}`;
-                                        if (loadedSymbolImages[variantKey]) {
-                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[variantKey], region);
+                                // Check example images
+                                if (symbol.images && symbol.images.examples) {
+                                    for (let i = 0; i < symbol.images.examples.length; i++) {
+                                        const exampleKey = `${symbol.id}_example_${i}`;
+                                        if (loadedSymbolImages[exampleKey]) {
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[exampleKey], region, `${symbol.name}_ex${i}`);
                                             for (const match of matches) {
                                                 const weightedConfidence = match.confidence * 0.9;
                                                 if (!bestMatch || weightedConfidence > bestMatch.confidence) {
@@ -628,13 +637,15 @@
                             if (bestMatch && bestMatch.confidence > 0.4) {
                                 results.push({
                                     ...bestMatch,
-                                    regionIndex: isolated.indexOf(region)
+                                    regionIndex: regionIndex
                                 });
-                                console.log(`Region ${isolated.indexOf(region)}: Matched ${bestMatch.symbol.name} with ${(bestMatch.confidence * 100).toFixed(1)}% confidence`);
                             }
                         }
                         console.log(`✓ Recognition complete: ${filteredResults.length} symbols detected (${results.length - filteredResults.length} overlapping removed)`);
 
+                        // 👇 RESET PROGRESS WHEN DONE
+                        setProcessingProgress({ current: 0, total: 0 });
+                        
                         // Apply non-maximum suppression to remove overlapping detections
                         const filteredResults = applyNonMaximumSuppression(results, 0.3);
                         console.log(`✓ Recognition complete: ${filteredResults.length} symbols detected (${results.length - filteredResults.length} overlapping removed)`);
@@ -1491,6 +1502,83 @@
                 }]);
             };
 
+            const saveSession = () => {
+                try {
+                    const session = {
+                        version: '1.0',
+                        timestamp: new Date().toISOString(),
+                        image: image,
+                        recognitionResults: recognitionResults,
+                        validations: validations,
+                        isolatedSymbols: isolatedSymbols,
+                        wordBoundaries: Array.from(wordBoundaries),
+                        readingOrder: readingOrder,
+                        readingDirection: readingDirection,
+                        viewMode: viewMode
+                    };
+
+                    localStorage.setItem('hakli_session', JSON.stringify(session));
+                    alert('✅ Session saved!\n\nYour work is saved locally in this browser.\nYou can close the tab and come back later.');
+                    recordAction('save_session', { timestamp: session.timestamp });
+                } catch (error) {
+                    console.error('Save session error:', error);
+                    showError(
+                        'Save Failed',
+                        'Could not save your session.',
+                        [
+                            'Your browser may have disabled localStorage',
+                            'You may be in private/incognito mode',
+                            'Try exporting your data instead'
+                        ]
+                    );
+                }
+            };
+
+            const loadSession = () => {
+                try {
+                    const saved = localStorage.getItem('hakli_session');
+                    if (!saved) {
+                        alert('ℹ️ No saved session found.');
+                        return;
+                    }
+
+                    const session = JSON.parse(saved);
+
+                    if (confirm(`📂 Load saved session?\n\nFrom: ${new Date(session.timestamp).toLocaleString()}\nSymbols: ${session.recognitionResults.length}\n\nThis will replace your current work!`)) {
+                        setImage(session.image);
+                        setRecognitionResults(session.recognitionResults || []);
+                        setValidations(session.validations || {});
+                        setIsolatedSymbols(session.isolatedSymbols || []);
+                        setWordBoundaries(new Set(session.wordBoundaries || []));
+                        setReadingOrder(session.readingOrder || []);
+                        setReadingDirection(session.readingDirection || 'detection');
+                        setViewMode(session.viewMode || 'detection');
+
+                        alert('✅ Session loaded successfully!');
+                        recordAction('load_session', { timestamp: session.timestamp });
+                    }
+                } catch (error) {
+                    console.error('Load session error:', error);
+                    showError(
+                        'Load Failed',
+                        'Could not load your saved session.',
+                        [
+                            'The saved data may be corrupted',
+                            'Try clearing your browser cache',
+                            'Check the browser console for details'
+                        ]
+                    );
+                }
+            };
+
+            const clearSession = () => {
+                if (confirm('🗑️ Delete saved session?\n\nThis will permanently delete your saved work.\nThis cannot be undone!')) {
+                    localStorage.removeItem('hakli_session');
+                    alert('✅ Saved session deleted.');
+                    recordAction('clear_session', {});
+                }
+            };
+
             const recordAction = (actionType, actionData) => {
                 const action = {
                     type: actionType,
@@ -2065,6 +2153,29 @@
                                 </button>
                                 <button onClick={() => setShowRegionBoundaries(!showRegionBoundaries)} className={`px-4 py-2 rounded ${showRegionBoundaries ? 'bg-purple-500 text-white hover:bg-purple-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
                                     Region Boundaries
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (confirm('🗑️ Clear all detections and start over?\n\nThis will remove:\n• All detected symbols\n• All validations\n• Manual selections\n• Reading order\n\nThis cannot be undone!')) {
+                                            setRecognitionResults([]);
+                                            setValidations({});
+                                            setSelectedRegions(new Set());
+                                            setIsolatedSymbols([]);
+                                            setWordBoundaries(new Set());
+                                            setReadingOrder([]);
+                                            setMergeIndicator(null);
+                                            setManualDetectionMode(false);
+                                            setTrimMode(null);
+                                            setExcludeMode(null);
+                                            setExcludeRegions([]);
+                                            recordAction('clear_all', { timestamp: new Date().toISOString() });
+                                            alert('✅ All detections cleared!');
+                                        }
+                                    }}
+                                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                                    disabled={recognitionResults.length === 0}
+                                >
+                                    🗑️ Clear All
                                 </button>
                                 {isolatedSymbols.length > 0 && (
                                     <button
