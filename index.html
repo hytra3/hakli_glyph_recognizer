@@ -645,7 +645,7 @@
 
                         // 👇 RESET PROGRESS WHEN DONE
                         setProcessingProgress({ current: 0, total: 0 });
-                        
+
                         // Apply non-maximum suppression to remove overlapping detections
                         const filteredResults = applyNonMaximumSuppression(results, 0.3);
                         console.log(`✓ Recognition complete: ${filteredResults.length} symbols detected (${results.length - filteredResults.length} overlapping removed)`);
@@ -2147,6 +2147,25 @@
                                 <button onClick={recognizeSymbols} disabled={isProcessing || !equivalenceChart} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50">
                                     {isProcessing ? 'Processing...' : 'Recognize Symbols'}
                                 </button>
+                                {/* 👇 ADD THIS PROGRESS BAR */}
+                                {isProcessing && processingProgress.total > 0 && (
+                                    <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-sm font-medium text-gray-700">
+                                                Processing region {processingProgress.current} of {processingProgress.total}
+                                            </span>
+                                            <span className="text-sm text-gray-600">
+                                                {Math.round((processingProgress.current / processingProgress.total) * 100)}%
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                            <div
+                                                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                                                style={{ width: `${(processingProgress.current / processingProgress.total) * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
 
                                 <button onClick={() => setManualDetectionMode(!manualDetectionMode)} className={`px-4 py-2 rounded ${manualDetectionMode ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
                                     {manualDetectionMode ? 'Exit Manual Mode' : 'Manual Detection'}
