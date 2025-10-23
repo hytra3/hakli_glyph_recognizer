@@ -108,6 +108,10 @@
             const MASTER_PASTE_URL = ''; // Will update after first upload
             const MASTER_PASTE_RAW_URL = ''; // Will update after first upload
 
+            // ============================================
+            // UTILITY FUNCTIONS
+            // ============================================
+            
             const convertToGitHubUrl = (githubUrl) => {
                 if (!githubUrl) return null;
                 if (githubUrl.indexOf('http') === 0) {
@@ -124,162 +128,6 @@
                 return null;
             };
 
-            const recordAction = (actionType, actionData) => {
-                const action = {
-                    type: actionType,
-                    data: actionData,
-                    timestamp: new Date().toISOString(),
-                    id: Date.now()
-                };
-                setActionHistory(prev => [...prev, action].slice(-50));
-                console.log('Action recorded:', action);
-                
-                // Take snapshot after modifying actions
-                const modifyingActions = ['validation', 'delete_detection', 'merge_detections', 
-                                        'add_manual_detection', 'correct_symbol', 'reorder_reading', 
-                                        'toggle_word_boundary'];
-                if (modifyingActions.includes(actionType)) {
-                    setTimeout(takeSnapshot, 0);
-                }
-            };
-
-            const takeSnapshot = () => {
-                const snapshot = {
-                    recognitionResults: [...recognitionResults],
-                    validations: { ...validations },
-                    selectedRegions: new Set(selectedRegions),
-                    wordBoundaries: new Set(wordBoundaries),
-                    readingOrder: [...readingOrder],
-                    isolatedSymbols: [...isolatedSymbols]
-                };
-                
-                // Remove any "future" history if we're not at the end
-                const newHistory = stateHistory.slice(0, historyIndex + 1);
-                newHistory.push(snapshot);
-                
-                // Keep only last 50 states
-                const trimmedHistory = newHistory.slice(-50);
-                
-                setStateHistory(trimmedHistory);
-                setHistoryIndex(trimmedHistory.length - 1);
-            };
-
-            const validateDetection = (detectionIndex, isCorrect) => {
-                recordAction('validation', {
-                    detectionIndex,
-                    isCorrect,
-                    detectionData: recognitionResults[detectionIndex]
-                });
-                setValidations(prev => ({
-                    ...prev,
-                    [detectionIndex]: {
-                        isCorrect,
-                        timestamp: new Date().toISOString(),
-                        detectionData: recognitionResults[detectionIndex]
-                    }
-                }));
-            };
-
-            const deleteDetection = (detectionIndex) => {
-                recordAction('delete_detection', {
-                    index: detectionIndex,
-                    detection: recognitionResults[detectionIndex]
-                });
-
-                // Update recognition results
-                setRecognitionResults(prev => prev.filter((_, i) => i !== detectionIndex));
-
-                // Update validations with shifted indices
-                setValidations(prev => {
-                    const newValidations = { ...prev };
-                    delete newValidations[detectionIndex];
-                    const shifted = {};
-                    Object.keys(newValidations).forEach(key => {
-                        const numKey = parseInt(key);
-                        shifted[numKey > detectionIndex ? numKey - 1 : numKey] = newValidations[key];
-                    });
-                    return shifted;
-                });
-
-                // Update selected regions - remove deleted index and shift others
-                setSelectedRegions(prev => {
-                    const newSet = new Set();
-                    prev.forEach(idx => {
-                        if (idx !== detectionIndex) {
-                            // Shift down indices that come after the deleted one
-                            newSet.add(idx > detectionIndex ? idx - 1 : idx);
-                        }
-                    });
-                    return newSet;
-                });
-
-                // Clear merge indicator if it existed
-                setMergeIndicator(null);
-            };
-
-            const mergeSelectedDetections = () => {
-                const selectedIndices = Array.from(selectedRegions).sort((a, b) => a - b);
-                if (selectedIndices.length < 2) {
-                    alert('Please select at least 2 detections to merge');
-                    return;
-                }
-
-                const detectionsToMerge = selectedIndices.map(i => recognitionResults[i]);
-                const minX = Math.min(...detectionsToMerge.map(d => d.position.x));
-                const minY = Math.min(...detectionsToMerge.map(d => d.position.y));
-                const maxX = Math.max(...detectionsToMerge.map(d => d.position.x + d.position.width));
-                const maxY = Math.max(...detectionsToMerge.map(d => d.position.y + d.position.height));
-
-                const baseDetection = detectionsToMerge.reduce((best, current) =>
-                    current.confidence > best.confidence ? current : best
-                );
-
-                const mergedBounds = {
-                    x: minX,
-                    y: minY,
-                    width: maxX - minX,
-                    height: maxY - minY
-                };
-
-                // Extract new thumbnail for merged region
-                const mergedThumbnail = extractRegionThumbnail(imageRef.current, { bounds: mergedBounds });
-
-                const mergedDetection = {
-                    ...baseDetection,
-                    position: mergedBounds,
-                    confidence: detectionsToMerge.reduce((sum, d) => sum + d.confidence, 0) / detectionsToMerge.length,
-                    mergedFrom: detectionsToMerge.length,
-                    isMerged: true,
-                    thumbnail: mergedThumbnail,  // Add the new thumbnail
-                    regionIndex: isolatedSymbols.length  // Will be the next index
-                };
-
-                recordAction('merge_detections', {
-                    indices: selectedIndices,
-                    detections: detectionsToMerge,
-                    mergedResult: mergedDetection
-                });
-
-                // Remove the merged detections
-                let newResults = recognitionResults.slice();
-                for (let i = selectedIndices.length - 1; i >= 0; i--) {
-                    newResults.splice(selectedIndices[i], 1);
-                }
-                newResults.push(mergedDetection);
-
-                // Add merged region to isolated symbols
-                setIsolatedSymbols(prev => [...prev, {
-                    bounds: mergedBounds,
-                    thumbnail: mergedThumbnail,
-                    area: mergedBounds.width * mergedBounds.height,
-                    aspectRatio: mergedBounds.width / mergedBounds.height
-                }]);
-
-                setRecognitionResults(newResults);
-                setSelectedRegions(new Set());
-                setMergeIndicator(null);
-            };
-
             const getImageCoordinates = (event) => {
                 if (!imageRef.current) return null;
                 const rect = imageRef.current.getBoundingClientRect();
@@ -291,246 +139,72 @@
                 };
             };
 
-            const handleImageMouseDown = (event) => {
-                // Manual detection mode
-                if (manualDetectionMode) {
-                    const coords = getImageCoordinates(event);
-                    if (!coords) return;
-                    setIsDrawing(true);
-                    setDrawStart(coords);
-                    setDrawCurrent(coords);
-                    return;
-                }
+            const extractRegionThumbnail = (inputImage, region) => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = region.bounds.width;
+                    canvas.height = region.bounds.height;
 
-                // Trim mode
-                if (trimMode !== null) {
-                    const coords = getImageCoordinates(event);
-                    if (!coords) return;
-                    setIsDrawing(true);
-                    setDrawStart(coords);
-                    setDrawCurrent(coords);
-                    return;
-                }
-
-                // Exclude mode
-                if (excludeMode !== null) {
-                    const coords = getImageCoordinates(event);
-                    if (!coords) return;
-                    setIsDrawing(true);
-                    setDrawStart(coords);
-                    setDrawCurrent(coords);
-                    return;
-                }
-            };
-
-            const handleImageMouseMove = (event) => {
-                if (!isDrawing) return;
-
-                event.preventDefault();
-                const coords = getImageCoordinates(event);
-                if (coords) {
-                    setDrawCurrent(coords);
-                }
-            };
-
-            const handleImageMouseUp = (event) => {
-                if (!isDrawing || !drawStart) return;
-
-                const coords = getImageCoordinates(event);
-                if (!coords) return;
-
-                const bounds = {
-                    x: Math.min(drawStart.x, coords.x),
-                    y: Math.min(drawStart.y, coords.y),
-                    width: Math.abs(coords.x - drawStart.x),
-                    height: Math.abs(coords.y - drawStart.y)
-                };
-
-                // Manual detection mode
-                if (manualDetectionMode && bounds.width > 10 && bounds.height > 10) {
-                    const thumbnail = extractRegionThumbnail(imageRef.current, { bounds: bounds });
-
-                    const manualDetection = {
-                        symbol: { id: 'unknown', name: 'Unknown', transliteration: '?' },
-                        confidence: 0.5,
-                        position: bounds,
-                        matchType: 'manual',
-                        isManual: true,
-                        regionIndex: isolatedSymbols.length,
-                        thumbnail: thumbnail
-                    };
-
-                    setIsolatedSymbols(prev => [...prev, {
-                        bounds: bounds,
-                        thumbnail: thumbnail,
-                        area: bounds.width * bounds.height,
-                        aspectRatio: bounds.width / bounds.height
-                    }]);
-
-                    setRecognitionResults(prev => [...prev, manualDetection]);
-                    recordAction('add_manual_detection', { bounds, thumbnail: !!thumbnail });
-                }
-
-                // Trim mode
-                if (trimMode !== null && bounds.width > 10 && bounds.height > 10) {
-                    applyTrim(trimMode, bounds);
-                }
-
-                // Exclude mode
-                if (excludeMode !== null && bounds.width > 10 && bounds.height > 10) {
-                    // Add to exclusion regions
-                    setExcludeRegions(prev => [...prev, bounds]);
-                }
-
-                setIsDrawing(false);
-                setDrawStart(null);
-                setDrawCurrent(null);
-            };
-
-            const toggleRegionSelection = (regionIndex) => {
-                setSelectedRegions(prev => {
-                    const newSet = new Set(prev);
-                    newSet.has(regionIndex) ? newSet.delete(regionIndex) : newSet.add(regionIndex);
-                    return newSet;
-                });
-            };
-
-            const handleDetectionClick = (event, index) => {
-                if (event.ctrlKey || event.metaKey) {
-                    event.stopPropagation();
-                    toggleRegionSelection(index);
-                }
-            };
-
-            const getReadingOrderedResults = () => {
-                if (viewMode === 'detection') return recognitionResults;
-                
-                // If manual reading order exists, use it
-                if (readingOrder.length === recognitionResults.length) {
-                    return readingOrder.map(idx => recognitionResults[idx]);
-                }
-                
-                // Otherwise, auto-sort by direction
-            const sorted = recognitionResults.map((result, idx) => ({ result, originalIndex: idx }));
-                
-                if (readingDirection === 'ltr') {
-                    sorted.sort((a, b) => 
-                        a.result.position.y - b.result.position.y || 
-                        a.result.position.x - b.result.position.x
+                    ctx.drawImage(
+                        inputImage,
+                        region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height,
+                        0, 0, region.bounds.width, region.bounds.height
                     );
-                } else if (readingDirection === 'rtl') {
-                    sorted.sort((a, b) => 
-                        a.result.position.y - b.result.position.y || 
-                        b.result.position.x - a.result.position.x
-                    );
-                } else if (readingDirection === 'ttb') {
-                    sorted.sort((a, b) => 
-                        a.result.position.x - b.result.position.x || 
-                        a.result.position.y - b.result.position.y
-                    );
+
+                    return canvas.toDataURL();
+                } catch (error) {
+                    console.error('Thumbnail extraction error:', error);
+                    return null;
                 }
-                
-                return sorted.map(item => item.result);
             };
 
-        const getFilteredResults = () => {
-                if (!useConfidenceFilter) {
-                    return recognitionResults;
-                }
-            return recognitionResults.filter(result => result.confidence >= confidenceThreshold / 100);
-         };   
+            const calculateIoU = (box1, box2) => {
+                const x1 = Math.max(box1.x, box2.x);
+                const y1 = Math.max(box1.y, box2.y);
+                const x2 = Math.min(box1.x + box1.width, box2.x + box2.width);
+                const y2 = Math.min(box1.y + box1.height, box2.y + box2.height);
 
-        const getReadingOrderIndex = (detectionIndex) => {
-            const orderedResults = getReadingOrderedResults();
-                return orderedResults.findIndex(result => 
-                recognitionResults.indexOf(result) === detectionIndex
-            ) + 1;
-        };
+                const intersectionArea = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+                const box1Area = box1.width * box1.height;
+                const box2Area = box2.width * box2.height;
+                const unionArea = box1Area + box2Area - intersectionArea;
 
-        const applyReadingDirection = (direction) => {
-            setReadingDirection(direction);
-                
-            // Auto-generate reading order based on direction
-            const sorted = recognitionResults.map((result, idx) => ({ result, idx }));
-                
-            if (direction === 'ltr') {
-                sorted.sort((a, b) => 
-                    a.result.position.y - b.result.position.y || 
-                    a.result.position.x - b.result.position.x
-                );
-            } else if (direction === 'rtl') {
-                sorted.sort((a, b) => 
-                    a.result.position.y - b.result.position.y || 
-                    b.result.position.x - a.result.position.x
-                );
-            } else if (direction === 'ttb') {
-                sorted.sort((a, b) => 
-                    a.result.position.x - b.result.position.x || 
-                    a.result.position.y - b.result.position.y
-                );
-            } else {
-                // Detection order - just use original indices
-                setReadingOrder(recognitionResults.map((_, idx) => idx));
-                return;
-            }
-            
-                setReadingOrder(sorted.map(item => item.idx));
+                return unionArea > 0 ? intersectionArea / unionArea : 0;
             };
 
-            const toggleWordBoundary = (readingOrderIndex) => {
-                setWordBoundaries(prev => {
-                    const newSet = new Set(prev);
-                    newSet.has(readingOrderIndex) ? newSet.delete(readingOrderIndex) : newSet.add(readingOrderIndex);
-                    return newSet;
-                });
-                recordAction('toggle_word_boundary', { readingOrderIndex });
-            };
+            // Add this utility function at the top
+            const preprocessImageForMatching = (img) => {
+                let gray = new cv.Mat();
+                const binary = new cv.Mat();
+                const processed = new cv.Mat();
 
-            const handleDragStart = (e, index) => {
-                // Prevent dragging in detection order mode
-                if (readingDirection === 'detection') {
-                    e.preventDefault();
-                    alert('⚠️ Cannot reorder in Detection Order mode.\n\nPlease select a reading direction (LTR, RTL, or TTB) to manually reorder symbols.');
-                    return;
-                }
-                setDraggedItem(index);
-                e.dataTransfer.effectAllowed = 'move';
-            };
-
-            const handleDragOver = (e, index) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-            };
-
-            const handleDrop = (e, dropIndex) => {
-                e.preventDefault();
-                if (draggedItem === null || draggedItem === dropIndex) return;
-                
-                const newOrder = [...readingOrder];
-                const draggedValue = newOrder[draggedItem];
-                newOrder.splice(draggedItem, 1);
-                newOrder.splice(dropIndex, 0, draggedValue);
-                
-                setReadingOrder(newOrder);
-                setDraggedItem(null);
-                
-                recordAction('reorder_reading', { from: draggedItem, to: dropIndex });
-            };
-
-            useEffect(() => {
-                if (selectedRegions.size >= 2) {
-                    const selectedDetections = Array.from(selectedRegions).map(i => recognitionResults[i]);
-                    if (selectedDetections.length > 0) {
-                        const minX = Math.min(...selectedDetections.map(d => d.position.x));
-                        const minY = Math.min(...selectedDetections.map(d => d.position.y));
-                        const maxX = Math.max(...selectedDetections.map(d => d.position.x + d.position.width));
-                        const maxY = Math.max(...selectedDetections.map(d => d.position.y + d.position.height));
-                        setMergeIndicator({ x: minX, y: minY, width: maxX - minX, height: maxY - minY });
-                    }
+                if (img.channels() > 1) {
+                    cv.cvtColor(img, gray, cv.COLOR_RGBA2GRAY);
                 } else {
-                    setMergeIndicator(null);
+                    img.copyTo(gray);
                 }
-            }, [selectedRegions, recognitionResults]);
+
+                cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 15, 3);
+
+                const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
+                cv.morphologyEx(binary, processed, cv.MORPH_CLOSE, kernel);
+                cv.morphologyEx(processed, processed, cv.MORPH_OPEN, kernel);
+
+                const thinKernel = cv.getStructuringElement(cv.MORPH_CROSS, new cv.Size(2, 2));
+                cv.erode(processed, processed, thinKernel, new cv.Point(-1, -1), 1);
+
+                kernel.delete();
+                thinKernel.delete();
+                gray.delete();
+                binary.delete();
+
+                return processed;
+            };
+
+            // ============================================
+            // SYMBOL ISOLATION & RECOGNITION
+            // ============================================
 
             const isolateSymbols = (inputImage) => {
                 if (!isOpenCvReady) return [];
@@ -547,7 +221,6 @@
                     } else {
                         src.copyTo(gray);
                     }
-
                     // Adaptive thresholding
                     cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
 
@@ -609,7 +282,7 @@
                         return a.bounds.x - b.bounds.x; // Same row, sort by x
                     });
 
-                    console.log(`Isolated ${isolatedRegions.length} regions (min area: ${minArea.toFixed(0)}, max area: ${maxArea.toFixed(0)})`);
+                    console.log(`✓ Isolated ${isolatedRegions.length} regions`);
 
                     // Cleanup
                     src.delete();
@@ -629,26 +302,6 @@
                 }
             };
 
-            const extractRegionThumbnail = (inputImage, region) => {
-                try {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    canvas.width = region.bounds.width;
-                    canvas.height = region.bounds.height;
-
-                    ctx.drawImage(
-                        inputImage,
-                        region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height,
-                        0, 0, region.bounds.width, region.bounds.height
-                    );
-
-                    return canvas.toDataURL();
-                } catch (error) {
-                    console.error('Thumbnail extraction error:', error);
-                    return null;
-                }
-            };
-            
             const performTemplateMatchingOnRegion = (inputImage, templateImage, region, symbolId) => {
                 if (!isOpenCvReady) return [];
                 try {
@@ -690,8 +343,8 @@
                         return normalized;
                     };
 
-                    const processedRegion = preprocessForShape(regionMat);
-                    const processedTemplate = preprocessForShape(templ);
+                    const processedRegion = preprocessImageForMatching(regionMat);
+                    const processedTemplate = preprocessImageForMatching(templ);
 
                     // Method 1: Contour Shape Matching (PRIMARY)
                     let shapeScore = 0;
@@ -829,7 +482,10 @@
                         (aspectScore * weights.aspect) +
                         (templateScore * weights.template);
 
-                    console.log(`Symbol ${symbolId}: Shape=${(shapeScore * 100).toFixed(1)}%[${shapeMethod}] Aspect=${(aspectScore * 100).toFixed(1)}% Template=${(templateScore * 100).toFixed(1)}% → Combined=${(combinedScore * 100).toFixed(1)}%`);
+                    // Only log low confidence matches (might be wrong) and high confidence (definitely right)
+                    if (combinedScore < 0.5 || combinedScore > 0.8) {
+                        console.log(`Symbol ${symbolId}: Combined=${(combinedScore * 100).toFixed(1)}% [Shape=${(shapeScore * 100).toFixed(1)}% Aspect=${(aspectScore * 100).toFixed(1)}% Template=${(templateScore * 100).toFixed(1)}%]`);
+                    }
 
                     // Lower threshold since we're focusing on shape
                     if (combinedScore >= 0.30) {
@@ -882,221 +538,231 @@
                 return keep;
             };
 
-            const calculateIoU = (box1, box2) => {
-                const x1 = Math.max(box1.x, box2.x);
-                const y1 = Math.max(box1.y, box2.y);
-                const x2 = Math.min(box1.x + box1.width, box2.x + box2.width);
-                const y2 = Math.min(box1.y + box1.height, box2.y + box2.height);
-
-                const intersectionArea = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
-                const box1Area = box1.width * box1.height;
-                const box2Area = box2.width * box2.height;
-                const unionArea = box1Area + box2Area - intersectionArea;
-
-                return unionArea > 0 ? intersectionArea / unionArea : 0;
-            };
-
-            const exportDetectionData = () => {
-                const data = {
-                    timestamp: new Date().toISOString(),
-                    imageFile: image ? 'uploaded_image' : null,
-                    viewMode: viewMode,
-                    readingDirection: readingDirection,
-                    detections: recognitionResults.map((result, index) => ({
-                        index: index,
-                        symbol: result.symbol.name,
-                        transliteration: result.symbol.transliteration,
-                        confidence: result.confidence,
-                        position: result.position,
-                        matchType: result.matchType,
-                        isManual: result.isManual || false,
-                        isMerged: result.isMerged || false,
-                        validated: validations[index] ? validations[index].isCorrect : null
-                    })),
-                    readingOrder: viewMode === 'reading' ? readingOrder : null,
-                    wordBoundaries: Array.from(wordBoundaries),
-                    actionHistory: actionHistory
-                };
-                
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `hakli_detection_data_${new Date().toISOString().slice(0,10)}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                recordAction('export_detection_data', { detectionCount: recognitionResults.length });
-            };
-
-            const exportAnnotatedImage = () => {
-                if (!imageRef.current) return;
-                
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                const img = imageRef.current;
-                
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
-                
-                // Draw original image
-                ctx.drawImage(img, 0, 0);
-                
-                // Draw detection boxes and labels
-                recognitionResults.forEach((detection, index) => {
-                    const pos = detection.position;
-                    
-                    // Determine box color based on validation
-                    let boxColor = '#3b82f6'; // blue - unvalidated
-                    if (validations[index]) {
-                        boxColor = validations[index].isCorrect ? '#10b981' : '#ef4444'; // green or red
-                    }
-                    
-                    // Draw box
-                    ctx.strokeStyle = boxColor;
-                    ctx.lineWidth = 4;
-                    ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
-                    
-                    // Draw semi-transparent background for label
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-                    const labelText = detection.symbol.name;
-                    ctx.font = '16px Arial';
-                    const textWidth = ctx.measureText(labelText).width;
-                    ctx.fillRect(pos.x, pos.y - 25, textWidth + 10, 25);
-                    
-                    // Draw label text
-                    ctx.fillStyle = 'white';
-                    ctx.fillText(labelText, pos.x + 5, pos.y - 7);
-                    
-                    // Draw reading order number if in reading view
-                    if (viewMode === 'reading') {
-                        const orderNum = getReadingOrderIndex(index);
-                        ctx.fillStyle = '#facc15';
-                        ctx.beginPath();
-                        ctx.arc(pos.x - 15, pos.y - 15, 15, 0, 2 * Math.PI);
-                        ctx.fill();
-                        ctx.strokeStyle = '#ca8a04';
-                        ctx.lineWidth = 2;
-                        ctx.stroke();
-                        
-                        ctx.fillStyle = 'black';
-                        ctx.font = 'bold 14px Arial';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillText(orderNum.toString(), pos.x - 15, pos.y - 15);
-                        ctx.textAlign = 'left';
-                        ctx.textBaseline = 'alphabetic';
-                    }
-                });
-                
-                // Convert to blob and download
-                canvas.toBlob((blob) => {
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `hakli_annotated_${new Date().toISOString().slice(0,10)}.png`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                    
-                    recordAction('export_annotated_image', {});
-                });
-            };
-
-            const copyTranscriptionToClipboard = () => {
-                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
-                let transcription = '';
-                
-                orderedResults.forEach((result, index) => {
-                    transcription += result.symbol.transliteration || result.symbol.name;
-                    if (viewMode === 'reading' && wordBoundaries.has(index)) {
-                        transcription += ' | ';
-                    } else if (index < orderedResults.length - 1) {
-                        transcription += ' ';
-                    }
-                });
-                
-                navigator.clipboard.writeText(transcription).then(() => {
-                    alert('Transcription copied to clipboard!');
-                    recordAction('copy_transcription', {});
-                }).catch(err => {
-                    console.error('Failed to copy:', err);
-                });
-            };
-
-            const startCorrection = (detectionIndex) => {
-                setCorrectionMode(detectionIndex);
-            };
-
-            const applyCorrection = (detectionIndex, newSymbol) => {
-                const oldSymbol = recognitionResults[detectionIndex].symbol;
-                const confidence = recognitionResults[detectionIndex].confidence;
-
-                recordAction('correct_symbol', {
-                    detectionIndex: detectionIndex,
-                    oldSymbol: oldSymbol,
-                    newSymbol: newSymbol
-                });
-
-                // Save to correction memory
-                saveCorrectionToMemory(oldSymbol, newSymbol, confidence);
-
-                setRecognitionResults(prev => prev.map((result, index) => {
-                    if (index === detectionIndex) {
-                        return {
-                            ...result,
-                            symbol: newSymbol,
-                            corrected: true,
-                            originalSymbol: result.symbol
-                        };
-                    }
-                    return result;
-                }));
-
-                setCorrectionMode(null);
-            };
-
-            const cancelCorrection = () => {
-                setCorrectionMode(null);
-            };
-
-            // Correction Memory Functions
-            const saveCorrectionToMemory = (originalSymbol, correctedSymbol, confidence) => {
+            const recognizeSymbols = () => {
+                if (!image || !equivalenceChart || !isOpenCvReady) return;
+                setIsProcessing(true);
+                setRecognitionResults([]);
+                console.log('Starting recognition with', equivalenceChart.symbols.length, 'symbols and', Object.keys(loadedSymbolImages).length, 'loaded images');
                 try {
-                    const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
-                    const key = originalSymbol.id;
+                    const tempImg = new Image();
+                    tempImg.onload = () => {
+                        const isolated = isolateSymbols(tempImg);
+                        const isolatedWithThumbnails = isolated.map(region => ({
+                            ...region,
+                            thumbnail: extractRegionThumbnail(tempImg, region)
+                        }));
+                        setIsolatedSymbols(isolatedWithThumbnails);
+                        console.log('Isolated', isolated.length, 'regions');
+                        if (isolated.length === 0) {
+                            console.log('No regions found - check image contrast and size');
+                            setIsProcessing(false);
+                            return;
+                        }
+                        const results = [];
+                        let totalMatches = 0;
+                        for (const region of isolated) {
+                            let bestMatch = null;
 
-                    if (!corrections[key]) {
-                        corrections[key] = {
-                            originalSymbol: originalSymbol,
-                            corrections: []
-                        };
-                    }
+                            for (const symbol of equivalenceChart.symbols) {
+                                // Check primary image
+                                if (loadedSymbolImages[symbol.id]) {
+                                    const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region);
+                                    totalMatches += matches.length;
+                                    for (const match of matches) {
+                                        if (!bestMatch || match.confidence > bestMatch.confidence) {
+                                            bestMatch = {
+                                                symbol,
+                                                confidence: match.confidence,
+                                                position: region.bounds,
+                                                matchType: 'primary'
+                                            };
+                                        }
+                                    }
+                                }
 
-                    // Find if this correction already exists
-                    const existingIndex = corrections[key].corrections.findIndex(c => c.to.id === correctedSymbol.id);
+                                // Check variant images
+                                if (symbol.images && symbol.images.variants) {
+                                    for (let i = 0; i < symbol.images.variants.length; i++) {
+                                        const variantKey = `${symbol.id}_variant_${i}`;
+                                        if (loadedSymbolImages[variantKey]) {
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[variantKey], region);
+                                            for (const match of matches) {
+                                                const weightedConfidence = match.confidence * 0.9;
+                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                                    bestMatch = {
+                                                        symbol,
+                                                        confidence: weightedConfidence,
+                                                        position: region.bounds,
+                                                        matchType: 'variant',
+                                                        variantIndex: i
+                                                    };
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
 
-                    if (existingIndex >= 0) {
-                        corrections[key].corrections[existingIndex].count++;
-                        corrections[key].corrections[existingIndex].lastUsed = new Date().toISOString();
-                    } else {
-                        corrections[key].corrections.push({
-                            to: correctedSymbol,
-                            count: 1,
-                            firstUsed: new Date().toISOString(),
-                            lastUsed: new Date().toISOString(),
-                            avgConfidence: confidence
-                        });
-                    }
+                                // Check example images
+                                if (symbol.images && symbol.images.examples) {
+                                    for (let i = 0; i < symbol.images.examples.length; i++) {
+                                        const exampleKey = `${symbol.id}_example_${i}`;
+                                        if (loadedSymbolImages[exampleKey]) {
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[exampleKey], region);
+                                            for (const match of matches) {
+                                                const weightedConfidence = match.confidence * 0.8;
+                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
+                                                    bestMatch = {
+                                                        symbol,
+                                                        confidence: weightedConfidence,
+                                                        position: region.bounds,
+                                                        matchType: 'example',
+                                                        exampleIndex: i
+                                                    };
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
-                    localStorage.setItem('hakliCorrections', JSON.stringify(corrections));
-                    console.log('Correction saved to memory:', originalSymbol.name, '→', correctedSymbol.name);
+                            if (bestMatch && bestMatch.confidence > 0.4) {
+                                results.push({
+                                    ...bestMatch,
+                                    regionIndex: isolated.indexOf(region)
+                                });
+                                console.log(`Region ${isolated.indexOf(region)}: Matched ${bestMatch.symbol.name} with ${(bestMatch.confidence * 100).toFixed(1)}% confidence`);
+                            }
+                        }
+                        console.log(`✓ Recognition complete: ${filteredResults.length} symbols detected (${results.length - filteredResults.length} overlapping removed)`);
+
+                        // Apply non-maximum suppression to remove overlapping detections
+                        const filteredResults = applyNonMaximumSuppression(results, 0.3);
+                        console.log(`✓ Recognition complete: ${filteredResults.length} symbols detected (${results.length - filteredResults.length} overlapping removed)`);
+
+                        setRecognitionResults(filteredResults);
+                        setIsProcessing(false);
+                    };
+                    tempImg.src = image;
                 } catch (error) {
-                    console.error('Failed to save correction:', error);
+                    console.error('Recognition error:', error);
+                    setIsProcessing(false);
                 }
+            };
+
+            // ============================================
+            // DETECTION MANIPULATION
+            // ============================================
+
+            const validateDetection = (detectionIndex, isCorrect) => {
+                recordAction('validation', {
+                    detectionIndex,
+                    isCorrect,
+                    detectionData: recognitionResults[detectionIndex]
+                });
+                setValidations(prev => ({
+                    ...prev,
+                    [detectionIndex]: {
+                        isCorrect,
+                        timestamp: new Date().toISOString(),
+                        detectionData: recognitionResults[detectionIndex]
+                    }
+                }));
+            };
+
+            const deleteDetection = (detectionIndex) => {
+                recordAction('delete_detection', {
+                    index: detectionIndex,
+                    detection: recognitionResults[detectionIndex]
+                });
+                // Update recognition results
+                setRecognitionResults(prev => prev.filter((_, i) => i !== detectionIndex));
+                // Update validations with shifted indices
+                setValidations(prev => {
+                    const newValidations = { ...prev };
+                    delete newValidations[detectionIndex];
+                    const shifted = {};
+                    Object.keys(newValidations).forEach(key => {
+                        const numKey = parseInt(key);
+                        shifted[numKey > detectionIndex ? numKey - 1 : numKey] = newValidations[key];
+                    });
+                    return shifted;
+                });
+                // Update selected regions - remove deleted index and shift others
+                setSelectedRegions(prev => {
+                    const newSet = new Set();
+                    prev.forEach(idx => {
+                        if (idx !== detectionIndex) {
+                            // Shift down indices that come after the deleted one
+                            newSet.add(idx > detectionIndex ? idx - 1 : idx);
+                        }
+                    });
+                    return newSet;
+                });
+                // Clear merge indicator if it existed
+                setMergeIndicator(null);
+            };
+
+            const mergeSelectedDetections = () => {
+                const selectedIndices = Array.from(selectedRegions).sort((a, b) => a - b);
+                if (selectedIndices.length < 2) {
+                    alert('Please select at least 2 detections to merge');
+                    return;
+                }
+
+                const detectionsToMerge = selectedIndices.map(i => recognitionResults[i]);
+                const minX = Math.min(...detectionsToMerge.map(d => d.position.x));
+                const minY = Math.min(...detectionsToMerge.map(d => d.position.y));
+                const maxX = Math.max(...detectionsToMerge.map(d => d.position.x + d.position.width));
+                const maxY = Math.max(...detectionsToMerge.map(d => d.position.y + d.position.height));
+
+                const baseDetection = detectionsToMerge.reduce((best, current) =>
+                    current.confidence > best.confidence ? current : best
+                );
+
+                const mergedBounds = {
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY
+                };
+
+                // Extract new thumbnail for merged region
+                const mergedThumbnail = extractRegionThumbnail(imageRef.current, { bounds: mergedBounds });
+
+                const mergedDetection = {
+                    ...baseDetection,
+                    position: mergedBounds,
+                    confidence: detectionsToMerge.reduce((sum, d) => sum + d.confidence, 0) / detectionsToMerge.length,
+                    mergedFrom: detectionsToMerge.length,
+                    isMerged: true,
+                    thumbnail: mergedThumbnail,  // Add the new thumbnail
+                    regionIndex: isolatedSymbols.length  // Will be the next index
+                };
+
+                recordAction('merge_detections', {
+                    indices: selectedIndices,
+                    detections: detectionsToMerge,
+                    mergedResult: mergedDetection
+                });
+
+                // Remove the merged detections
+                let newResults = recognitionResults.slice();
+                for (let i = selectedIndices.length - 1; i >= 0; i--) {
+                    newResults.splice(selectedIndices[i], 1);
+                }
+                newResults.push(mergedDetection);
+
+                // Add merged region to isolated symbols
+                setIsolatedSymbols(prev => [...prev, {
+                    bounds: mergedBounds,
+                    thumbnail: mergedThumbnail,
+                    area: mergedBounds.width * mergedBounds.height,
+                    aspectRatio: mergedBounds.width / mergedBounds.height
+                }]);
+
+                setRecognitionResults(newResults);
+                setSelectedRegions(new Set());
+                setMergeIndicator(null);
             };
 
             const applyTrim = (detectionIndex, newBounds) => {
@@ -1147,18 +813,17 @@
                 setRecognitionResults(prev =>
                     prev.map((r, i) => i === detectionIndex ? updatedDetection : r)
                 );
-
                 recordAction('trim_detection', {
-                    index: detectionIndex,
-                    oldBounds,
-                    newBounds: trimmedBounds
-                });
+                        index: detectionIndex,
+                        oldBounds,
+                        newBounds: trimmedBounds
+                    });
 
                 setTrimMode(null);
                 alert('✅ Detection trimmed! You may want to correct the symbol if recognition changed.');
             };
 
-           const applyExclude = (detectionIndex) => {
+              const applyExclude = (detectionIndex) => {
                 if (excludeRegions.length === 0) {
                     alert('❌ No exclusion regions drawn. Draw at least one region to exclude.');
                     return;
@@ -1166,9 +831,6 @@
 
                 const detection = recognitionResults[detectionIndex];
                 const originalBounds = detection.position;
-
-                console.log('🚫 Starting exclusion for detection:', detectionIndex, detection);
-                console.log('📦 Exclusion regions:', excludeRegions);
 
                 try {
                     // Create a mask of the original region
@@ -1348,6 +1010,175 @@
                 }
             };
 
+
+            // ============================================
+            // CLOUD SYNC
+            // ============================================
+
+            const uploadCorrectionsToCloud = async () => {
+                    try {
+                        const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
+                        const exportData = {
+                            version: '1.0',
+                            uploadDate: new Date().toISOString(),
+                            corrections: corrections,
+                            stats: {
+                                totalSymbols: Object.keys(corrections).length,
+                                totalCorrections: Object.values(corrections).reduce((sum, c) =>
+                                    sum + c.corrections.reduce((s, cor) => s + cor.count, 0), 0)
+                            },
+                            source: 'hakli-recognizer-community-contribution'
+                        };
+
+                        // Create downloadable JSON file
+                        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `hakli_corrections_contribution_${new Date().toISOString().slice(0, 10)}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+
+                        // Show instructions
+                        const issueUrl = 'https://github.com/hytra3/hakli_glyph_recognizer/issues/new?title=Community%20Corrections%20Contribution&body=Please%20find%20my%20correction%20memory%20attached.%20Thank%20you!';
+
+                        const message = `✅ Corrections file downloaded!\n\n` +
+                            `📤 To share with the community:\n\n` +
+                            `1. The file has been downloaded to your computer\n` +
+                            `2. Click OK to open a new GitHub Issue\n` +
+                            `3. Attach the downloaded JSON file to the issue\n` +
+                            `4. Submit the issue\n\n` +
+                            `Your corrections will be reviewed and added to the master collection!\n\n` +
+                            `Stats: ${exportData.stats.totalCorrections} corrections for ${exportData.stats.totalSymbols} symbols`;
+
+                        if (confirm(message)) {
+                            window.open(issueUrl, '_blank');
+                        }
+
+                        recordAction('export_for_contribution', { stats: exportData.stats });
+
+                        return { success: true };
+                    } catch (error) {
+                        console.error('Export failed:', error);
+                        alert('❌ Failed to export corrections. Check console for details.');
+                        return null;
+                    }
+                };
+
+            const downloadCorrectionsFromCloud = async (url = null) => {
+                    try {
+                        // Default to master collection
+                        const masterUrl = url || 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/community-corrections/master.json';
+
+                        // Fetch the corrections data
+                        const response = await fetch(masterUrl);
+                        if (!response.ok) {
+                            if (response.status === 404) {
+                                alert('ℹ️ No master corrections available yet.\n\nBe the first to contribute!');
+                                return null;
+                            }
+                            throw new Error('Failed to download corrections');
+                        }
+
+                        const cloudData = await response.json();
+
+                        // Check if there are any corrections
+                        if (!cloudData.corrections || Object.keys(cloudData.corrections).length === 0) {
+                            alert('ℹ️ The master collection is empty.\n\nContribute your corrections to help the community!');
+                            return null;
+                        }
+
+                        // Merge with existing corrections
+                        const existing = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
+                        let newCorrections = 0;
+                        let updatedCorrections = 0;
+
+                        Object.keys(cloudData.corrections).forEach(key => {
+                            if (!existing[key]) {
+                                existing[key] = cloudData.corrections[key];
+                                newCorrections++;
+                            } else {
+                                // Merge correction counts
+                                cloudData.corrections[key].corrections.forEach(cloudCorr => {
+                                    const existingCorr = existing[key].corrections.find(c => c.to.id === cloudCorr.to.id);
+                                    if (existingCorr) {
+                                        existingCorr.count += cloudCorr.count;
+                                        updatedCorrections++;
+                                    } else {
+                                        existing[key].corrections.push(cloudCorr);
+                                        newCorrections++;
+                                    }
+                                });
+                            }
+                        });
+
+                        localStorage.setItem('hakliCorrections', JSON.stringify(existing));
+
+                        const contributorInfo = cloudData.stats?.contributors?.length > 0
+                            ? `\n\nThanks to ${cloudData.stats.contributors.length} contributor(s)!`
+                            : '';
+
+                        alert(`✅ Community corrections downloaded!\n\n` +
+                            `${newCorrections} new corrections added\n` +
+                            `${updatedCorrections} existing corrections updated\n\n` +
+                            `Total symbols in your memory: ${Object.keys(existing).length}` +
+                            contributorInfo);
+
+                        recordAction('download_from_cloud', {
+                            source: masterUrl,
+                            newCorrections,
+                            updatedCorrections
+                        });
+
+                        return { newCorrections, updatedCorrections };
+                    } catch (error) {
+                        console.error('Download from cloud failed:', error);
+                        alert('❌ Failed to download corrections from cloud.\n\nThe master collection may not exist yet, or there may be a network issue.');
+                        return null;
+                    }
+                };
+          
+            // ============================================
+            // CORRECTION MEMORY
+            // ============================================
+
+            const saveCorrectionToMemory = (originalSymbol, correctedSymbol, confidence) => {
+                try {
+                    const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
+                    const key = originalSymbol.id;
+
+                    if (!corrections[key]) {
+                        corrections[key] = {
+                            originalSymbol: originalSymbol,
+                            corrections: []
+                        };
+                    }
+
+                    // Find if this correction already exists
+                    const existingIndex = corrections[key].corrections.findIndex(c => c.to.id === correctedSymbol.id);
+
+                    if (existingIndex >= 0) {
+                        corrections[key].corrections[existingIndex].count++;
+                        corrections[key].corrections[existingIndex].lastUsed = new Date().toISOString();
+                    } else {
+                        corrections[key].corrections.push({
+                            to: correctedSymbol,
+                            count: 1,
+                            firstUsed: new Date().toISOString(),
+                            lastUsed: new Date().toISOString(),
+                            avgConfidence: confidence
+                        });
+                    }
+
+                    localStorage.setItem('hakliCorrections', JSON.stringify(corrections));
+                    console.log('Correction saved to memory:', originalSymbol.name, '→', correctedSymbol.name);
+                } catch (error) {
+                    console.error('Failed to save correction:', error);
+                }
+            };
+
             const getCorrectionSuggestion = (symbolId) => {
                 try {
                     const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
@@ -1422,7 +1253,532 @@
                     alert('Failed to import corrections - invalid file format');
                 }
             };
+
+            // ============================================
+            // EXPORT FUNCTIONS
+            // ============================================
+
+            const exportTranscription = () => {
+                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
+                let transcription = '';
+
+                orderedResults.forEach((result, index) => {
+                    transcription += result.symbol.transliteration || result.symbol.name;
+                    if (viewMode === 'reading' && wordBoundaries.has(index)) {
+                        transcription += ' | ';
+                    } else if (index < orderedResults.length - 1) {
+                        transcription += ' ';
+                    }
+                });
+
+                const blob = new Blob([transcription], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `hakli_transcription_${new Date().toISOString().slice(0, 10)}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                recordAction('export_transcription', { transcription });
+            };
+
+            const exportDetectionData = () => {
+                const data = {
+                    timestamp: new Date().toISOString(),
+                    imageFile: image ? 'uploaded_image' : null,
+                    viewMode: viewMode,
+                    readingDirection: readingDirection,
+                    detections: recognitionResults.map((result, index) => ({
+                        index: index,
+                        symbol: result.symbol.name,
+                        transliteration: result.symbol.transliteration,
+                        confidence: result.confidence,
+                        position: result.position,
+                        matchType: result.matchType,
+                        isManual: result.isManual || false,
+                        isMerged: result.isMerged || false,
+                        validated: validations[index] ? validations[index].isCorrect : null
+                    })),
+                    readingOrder: viewMode === 'reading' ? readingOrder : null,
+                    wordBoundaries: Array.from(wordBoundaries),
+                    actionHistory: actionHistory
+                };
+
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `hakli_detection_data_${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                recordAction('export_detection_data', { detectionCount: recognitionResults.length });
+            };
+
+            const exportAnnotatedImage = () => {
+                if (!imageRef.current) return;
+
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = imageRef.current;
+
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+
+                // Draw original image
+                ctx.drawImage(img, 0, 0);
+
+                // Draw detection boxes and labels
+                recognitionResults.forEach((detection, index) => {
+                    const pos = detection.position;
+
+                    // Determine box color based on validation
+                    let boxColor = '#3b82f6'; // blue - unvalidated
+                    if (validations[index]) {
+                        boxColor = validations[index].isCorrect ? '#10b981' : '#ef4444'; // green or red
+                    }
+
+                    // Draw box
+                    ctx.strokeStyle = boxColor;
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
+
+                    // Draw semi-transparent background for label
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+                    const labelText = detection.symbol.name;
+                    ctx.font = '16px Arial';
+                    const textWidth = ctx.measureText(labelText).width;
+                    ctx.fillRect(pos.x, pos.y - 25, textWidth + 10, 25);
+
+                    // Draw label text
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(labelText, pos.x + 5, pos.y - 7);
+
+                    // Draw reading order number if in reading view
+                    if (viewMode === 'reading') {
+                        const orderNum = getReadingOrderIndex(index);
+                        ctx.fillStyle = '#facc15';
+                        ctx.beginPath();
+                        ctx.arc(pos.x - 15, pos.y - 15, 15, 0, 2 * Math.PI);
+                        ctx.fill();
+                        ctx.strokeStyle = '#ca8a04';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+
+                        ctx.fillStyle = 'black';
+                        ctx.font = 'bold 14px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(orderNum.toString(), pos.x - 15, pos.y - 15);
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'alphabetic';
+                    }
+                });
+
+                // Convert to blob and download
+                canvas.toBlob((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `hakli_annotated_${new Date().toISOString().slice(0, 10)}.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    recordAction('export_annotated_image', {});
+                });
+            };
+
+            const copyTranscriptionToClipboard = () => {
+                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
+                let transcription = '';
+
+                orderedResults.forEach((result, index) => {
+                    transcription += result.symbol.transliteration || result.symbol.name;
+                    if (viewMode === 'reading' && wordBoundaries.has(index)) {
+                        transcription += ' | ';
+                    } else if (index < orderedResults.length - 1) {
+                        transcription += ' ';
+                    }
+                });
+
+                navigator.clipboard.writeText(transcription).then(() => {
+                    alert('Transcription copied to clipboard!');
+                    recordAction('copy_transcription', {});
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                });
+            };
+
+            // ============================================
+            // UI HELPERS
+            // ============================================
+
+            const getDetectionBoxStyle = (index) => {
+                const detection = recognitionResults[index];
+                if (!detection || !imageRef.current) return {};
+                const imageRect = imageRef.current.getBoundingClientRect();
+                const scaleX = imageRect.width / imageRef.current.naturalWidth;
+                const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                return {
+                    left: detection.position.x * scaleX + 'px',
+                    top: detection.position.y * scaleY + 'px',
+                    width: detection.position.width * scaleX + 'px',
+                    height: detection.position.height * scaleY + 'px'
+                };
+            };
+
+            const getDetectionBoxClass = (index) => {
+                let classes = ['detection-box'];
+                if (validations[index]) {
+                    classes.push(validations[index].isCorrect ? 'validated-correct' : 'validated-incorrect');
+                } else {
+                    classes.push('unvalidated');
+                }
+                if (selectedRegions.has(index)) classes.push('selected');
+                return classes.join(' ');
+            };
+
+            const getReadingOrderedResults = () => {
+                if (viewMode === 'detection') return recognitionResults;
+
+                // If manual reading order exists, use it
+                if (readingOrder.length === recognitionResults.length) {
+                    return readingOrder.map(idx => recognitionResults[idx]);
+                }
+
+                // Otherwise, auto-sort by direction
+                const sorted = recognitionResults.map((result, idx) => ({ result, originalIndex: idx }));
+
+                if (readingDirection === 'ltr') {
+                    sorted.sort((a, b) =>
+                        a.result.position.y - b.result.position.y ||
+                        a.result.position.x - b.result.position.x
+                    );
+                } else if (readingDirection === 'rtl') {
+                    sorted.sort((a, b) =>
+                        a.result.position.y - b.result.position.y ||
+                        b.result.position.x - a.result.position.x
+                    );
+                } else if (readingDirection === 'ttb') {
+                    sorted.sort((a, b) =>
+                        a.result.position.x - b.result.position.x ||
+                        a.result.position.y - b.result.position.y
+                    );
+                }
+
+                return sorted.map(item => item.result);
+            };
+
+            const getFilteredResults = () => {
+                if (!useConfidenceFilter) {
+                    return recognitionResults;
+                }
+                return recognitionResults.filter(result => result.confidence >= confidenceThreshold / 100);
+            };   
+
+            const addToIsolatedSymbols = (bounds, thumbnail) => {
+                setIsolatedSymbols(prev => [...prev, {
+                    bounds: bounds,
+                    thumbnail: thumbnail,
+                    area: bounds.width * bounds.height,
+                    aspectRatio: bounds.width / bounds.height
+                }]);
+            };
+
+            const recordAction = (actionType, actionData) => {
+                const action = {
+                    type: actionType,
+                    data: actionData,
+                    timestamp: new Date().toISOString(),
+                    id: Date.now()
+                };
+                setActionHistory(prev => [...prev, action].slice(-50));
+                // Only log important actions
+                if (['exclude_regions', 'merge_detections', 'upload_to_cloud'].includes(actionType)) {
+                    console.log(`✓ ${actionType}:`, actionData);
+                }
+                // Take snapshot after modifying actions
+                const modifyingActions = ['validation', 'delete_detection', 'merge_detections', 
+                                        'add_manual_detection', 'correct_symbol', 'reorder_reading', 
+                                        'toggle_word_boundary'];
+                if (modifyingActions.includes(actionType)) {
+                    setTimeout(takeSnapshot, 0);
+                }
+            };
+
+            const takeSnapshot = () => {
+                const snapshot = {
+                    recognitionResults: [...recognitionResults],
+                    validations: { ...validations },
+                    selectedRegions: new Set(selectedRegions),
+                    wordBoundaries: new Set(wordBoundaries),
+                    readingOrder: [...readingOrder],
+                    isolatedSymbols: [...isolatedSymbols]
+                };
+                
+                // Remove any "future" history if we're not at the end
+                const newHistory = stateHistory.slice(0, historyIndex + 1);
+                newHistory.push(snapshot);
+                
+                // Keep only last 50 states
+                const trimmedHistory = newHistory.slice(-50);
+                
+                setStateHistory(trimmedHistory);
+                setHistoryIndex(trimmedHistory.length - 1);
+            };
+
+            const handleImageMouseDown = (event) => {
+                // Manual detection mode
+                if (manualDetectionMode) {
+                    const coords = getImageCoordinates(event);
+                    if (!coords) return;
+                    setIsDrawing(true);
+                    setDrawStart(coords);
+                    setDrawCurrent(coords);
+                    return;
+                }
+
+                // Trim mode
+                if (trimMode !== null) {
+                    const coords = getImageCoordinates(event);
+                    if (!coords) return;
+                    setIsDrawing(true);
+                    setDrawStart(coords);
+                    setDrawCurrent(coords);
+                    return;
+                }
+
+                // Exclude mode
+                if (excludeMode !== null) {
+                    const coords = getImageCoordinates(event);
+                    if (!coords) return;
+                    setIsDrawing(true);
+                    setDrawStart(coords);
+                    setDrawCurrent(coords);
+                    return;
+                }
+            };
+
+            const handleImageMouseMove = (event) => {
+                if (!isDrawing) return;
+
+                event.preventDefault();
+                const coords = getImageCoordinates(event);
+                if (coords) {
+                    setDrawCurrent(coords);
+                }
+            };
+
+            const handleImageMouseUp = (event) => {
+                if (!isDrawing || !drawStart) return;
+
+                const coords = getImageCoordinates(event);
+                if (!coords) return;
+
+                const bounds = {
+                    x: Math.min(drawStart.x, coords.x),
+                    y: Math.min(drawStart.y, coords.y),
+                    width: Math.abs(coords.x - drawStart.x),
+                    height: Math.abs(coords.y - drawStart.y)
+                };
+
+                // Manual detection mode
+                if (manualDetectionMode && bounds.width > 10 && bounds.height > 10) {
+                    const thumbnail = extractRegionThumbnail(imageRef.current, { bounds: bounds });
+
+                    const manualDetection = {
+                        symbol: { id: 'unknown', name: 'Unknown', transliteration: '?' },
+                        confidence: 0.5,
+                        position: bounds,
+                        matchType: 'manual',
+                        isManual: true,
+                        regionIndex: isolatedSymbols.length,
+                        thumbnail: thumbnail
+                    };
+
+                    setIsolatedSymbols(prev => [...prev, {
+                        bounds: bounds,
+                        thumbnail: thumbnail,
+                        area: bounds.width * bounds.height,
+                        aspectRatio: bounds.width / bounds.height
+                    }]);
+
+                    setRecognitionResults(prev => [...prev, manualDetection]);
+                    recordAction('add_manual_detection', { bounds, thumbnail: !!thumbnail });
+                }
+
+                // Trim mode
+                if (trimMode !== null && bounds.width > 10 && bounds.height > 10) {
+                    applyTrim(trimMode, bounds);
+                }
+
+                // Exclude mode
+                if (excludeMode !== null && bounds.width > 10 && bounds.height > 10) {
+                    // Add to exclusion regions
+                    setExcludeRegions(prev => [...prev, bounds]);
+                }
+
+                setIsDrawing(false);
+                setDrawStart(null);
+                setDrawCurrent(null);
+            };
+
+            const toggleRegionSelection = (regionIndex) => {
+                setSelectedRegions(prev => {
+                    const newSet = new Set(prev);
+                    newSet.has(regionIndex) ? newSet.delete(regionIndex) : newSet.add(regionIndex);
+                    return newSet;
+                });
+            };
+
+            const handleDetectionClick = (event, index) => {
+                if (event.ctrlKey || event.metaKey) {
+                    event.stopPropagation();
+                    toggleRegionSelection(index);
+                }
+            };
             
+            const getReadingOrderIndex = (detectionIndex) => {
+                const orderedResults = getReadingOrderedResults();
+                    return orderedResults.findIndex(result => 
+                    recognitionResults.indexOf(result) === detectionIndex
+                ) + 1;
+            };
+
+            const applyReadingDirection = (direction) => {
+                setReadingDirection(direction);
+                
+            // Auto-generate reading order based on direction
+            const sorted = recognitionResults.map((result, idx) => ({ result, idx }));
+                
+            if (direction === 'ltr') {
+                sorted.sort((a, b) => 
+                    a.result.position.y - b.result.position.y || 
+                    a.result.position.x - b.result.position.x
+                );
+            } else if (direction === 'rtl') {
+                sorted.sort((a, b) => 
+                    a.result.position.y - b.result.position.y || 
+                    b.result.position.x - a.result.position.x
+                );
+            } else if (direction === 'ttb') {
+                sorted.sort((a, b) => 
+                    a.result.position.x - b.result.position.x || 
+                    a.result.position.y - b.result.position.y
+                );
+            } else {
+                // Detection order - just use original indices
+                setReadingOrder(recognitionResults.map((_, idx) => idx));
+                return;
+            }
+            
+                setReadingOrder(sorted.map(item => item.idx));
+            };
+
+            const toggleWordBoundary = (readingOrderIndex) => {
+                setWordBoundaries(prev => {
+                    const newSet = new Set(prev);
+                    newSet.has(readingOrderIndex) ? newSet.delete(readingOrderIndex) : newSet.add(readingOrderIndex);
+                    return newSet;
+                });
+                recordAction('toggle_word_boundary', { readingOrderIndex });
+            };
+
+            const handleDragStart = (e, index) => {
+                // Prevent dragging in detection order mode
+                if (readingDirection === 'detection') {
+                    e.preventDefault();
+                    alert('⚠️ Cannot reorder in Detection Order mode.\n\nPlease select a reading direction (LTR, RTL, or TTB) to manually reorder symbols.');
+                    return;
+                }
+                setDraggedItem(index);
+                e.dataTransfer.effectAllowed = 'move';
+            };
+
+            const handleDragOver = (e, index) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            };
+
+            const handleDrop = (e, dropIndex) => {
+                e.preventDefault();
+                if (draggedItem === null || draggedItem === dropIndex) return;
+                
+                const newOrder = [...readingOrder];
+                const draggedValue = newOrder[draggedItem];
+                newOrder.splice(draggedItem, 1);
+                newOrder.splice(dropIndex, 0, draggedValue);
+                
+                setReadingOrder(newOrder);
+                setDraggedItem(null);
+                
+                recordAction('reorder_reading', { from: draggedItem, to: dropIndex });
+            };
+
+            const handleRecognitionError = (error, context = 'Recognition') => {
+                console.error(`❌ ${context} error:`, error);
+                alert(`❌ ${context} failed. Check console for details.`);
+            };
+
+            useEffect(() => {
+                if (selectedRegions.size >= 2) {
+                    const selectedDetections = Array.from(selectedRegions).map(i => recognitionResults[i]);
+                    if (selectedDetections.length > 0) {
+                        const minX = Math.min(...selectedDetections.map(d => d.position.x));
+                        const minY = Math.min(...selectedDetections.map(d => d.position.y));
+                        const maxX = Math.max(...selectedDetections.map(d => d.position.x + d.position.width));
+                        const maxY = Math.max(...selectedDetections.map(d => d.position.y + d.position.height));
+                        setMergeIndicator({ x: minX, y: minY, width: maxX - minX, height: maxY - minY });
+                    }
+                } else {
+                    setMergeIndicator(null);
+                }
+            }, [selectedRegions, recognitionResults]);
+
+
+            const startCorrection = (detectionIndex) => {
+                setCorrectionMode(detectionIndex);
+            };
+
+            const applyCorrection = (detectionIndex, newSymbol) => {
+                const oldSymbol = recognitionResults[detectionIndex].symbol;
+                const confidence = recognitionResults[detectionIndex].confidence;
+
+                recordAction('correct_symbol', {
+                    detectionIndex: detectionIndex,
+                    oldSymbol: oldSymbol,
+                    newSymbol: newSymbol
+                });
+
+                // Save to correction memory
+                saveCorrectionToMemory(oldSymbol, newSymbol, confidence);
+
+                setRecognitionResults(prev => prev.map((result, index) => {
+                    if (index === detectionIndex) {
+                        return {
+                            ...result,
+                            symbol: newSymbol,
+                            corrected: true,
+                            originalSymbol: result.symbol
+                        };
+                    }
+                    return result;
+                }));
+
+                setCorrectionMode(null);
+            };
+
+            const cancelCorrection = () => {
+                setCorrectionMode(null);
+            };
+
+                    
             const undo = () => {
                 if (historyIndex <= 0) return;
                 
@@ -1453,145 +1809,6 @@
                 console.log('Redo to state', historyIndex + 1);
             }; 
 
-            const exportTranscription = () => {
-                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
-                let transcription = '';
-
-                orderedResults.forEach((result, index) => {
-                    transcription += result.symbol.transliteration || result.symbol.name;
-                    if (viewMode === 'reading' && wordBoundaries.has(index)) {
-                        transcription += ' | ';
-                    } else if (index < orderedResults.length - 1) {
-                        transcription += ' ';
-                    }
-                });
-
-                const blob = new Blob([transcription], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `hakli_transcription_${new Date().toISOString().slice(0, 10)}.txt`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-
-                recordAction('export_transcription', { transcription });
-            };
-
-
-
-            const recognizeSymbols = () => {
-                if (!image || !equivalenceChart || !isOpenCvReady) return;
-                setIsProcessing(true);
-                setRecognitionResults([]);
-                console.log('Starting recognition with', equivalenceChart.symbols.length, 'symbols and', Object.keys(loadedSymbolImages).length, 'loaded images');
-                try {
-                    const tempImg = new Image();
-                    tempImg.onload = () => {
-                        const isolated = isolateSymbols(tempImg);
-                        const isolatedWithThumbnails = isolated.map(region => ({
-                            ...region,
-                            thumbnail: extractRegionThumbnail(tempImg, region)
-                        }));
-                        setIsolatedSymbols(isolatedWithThumbnails);
-                        console.log('Isolated', isolated.length, 'regions');
-                        if (isolated.length === 0) {
-                            console.log('No regions found - check image contrast and size');
-                            setIsProcessing(false);
-                            return;
-                        }
-                        const results = [];
-                        let totalMatches = 0;
-                        for (const region of isolated) {
-                            let bestMatch = null;
-                            
-                            for (const symbol of equivalenceChart.symbols) {
-                                // Check primary image
-                                if (loadedSymbolImages[symbol.id]) {
-                                    const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region);
-                                    totalMatches += matches.length;
-                                    for (const match of matches) {
-                                        if (!bestMatch || match.confidence > bestMatch.confidence) {
-                                            bestMatch = {
-                                                symbol,
-                                                confidence: match.confidence,
-                                                position: region.bounds,
-                                                matchType: 'primary'
-                                            };
-                                        }
-                                    }
-                                }
-                                
-                                // Check variant images
-                                if (symbol.images && symbol.images.variants) {
-                                    for (let i = 0; i < symbol.images.variants.length; i++) {
-                                        const variantKey = `${symbol.id}_variant_${i}`;
-                                        if (loadedSymbolImages[variantKey]) {
-                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[variantKey], region);
-                                            for (const match of matches) {
-                                                const weightedConfidence = match.confidence * 0.9;
-                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
-                                                    bestMatch = {
-                                                        symbol,
-                                                        confidence: weightedConfidence,
-                                                        position: region.bounds,
-                                                        matchType: 'variant',
-                                                        variantIndex: i
-                                                    };
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                
-                                // Check example images
-                                if (symbol.images && symbol.images.examples) {
-                                    for (let i = 0; i < symbol.images.examples.length; i++) {
-                                        const exampleKey = `${symbol.id}_example_${i}`;
-                                        if (loadedSymbolImages[exampleKey]) {
-                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[exampleKey], region);
-                                            for (const match of matches) {
-                                                const weightedConfidence = match.confidence * 0.8;
-                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
-                                                    bestMatch = {
-                                                        symbol,
-                                                        confidence: weightedConfidence,
-                                                        position: region.bounds,
-                                                        matchType: 'example',
-                                                        exampleIndex: i
-                                                    };
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            if (bestMatch && bestMatch.confidence > 0.4) {
-                                results.push({
-                                    ...bestMatch,
-                                    regionIndex: isolated.indexOf(region)
-                                });
-                                console.log(`Region ${isolated.indexOf(region)}: Matched ${bestMatch.symbol.name} with ${(bestMatch.confidence * 100).toFixed(1)}% confidence`);
-                            }
-                        }
-                                                    console.log(`Recognition complete: ${results.length} symbols detected from ${isolated.length} regions (${totalMatches} total template matches tested)`);
-                        
-                        // Apply non-maximum suppression to remove overlapping detections
-                        const filteredResults = applyNonMaximumSuppression(results, 0.3);
-                        console.log(`After NMS: ${filteredResults.length} detections (removed ${results.length - filteredResults.length} overlapping)`);
-                        
-                        setRecognitionResults(filteredResults);
-                        setIsProcessing(false);
-                    };
-                    tempImg.src = image;
-                } catch (error) {
-                    console.error('Recognition error:', error);
-                    setIsProcessing(false);
-                }
-            };
-
             const handleFileUpload = (event) => {
                 const file = event.target.files[0];
                 if (file && file.type.indexOf('image/') === 0) {
@@ -1609,156 +1826,7 @@
                 }
             };
 
-            // Cloud Sync Functions - GitHub Repository Method
-            const uploadCorrectionsToCloud = async () => {
-                try {
-                    const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
-                    const exportData = {
-                        version: '1.0',
-                        uploadDate: new Date().toISOString(),
-                        corrections: corrections,
-                        stats: {
-                            totalSymbols: Object.keys(corrections).length,
-                            totalCorrections: Object.values(corrections).reduce((sum, c) =>
-                                sum + c.corrections.reduce((s, cor) => s + cor.count, 0), 0)
-                        },
-                        source: 'hakli-recognizer-community-contribution'
-                    };
-
-                    // Create downloadable JSON file
-                    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `hakli_corrections_contribution_${new Date().toISOString().slice(0, 10)}.json`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-
-                    // Show instructions
-                    const issueUrl = 'https://github.com/hytra3/hakli_glyph_recognizer/issues/new?title=Community%20Corrections%20Contribution&body=Please%20find%20my%20correction%20memory%20attached.%20Thank%20you!';
-
-                    const message = `✅ Corrections file downloaded!\n\n` +
-                        `📤 To share with the community:\n\n` +
-                        `1. The file has been downloaded to your computer\n` +
-                        `2. Click OK to open a new GitHub Issue\n` +
-                        `3. Attach the downloaded JSON file to the issue\n` +
-                        `4. Submit the issue\n\n` +
-                        `Your corrections will be reviewed and added to the master collection!\n\n` +
-                        `Stats: ${exportData.stats.totalCorrections} corrections for ${exportData.stats.totalSymbols} symbols`;
-
-                    if (confirm(message)) {
-                        window.open(issueUrl, '_blank');
-                    }
-
-                    recordAction('export_for_contribution', { stats: exportData.stats });
-
-                    return { success: true };
-                } catch (error) {
-                    console.error('Export failed:', error);
-                    alert('❌ Failed to export corrections. Check console for details.');
-                    return null;
-                }
-            };
-
-            const downloadCorrectionsFromCloud = async (url = null) => {
-                try {
-                    // Default to master collection
-                    const masterUrl = url || 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/community-corrections/master.json';
-
-                    // Fetch the corrections data
-                    const response = await fetch(masterUrl);
-                    if (!response.ok) {
-                        if (response.status === 404) {
-                            alert('ℹ️ No master corrections available yet.\n\nBe the first to contribute!');
-                            return null;
-                        }
-                        throw new Error('Failed to download corrections');
-                    }
-
-                    const cloudData = await response.json();
-
-                    // Check if there are any corrections
-                    if (!cloudData.corrections || Object.keys(cloudData.corrections).length === 0) {
-                        alert('ℹ️ The master collection is empty.\n\nContribute your corrections to help the community!');
-                        return null;
-                    }
-
-                    // Merge with existing corrections
-                    const existing = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
-                    let newCorrections = 0;
-                    let updatedCorrections = 0;
-
-                    Object.keys(cloudData.corrections).forEach(key => {
-                        if (!existing[key]) {
-                            existing[key] = cloudData.corrections[key];
-                            newCorrections++;
-                        } else {
-                            // Merge correction counts
-                            cloudData.corrections[key].corrections.forEach(cloudCorr => {
-                                const existingCorr = existing[key].corrections.find(c => c.to.id === cloudCorr.to.id);
-                                if (existingCorr) {
-                                    existingCorr.count += cloudCorr.count;
-                                    updatedCorrections++;
-                                } else {
-                                    existing[key].corrections.push(cloudCorr);
-                                    newCorrections++;
-                                }
-                            });
-                        }
-                    });
-
-                    localStorage.setItem('hakliCorrections', JSON.stringify(existing));
-
-                    const contributorInfo = cloudData.stats?.contributors?.length > 0
-                        ? `\n\nThanks to ${cloudData.stats.contributors.length} contributor(s)!`
-                        : '';
-
-                    alert(`✅ Community corrections downloaded!\n\n` +
-                        `${newCorrections} new corrections added\n` +
-                        `${updatedCorrections} existing corrections updated\n\n` +
-                        `Total symbols in your memory: ${Object.keys(existing).length}` +
-                        contributorInfo);
-
-                    recordAction('download_from_cloud', {
-                        source: masterUrl,
-                        newCorrections,
-                        updatedCorrections
-                    });
-
-                    return { newCorrections, updatedCorrections };
-                } catch (error) {
-                    console.error('Download from cloud failed:', error);
-                    alert('❌ Failed to download corrections from cloud.\n\nThe master collection may not exist yet, or there may be a network issue.');
-                    return null;
-                }
-            };
-
-            const getDetectionBoxStyle = (index) => {
-                const detection = recognitionResults[index];
-                if (!detection || !imageRef.current) return {};
-                const imageRect = imageRef.current.getBoundingClientRect();
-                const scaleX = imageRect.width / imageRef.current.naturalWidth;
-                const scaleY = imageRect.height / imageRef.current.naturalHeight;
-                return {
-                    left: detection.position.x * scaleX + 'px',
-                    top: detection.position.y * scaleY + 'px',
-                    width: detection.position.width * scaleX + 'px',
-                    height: detection.position.height * scaleY + 'px'
-                };
-            };
-
-            const getDetectionBoxClass = (index) => {
-                let classes = ['detection-box'];
-                if (validations[index]) {
-                    classes.push(validations[index].isCorrect ? 'validated-correct' : 'validated-incorrect');
-                } else {
-                    classes.push('unvalidated');
-                }
-                if (selectedRegions.has(index)) classes.push('selected');
-                return classes.join(' ');
-            };
+            
 
             useEffect(() => {
                 const handleKeyDown = (e) => {
@@ -1798,7 +1866,7 @@
                 return () => window.removeEventListener('keydown', handleKeyDown);
             }, [historyIndex, stateHistory, correctionMode, trimMode, excludeMode]);
 
-                        useEffect(() => {
+            useEffect(() => {
                 if (chartLoadStatus === 'not-loaded') {
                     setChartLoadStatus('loading');
                     const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
@@ -1885,7 +1953,7 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Symbol Recognizer</h1>
-                        <p className="text-gray-600">beta v251021 ©marty heaton</p>
+                        <p className="text-gray-600">beta v251022 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -2104,7 +2172,7 @@
                             )}
                             {recognitionResults.length > 0 && (
                                 <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-                                    💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) and Merge (⚡) buttons will appear.
+                                    💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) Merge (⚡) and exclude buttons will appear.
                                 </div>
                             )}
                         </div>
