@@ -2003,6 +2003,27 @@
                                         }
                                     }
                                 }
+
+                              // Load example images
+                                if (symbol.images && symbol.images.examples) {
+                                    for (let i = 0; i < symbol.images.examples.length; i++) {
+                                        const fullUrl = convertToGitHubUrl(symbol.images.examples[i]);
+                                        if (fullUrl) {
+                                            const exampleKey = `${symbol.id}_example_${i}`;
+                                            const promise = new Promise((resolve) => {
+                                                const img = new Image();
+                                                img.crossOrigin = 'anonymous';
+                                                img.onload = () => {
+                                                    imageCache[exampleKey] = img;
+                                                    resolve();
+                                                };
+                                                img.onerror = () => resolve();
+                                                img.src = fullUrl;
+                                            });
+                                            loadPromises.push(promise);
+                                        }
+                                    }
+                                }
                             }
                             
                             Promise.all(loadPromises).then(() => {
