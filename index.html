@@ -553,12 +553,13 @@
                             thumbnail: extractRegionThumbnail(tempImg, region)
                         }));
                         setIsolatedSymbols(isolatedWithThumbnails);
-                        console.log('Isolated', isolated.length, 'regions');
+                        console.log('✓ Isolated', isolated.length, 'regions');
                         if (isolated.length === 0) {
                             console.log('No regions found - check image contrast and size');
                             setIsProcessing(false);
                             return;
                         }
+
                         const results = [];
                         let totalMatches = 0;
                         const totalRegions = isolated.length;
@@ -567,7 +568,7 @@
                         for (let regionIndex = 0; regionIndex < isolated.length; regionIndex++) {
                             const region = isolated[regionIndex];
 
-                            // 👇 UPDATE PROGRESS
+                            // Update progress
                             setProcessingProgress({ current: regionIndex + 1, total: totalRegions });
 
                             let bestMatch = null;
@@ -575,7 +576,7 @@
                             for (const symbol of equivalenceChart.symbols) {
                                 // Check primary image
                                 if (loadedSymbolImages[symbol.id]) {
-                                    const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region, symbol.name || symbol.id);
+                                    const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region, symbol.id);
                                     totalMatches += matches.length;
                                     for (const match of matches) {
                                         if (!bestMatch || match.confidence > bestMatch.confidence) {
@@ -594,29 +595,7 @@
                                     for (let i = 0; i < symbol.images.examples.length; i++) {
                                         const exampleKey = `${symbol.id}_example_${i}`;
                                         if (loadedSymbolImages[exampleKey]) {
-                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[exampleKey], region, `${symbol.name}_ex${i}`);
-                                            for (const match of matches) {
-                                                const weightedConfidence = match.confidence * 0.9;
-                                                if (!bestMatch || weightedConfidence > bestMatch.confidence) {
-                                                    bestMatch = {
-                                                        symbol,
-                                                        confidence: weightedConfidence,
-                                                        position: region.bounds,
-                                                        matchType: 'variant',
-                                                        variantIndex: i
-                                                    };
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Check example images
-                                if (symbol.images && symbol.images.examples) {
-                                    for (let i = 0; i < symbol.images.examples.length; i++) {
-                                        const exampleKey = `${symbol.id}_example_${i}`;
-                                        if (loadedSymbolImages[exampleKey]) {
-                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[exampleKey], region);
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[exampleKey], region, `${symbol.id}_ex${i}`);
                                             for (const match of matches) {
                                                 const weightedConfidence = match.confidence * 0.8;
                                                 if (!bestMatch || weightedConfidence > bestMatch.confidence) {
@@ -641,9 +620,8 @@
                                 });
                             }
                         }
-                        console.log(`✓ Recognition complete: ${filteredResults.length} symbols detected (${results.length - filteredResults.length} overlapping removed)`);
 
-                        // 👇 RESET PROGRESS WHEN DONE
+                        // Reset progress when done
                         setProcessingProgress({ current: 0, total: 0 });
 
                         // Apply non-maximum suppression to remove overlapping detections
