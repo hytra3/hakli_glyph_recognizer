@@ -2445,8 +2445,12 @@
                                     );
                                 })}
                                 
-                                {getFilteredResults().map((detection) => {
-                                    const index = recognitionResults.indexOf(detection);
+                                {recognitionResults.map((detection, index) => {
+                                    // Skip if filtered out
+                                    if (useConfidenceFilter && detection.confidence < confidenceThreshold / 100) {
+                                        return null;
+                                    }
+
                                     return (
                                     <div key={`detection-${index}`} className={getDetectionBoxClass(index)} style={getDetectionBoxStyle(index)} onClick={(e) => handleDetectionClick(e, index)}>               
                                         {viewMode === 'reading' && (
