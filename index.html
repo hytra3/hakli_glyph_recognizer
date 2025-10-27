@@ -198,7 +198,7 @@
                 // cv.erode(processed, processed, thinKernel, new cv.Point(-1, -1), 1);
 
                 kernel.delete();
-                thinKernel.delete();
+                // thinKernel.delete();  // Commented out since we're not creating it
                 gray.delete();
                 binary.delete();
 
@@ -317,7 +317,7 @@
                     const preprocessForShape = (img) => {
                         let gray = new cv.Mat();
                         const binary = new cv.Mat();
-                        const normalized = new cv.Mat();
+                        const processed = new cv.Mat();  // ADD THIS LINE
 
                         // Convert to grayscale
                         if (img.channels() > 1) {
@@ -338,11 +338,11 @@
                         // cv.erode(processed, processed, thinKernel, new cv.Point(-1, -1), 2);
 
                         kernel.delete();
-                        thinKernel.delete();
+                        // thinKernel.delete();  // Commented out
                         gray.delete();
                         binary.delete();
 
-                        return normalized;
+                        return processed;  // CHANGE FROM 'normalized' TO 'processed'
                     };
 
                     const processedRegion = preprocessImageForMatching(regionMat);
