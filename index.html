@@ -188,12 +188,14 @@
 
                 cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 15, 3);
 
+                // Lighter preprocessing for ancient inscriptions
                 const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
                 cv.morphologyEx(binary, processed, cv.MORPH_CLOSE, kernel);
-                cv.morphologyEx(processed, processed, cv.MORPH_OPEN, kernel);
 
-                const thinKernel = cv.getStructuringElement(cv.MORPH_CROSS, new cv.Size(2, 2));
-                cv.erode(processed, processed, thinKernel, new cv.Point(-1, -1), 1);
+                // Skip MORPH_OPEN and erosion - they fragment ancient inscriptions
+                // cv.morphologyEx(processed, processed, cv.MORPH_OPEN, kernel);
+                // const thinKernel = cv.getStructuringElement(cv.MORPH_CROSS, new cv.Size(2, 2));
+                // cv.erode(processed, processed, thinKernel, new cv.Point(-1, -1), 1);
 
                 kernel.delete();
                 thinKernel.delete();
