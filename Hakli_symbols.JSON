@@ -13,9 +13,7 @@
             "symbols/h_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
-          ]
+                     ]
         },
       "description": "ح or h"
     },
@@ -30,8 +28,7 @@
             "symbols/l_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+           
           ]
         },
       "description": "description"
@@ -47,8 +44,7 @@
             "symbols/h-dot_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -64,8 +60,7 @@
             "symbols/m_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -81,8 +76,7 @@
             "symbols/q_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -98,8 +92,7 @@
             "symbols/w_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -115,8 +108,7 @@
             "symbols/s-2_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -132,8 +124,7 @@
             "symbols/r_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -149,8 +140,7 @@
             "symbols/b_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -166,8 +156,7 @@
             "symbols/t_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -183,8 +172,7 @@
             "symbols/s-1_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -200,8 +188,7 @@
             "symbols/k_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -217,8 +204,7 @@
             "symbols/n_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -234,8 +220,7 @@
             
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -251,8 +236,7 @@
             
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -267,8 +251,7 @@
           "variants": [
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -284,8 +267,7 @@
             "symbols/(_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -301,8 +283,7 @@
             "symbols/d-dot_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -318,8 +299,7 @@
             "symbols/g_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -335,8 +315,7 @@
             "symbols/d_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+           
           ]
         },
       "description": "description"
@@ -352,8 +331,7 @@
             "symbols/g-dot_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+           
           ]
         },
       "description": "description"
@@ -369,8 +347,7 @@
             "symbols/t-dot_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -386,8 +363,7 @@
             "symbols/d-bar_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -403,8 +379,7 @@
             "symbols/y_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
       "description": "description"
@@ -420,11 +395,10 @@
             "symbols/t-bar_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
+            
           ]
         },
-      "description": "description"
+      "description": "t-bar"
     },
     {
       "id": 37,
@@ -437,21 +411,18 @@
             "symbols/z-dot_01.png"
           ],
           "examples": [
-            "examples/KMD_28-31.png",
-            "examples/KMG_120-126.png"
-          ]
+                      ]
         },
-      "description": "description"
+      "description": "z-dot"
     },
     {
-      "id": 37,
+      "id": 38,
       "name": "?",
       "arabic": "؟",
       "images": {
         "primary": "symbols/z-dot_00.png",
         "variants": [
-          "symbols/z-dot_01.png"
-        ],
+                    ],
         "examples": [
           "examples/KMD_28-31.png",
           "examples/KMG_120-126.png"

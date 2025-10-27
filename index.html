@@ -242,7 +242,7 @@
 
                     // Calculate dynamic thresholds based on image size
                     const imageArea = src.rows * src.cols;
-                    const minArea = imageArea * 0.0001; // 0.01% of image
+                    const minArea = imageArea * 0.002;  // 20x larger - will filter out small noise
                     const maxArea = imageArea * 0.05;   // 5% of image
 
                     for (let i = 0; i < contours.size(); i++) {
@@ -327,14 +327,13 @@
                         // Adaptive threshold
                         cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 15, 3);
 
-                        // Heavy morphological processing to normalize stroke width
+                        // Lighter preprocessing for ancient inscriptions
                         const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
-                        cv.morphologyEx(binary, normalized, cv.MORPH_CLOSE, kernel);
-                        cv.morphologyEx(normalized, normalized, cv.MORPH_OPEN, kernel);
+                        cv.morphologyEx(binary, processed, cv.MORPH_CLOSE, kernel);
 
-                        // Normalize to similar stroke width
-                        const thinKernel = cv.getStructuringElement(cv.MORPH_CROSS, new cv.Size(2, 2));
-                        cv.erode(normalized, normalized, thinKernel, new cv.Point(-1, -1), 1);
+                        // Skip aggressive erosion that fragments symbols
+                        // const thinKernel = cv.getStructuringElement(cv.MORPH_CROSS, new cv.Size(3, 3));
+                        // cv.erode(processed, processed, thinKernel, new cv.Point(-1, -1), 2);
 
                         kernel.delete();
                         thinKernel.delete();
@@ -649,7 +648,14 @@
                         const filteredResults = applyNonMaximumSuppression(results, 0.3);
                         console.log(`✓ Recognition complete: ${filteredResults.length} symbols detected (${results.length - filteredResults.length} overlapping removed)`);
 
-                        setRecognitionResults(filteredResults);
+                        // Apply confidence threshold filter based on slider value
+                        const confidenceFilteredResults = filteredResults.filter(r =>
+                            r.confidence >= (confidenceThreshold / 100)
+                        );
+
+                        console.log(`✓ After confidence filter (${confidenceThreshold}%): ${confidenceFilteredResults.length} symbols (${filteredResults.length - confidenceFilteredResults.length} filtered out)`);
+
+                        setRecognitionResults(confidenceFilteredResults);
                         setIsProcessing(false);
                     };
                     tempImg.src = image;
