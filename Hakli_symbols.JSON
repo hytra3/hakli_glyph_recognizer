@@ -44,7 +44,7 @@
             "symbols/h-dot_01.png"
           ],
           "examples": [
-            
+            "h-dot_Jallad-2025p30.jpg"
           ]
         },
       "description": "description"
@@ -60,7 +60,7 @@
             "symbols/m_01.png"
           ],
           "examples": [
-            
+            "examples/m_10.jpg"
           ]
         },
       "description": "description"
@@ -140,7 +140,7 @@
             "symbols/b_01.png"
           ],
           "examples": [
-            
+             "examples/b_Jallad-2025p30.jpg"
           ]
         },
       "description": "description"
@@ -283,7 +283,7 @@
             "symbols/d-dot_01.png"
           ],
           "examples": [
-            
+            "examples/d-dot_10.jpg"
           ]
         },
       "description": "description"
@@ -315,10 +315,11 @@
             "symbols/d_01.png"
           ],
           "examples": [
-           
+            "examples/d_10.jpg",
+            "d_Jallad-2025p30/jpg"
           ]
         },
-      "description": "description"
+      "description": "d"
     },
     {
       "id": 30,
