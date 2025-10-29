@@ -29,6 +29,19 @@
         .detection-box.validated-incorrect { border-color: #ef4444; background: rgba(239, 68, 68, 0.25); }
         .detection-box.unvalidated { border-color: #3b82f6; background: rgba(59, 130, 246, 0.25); }
         .detection-box.selected { border-color: #f59e0b; background: rgba(245, 158, 11, 0.3); border-width: 4px; }
+
+        .detection-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            border-radius: 3px;
+            white-space: nowrap;
+            opacity: 0.9;
+        }
         
         .canvas-container {
             position: relative;
@@ -2864,7 +2877,7 @@
                                                 }
                                             }}
                                         >
-                                            <div className="detection-label" style={{ backgroundColor: boxColor }}>
+                                            <div className="detection-label" style={{ backgroundColor: boxColor + 'e6' }}>
                                                 {detection.symbol.name}
                                                 {detection.corrected && <span className="ml-1">✏️</span>}
                                             </div>
