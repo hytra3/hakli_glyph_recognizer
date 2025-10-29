@@ -92,7 +92,7 @@
             "symbols/w_01.png"
           ],
           "examples": [
-            "examples/w_Jallad-2025p30"
+            "examples/w_Jallad-2025p30.jpg"
           ]
         },
       "description": "description"
@@ -316,7 +316,7 @@
           ],
           "examples": [
             "examples/d_10.jpg",
-            "examples/d_Jallad-2025p30/jpg"
+            "examples/d_Jallad-2025p30.jpg"
           ]
         },
       "description": "d"
