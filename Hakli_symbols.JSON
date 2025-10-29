@@ -1,5 +1,5 @@
 {
-  "source_image": "Jallad-2025.jpg",
+  "source_image": "Jallad-2025.pdf",
   "extraction_date": "2025-09-15T21:20:14.597Z",
   "symbols": [
     {
@@ -44,7 +44,7 @@
             "symbols/h-dot_01.png"
           ],
           "examples": [
-            "h-dot_Jallad-2025p30.jpg"
+            "examples/h-dot_Jallad-2025p30.jpg"
           ]
         },
       "description": "description"
@@ -92,7 +92,7 @@
             "symbols/w_01.png"
           ],
           "examples": [
-            
+            "examples/w_Jallad-2025p30"
           ]
         },
       "description": "description"
@@ -316,7 +316,7 @@
           ],
           "examples": [
             "examples/d_10.jpg",
-            "d_Jallad-2025p30/jpg"
+            "examples/d_Jallad-2025p30/jpg"
           ]
         },
       "description": "d"
