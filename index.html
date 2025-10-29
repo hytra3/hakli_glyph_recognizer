@@ -545,9 +545,9 @@
                 setIsProcessing(true);
                 setRecognitionResults([]);
                 console.log('Starting recognition with', equivalenceChart.symbols.length, 'symbols and', Object.keys(loadedSymbolImages).length, 'loaded images');
-                try {
                     const tempImg = new Image();
                     tempImg.onload = () => {
+                        try {
                         const isolated = isolateSymbols(tempImg);
                         const isolatedWithThumbnails = isolated.map(region => ({
                             ...region,
@@ -641,14 +641,14 @@
                                 }
                             }
 
-                            if (bestMatch && bestMatch.confidence > 0.30) { // Lower threshold since shape matching is good
+                            if (bestMatch && bestMatch.confidence > 0.30) {
                                 results.push({
                                     ...bestMatch,
                                     regionIndex: regionIndex
                                 });
                                 console.log(`✅ Region ${regionIndex + 1}: ${bestMatch.symbol.name} (${Math.round(bestMatch.confidence * 100)}%)`);
                             }
-
+                        }
                         // Reset progress when done
                         setProcessingProgress({ current: 0, total: 0 });
 
@@ -665,13 +665,13 @@
 
                         setRecognitionResults(confidenceFilteredResults);
                         setIsProcessing(false);
-                    };
-                    tempImg.src = image;
-                } catch (error) {
-                    console.error('Recognition error:', error);
-                    setIsProcessing(false);
-                }
-            };
+                    } catch (error) {
+                        console.error('Recognition error:', error);
+                        setIsProcessing(false);
+                    }
+                };
+                tempImg.src = image;
+            };  // end recognizeSymbols
 
             // ============================================
             // DETECTION MANIPULATION
