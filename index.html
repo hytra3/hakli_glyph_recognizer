@@ -345,8 +345,8 @@
                         return processed;  // CHANGE FROM 'normalized' TO 'processed'
                     };
 
-                    const processedRegion = preprocessImageForMatching(regionMat);
-                    const processedTemplate = preprocessImageForMatching(templ);
+                    const processedRegion = preprocessForShape(regionMat);
+                    const processedTemplate = preprocessForShape(templ);
 
                     // Method 1: Contour Shape Matching (PRIMARY)
                     let shapeScore = 0;
@@ -440,8 +440,8 @@
                     let templateScore = 0;
                     let bestScale = 1.0;
                     try {
-                        // Try fewer scales, focus on likely matches
-                        const scales = [1.0, 0.85, 0.7, 0.55];
+                        // Try fewer scales, focus on likely matches :: added more scales because not matching
+                        const scales = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 1.1, 1.2];  
 
                         for (const scale of scales) {
                             const scaledTempl = new cv.Mat();
@@ -489,8 +489,8 @@
                         console.log(`Symbol ${symbolId}: Combined=${(combinedScore * 100).toFixed(1)}% [Shape=${(shapeScore * 100).toFixed(1)}% Aspect=${(aspectScore * 100).toFixed(1)}% Template=${(templateScore * 100).toFixed(1)}%]`);
                     }
 
-                    // Lower threshold since we're focusing on shape
-                    if (combinedScore >= 0.30) {
+                    // Lower threshold since we're focusing on shape (raised to .4 from .3 : .3 was lower shape)
+                    if (combinedScore >= 0.40) {  // Stricter threshold
                         matches.push({
                             confidence: combinedScore,
                             position: region.bounds,
