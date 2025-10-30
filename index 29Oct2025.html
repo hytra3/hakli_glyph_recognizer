@@ -122,8 +122,6 @@
             const [selectedIsolatedRegion, setSelectedIsolatedRegion] = useState(null); // to enable delete when show isolated
             const [templateTrainingMode, setTemplateTrainingMode] = useState(false); // add glyph to template 
             const [selectedForTemplate, setSelectedForTemplate] = useState(null);
-            const [localTemplatesCount, setLocalTemplatesCount] = useState(0);
-            const [chartVersion, setChartVersion] = useState(null); // pull request for updated symbol JSON
 
             const MASTER_PASTE_URL = ''; // Will update after first upload
             const MASTER_PASTE_RAW_URL = ''; // Will update after first upload
@@ -734,64 +732,36 @@
             };
 
             const deleteDetection = (detectionIndex) => {
-                const detection = recognitionResults[detectionIndex];
-
                 recordAction('delete_detection', {
                     index: detectionIndex,
-                    symbol: detection.symbol.name,
-                    confidence: detection.confidence
+                    detection: recognitionResults[detectionIndex]
                 });
-
-                // Remove the detection
+                // Update recognition results
                 setRecognitionResults(prev => prev.filter((_, i) => i !== detectionIndex));
-
-                // Remove validation if it exists
+                // Update validations with shifted indices
                 setValidations(prev => {
                     const newValidations = { ...prev };
                     delete newValidations[detectionIndex];
-                    // Shift down validations for indices after the deleted one
                     const shifted = {};
                     Object.keys(newValidations).forEach(key => {
-                        const idx = parseInt(key);
-                        if (idx > detectionIndex) {
-                            shifted[idx - 1] = newValidations[key];
-                        } else {
-                            shifted[key] = newValidations[key];
-                        }
+                        const numKey = parseInt(key);
+                        shifted[numKey > detectionIndex ? numKey - 1 : numKey] = newValidations[key];
                     });
                     return shifted;
                 });
-
-                // Remove the corresponding isolated region if it exists
-                if (detection.regionIndex !== undefined && detection.regionIndex !== null) {
-                    setIsolatedSymbols(prev => prev.filter((_, i) => i !== detection.regionIndex));
-
-                    // Update regionIndex for remaining detections
-                    setRecognitionResults(prev => prev.map(det => {
-                        if (det.regionIndex > detection.regionIndex) {
-                            return { ...det, regionIndex: det.regionIndex - 1 };
-                        }
-                        return det;
-                    }));
-                }
-
-                // Clear selection
+                // Update selected regions - remove deleted index and shift others
                 setSelectedRegions(prev => {
-                    const newSet = new Set(prev);
-                    newSet.delete(detectionIndex);
-                    // Shift down selected indices
-                    const shifted = new Set();
-                    newSet.forEach(idx => {
-                        if (idx > detectionIndex) {
-                            shifted.add(idx - 1);
-                        } else {
-                            shifted.add(idx);
+                    const newSet = new Set();
+                    prev.forEach(idx => {
+                        if (idx !== detectionIndex) {
+                            // Shift down indices that come after the deleted one
+                            newSet.add(idx > detectionIndex ? idx - 1 : idx);
                         }
                     });
-                    return shifted;
+                    return newSet;
                 });
-
-                console.log(`✓ Deleted detection ${detectionIndex} and its corresponding isolated region`);
+                // Clear merge indicator if it existed
+                setMergeIndicator(null);
             };
 
             const mergeSelectedDetections = () => {
@@ -1187,83 +1157,6 @@
                 });
 
                 setSelectedForTemplate(null);
-                setLocalTemplatesCount(prev => prev + 1);  // Track local template count
-            };
-
-            const contributeTemplates = () => {
-                if (localTemplatesCount === 0) {
-                    alert('No local templates to contribute yet. Save some templates first using Template Training Mode!');
-                    return;
-                }
-
-                // Generate contribution summary
-                let summary = `## New Template Contribution\n\n`;
-                summary += `**Contributor:** Community Member\n`;
-                summary += `**Date:** ${new Date().toLocaleDateString()}\n`;
-                summary += `**Templates Added:** ${localTemplatesCount}\n\n`;
-                summary += `### Summary\n`;
-                summary += `This contribution adds ${localTemplatesCount} new template image(s) to improve symbol recognition accuracy.\n\n`;
-                summary += `### Changes Made\n`;
-
-                // Count additions by type
-                let primaryCount = 0;
-                let variantCount = 0;
-                let exampleCount = 0;
-
-                equivalenceChart.symbols.forEach(symbol => {
-                    if (symbol.images) {
-                        if (symbol.images.variants) variantCount += symbol.images.variants.length;
-                        if (symbol.images.examples) exampleCount += symbol.images.examples.length;
-                    }
-                });
-
-                summary += `- Primary templates: Updated as needed\n`;
-                summary += `- Variant templates: ${variantCount} total\n`;
-                summary += `- Example templates: ${exampleCount} total\n\n`;
-                summary += `### Testing\n`;
-                summary += `- [ ] Templates tested on sample inscriptions\n`;
-                summary += `- [ ] No duplicate templates added\n`;
-                summary += `- [ ] Image quality verified\n\n`;
-                summary += `### Notes\n`;
-                summary += `Please review the updated \`Hakli_symbols.JSON\` file attached to this PR.\n`;
-
-                // Copy summary to clipboard
-                navigator.clipboard.writeText(summary).then(() => {
-                    console.log('PR description copied to clipboard!');
-                });
-
-                // Export the chart for upload
-                exportUpdatedChart();
-
-                // Open GitHub PR page
-                const repoUrl = 'https://github.com/hytra3/hakli_glyph_recognizer';
-
-                // Show instructions
-                const instructions = `✅ Template chart exported!
-✅ PR description copied to clipboard!
-
-📋 Next Steps:
-1. A new tab will open to GitHub
-2. Navigate to your downloaded file
-3. Upload the JSON file 
-4. Paste the PR description (Ctrl+V)
-5. Click "Create Pull Request"
-
-Your templates will be reviewed and merged soon!`;
-
-                alert(instructions);
-
-                // Open GitHub upload page
-                window.open(repoUrl + '/upload/main', '_blank');
-
-                recordAction('contribute_templates', {
-                    templateCount: localTemplatesCount
-                });
-            };
-
-            const checkForChartUpdates = () => {
-                setChartLoadStatus('not-loaded');
-                alert('Reloading chart from GitHub...');
             };
 
             const exportUpdatedChart = () => {
@@ -1278,7 +1171,7 @@ Your templates will be reviewed and merged soon!`;
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
 
-                alert('✅ Updated equivalence chart exported!\n\nFile saved: Hakli_symbols_updated_' + new Date().toISOString().slice(0, 10) + '.json\n\n' + (localTemplatesCount > 0 ? 'Ready to contribute to the community!' : 'You can now upload to GitHub or share with others.'));
+                alert('✅ Updated equivalence chart exported!\n\nYou can now:\n1. Review the new templates\n2. Upload to GitHub to use in future sessions\n3. Share with other users');
             };
 
 
@@ -2388,11 +2281,6 @@ Your templates will be reviewed and merged soon!`;
                         .then(response => response.json())
                         .then(chartData => {
                             setEquivalenceChart(chartData);
-                            
-                            // Track version
-                            const version = chartData.version || new Date(chartData.lastUpdated || Date.now()).toISOString().slice(0, 10);
-                            setChartVersion(version);
-
                             const imageCache = {};
                             const loadPromises = [];
 
@@ -2514,9 +2402,9 @@ Your templates will be reviewed and merged soon!`;
                         <p className="text-gray-600">beta v251029 ©marty heaton</p>
                     </div>
 
-                      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                    <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                         <div className="flex items-center justify-between">
-                            <div className="flex-1">
+                            <div>
                                 <h3 className="font-semibold text-gray-900">Equivalence Chart Status</h3>
                                 <div className="flex items-center gap-2 mt-1">
                                     {chartLoadStatus === 'loading' && (
@@ -2528,42 +2416,16 @@ Your templates will be reviewed and merged soon!`;
                                         </span>
                                     )}
                                     {chartLoadStatus === 'loaded' && (
-                                        <div className="flex flex-col gap-1">
-                                            <span className="text-green-600">
-                                                ✅ Loaded {equivalenceChart?.symbols?.length || 0} symbols, {Object.keys(loadedSymbolImages).length} images
-                                            </span>
-                                            {chartVersion && (
-                                                <span className="text-xs text-gray-500">
-                                                    Chart version: {chartVersion}
-                                                </span>
-                                            )}
-                                            {localTemplatesCount > 0 && (
-                                                <span className="text-xs text-purple-600 font-semibold">
-                                                    💡 You have {localTemplatesCount} local template(s) ready to contribute
-                                                </span>
-                                            )}
-                                        </div>
+                                        <span className="text-green-600">
+                                            ✅ Loaded {equivalenceChart?.symbols?.length || 0} symbols, {Object.keys(loadedSymbolImages).length} images
+                                        </span>
                                     )}
                                     {chartLoadStatus === 'error' && <span className="text-red-600">❌ Error loading chart</span>}
                                 </div>
                             </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={checkForChartUpdates}
-                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                                    disabled={chartLoadStatus === 'loading'}
-                                >
-                                    🔄 Check for Updates
-                                </button>
-                                {localTemplatesCount > 0 && (
-                                    <button
-                                        onClick={contributeTemplates}
-                                        className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm font-semibold"
-                                    >
-                                        🎁 Contribute Templates ({localTemplatesCount})
-                                    </button>
-                                )}
-                            </div>
+                            <button onClick={() => setChartLoadStatus('not-loaded')} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" disabled={chartLoadStatus === 'loading'}>
+                                Reload Chart
+                            </button>
                         </div>
                     </div>
 
