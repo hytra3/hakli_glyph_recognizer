@@ -81,7 +81,7 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        function HakliSymbolRecognizer() {
+        function SymbolRecognizer() {
             const [image, setImage] = useState(null);
             const [recognitionResults, setRecognitionResults] = useState([]);
             const [isProcessing, setIsProcessing] = useState(false);
@@ -141,7 +141,7 @@
                     return githubUrl;
                 }
                 if (typeof githubUrl === 'string' && githubUrl.length > 0) {
-                    const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/';
+                    const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/';
                     const cleanPath = githubUrl.indexOf('/') === 0 ? githubUrl.substring(1) : githubUrl;
                     return baseUrl + cleanPath;
                 }
@@ -1298,7 +1298,7 @@ Your templates will be reviewed and merged soon!`;
                                 totalCorrections: Object.values(corrections).reduce((sum, c) =>
                                     sum + c.corrections.reduce((s, cor) => s + cor.count, 0), 0)
                             },
-                            source: 'hakli-recognizer-community-contribution'
+                            source: 'hakli_glyph_recognizer-community-contribution'
                         };
 
                         // Create downloadable JSON file
@@ -2383,7 +2383,7 @@ Your templates will be reviewed and merged soon!`;
             useEffect(() => {
                 if (chartLoadStatus === 'not-loaded') {
                     setChartLoadStatus('loading');
-                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
+                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/Hakli_symbols.JSON';
                     fetch(githubJsonUrl)
                         .then(response => response.json())
                         .then(chartData => {
