@@ -81,13 +81,13 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        function HakliSymbolRecognizer() {
+        function HakliGlyphRecognizer() {
             const [image, setImage] = useState(null);
             const [recognitionResults, setRecognitionResults] = useState([]);
             const [isProcessing, setIsProcessing] = useState(false);
             const [equivalenceChart, setEquivalenceChart] = useState(null);
             const [chartLoadStatus, setChartLoadStatus] = useState('not-loaded');
-            const [loadedSymbolImages, setLoadedSymbolImages] = useState({});
+            const [loadedGlyphImages, setLoadedGlyphImages] = useState({});
             const [manualDetectionMode, setManualDetectionMode] = useState(false);
             const [isDrawing, setIsDrawing] = useState(false);
             const [drawStart, setDrawStart] = useState(null);
@@ -95,7 +95,7 @@
             const [selectedRegions, setSelectedRegions] = useState(new Set());
             const [validations, setValidations] = useState({});
             const [actionHistory, setActionHistory] = useState([]);
-            const [isolatedSymbols, setIsolatedSymbols] = useState([]);
+            const [isolatedGlyphs, setIsolatedGlyphs] = useState([]);
             const [showRegionBoundaries, setShowRegionBoundaries] = useState(false);
             const [mergeIndicator, setMergeIndicator] = useState(null);
             const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
@@ -223,10 +223,10 @@
             };
 
             // ============================================
-            // SYMBOL ISOLATION & RECOGNITION
+            // GLYPH ISOLATION & RECOGNITION
             // ============================================
 
-            const isolateSymbols = (inputImage) => {
+            const isolateGlyphs = (inputImage) => {
                 if (!isOpenCvReady) return [];
                 try {
                     const src = cv.imread(inputImage);
@@ -317,12 +317,12 @@
 
                     return isolatedRegions;
                 } catch (error) {
-                    console.error('Symbol isolation error:', error);
+                    console.error('Glyph isolation error:', error);
                     return [];
                 }
             };
 
-            const performTemplateMatchingOnRegion = (inputImage, templateImage, region, symbolId) => {
+            const performTemplateMatchingOnRegion = (inputImage, templateImage, region, glyphId) => {
                 if (!isOpenCvReady) return [];
                 try {
                     const src = cv.imread(inputImage);
@@ -350,7 +350,7 @@
                         const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
                         cv.morphologyEx(binary, processed, cv.MORPH_CLOSE, kernel);
 
-                        // Skip aggressive erosion that fragments symbols
+                        // Skip aggressive erosion that fragments Glyphs
                         // const thinKernel = cv.getStructuringElement(cv.MORPH_CROSS, new cv.Size(3, 3));
                         // cv.erode(processed, processed, thinKernel, new cv.Point(-1, -1), 2);
 
@@ -442,7 +442,7 @@
                         contoursTemplate.delete();
                         hierarchy.delete();
                     } catch (shapeError) {
-                        console.log(`Shape matching failed for ${symbolId}:`, shapeError);
+                        console.log(`Shape matching failed for ${glyphId}:`, shapeError);
                         shapeScore = 0;
                     }
 
@@ -503,7 +503,7 @@
 
                     // Only log low confidence matches (might be wrong) and high confidence (definitely right)
                     if (combinedScore < 0.5 || combinedScore > 0.8) {
-                        console.log(`Symbol ${symbolId}: Combined=${(combinedScore * 100).toFixed(1)}% [Shape=${(shapeScore * 100).toFixed(1)}% Aspect=${(aspectScore * 100).toFixed(1)}% Template=${(templateScore * 100).toFixed(1)}%]`);
+                        console.log(`Glyph ${glyphId}: Combined=${(combinedScore * 100).toFixed(1)}% [Shape=${(shapeScore * 100).toFixed(1)}% Aspect=${(aspectScore * 100).toFixed(1)}% Template=${(templateScore * 100).toFixed(1)}%]`);
                     }
 
                     // Lower threshold since we're focusing on shape (raised to .4 from .3 : .3 was lower shape)
@@ -557,20 +557,20 @@
                 return keep;
             };
 
-            const recognizeSymbols = () => {
+            const recognizeGlyphs = () => {
                 if (!image || !equivalenceChart || !isOpenCvReady) return;
                 setIsProcessing(true);
                 setRecognitionResults([]);
-                console.log('Starting recognition with', equivalenceChart.symbols.length, 'symbols and', Object.keys(loadedSymbolImages).length, 'loaded images');
+                console.log('Starting recognition with', equivalenceChart.glyphs.length, 'Glyphs and', Object.keys(loadedGlyphImages).length, 'loaded images');
                     const tempImg = new Image();
                     tempImg.onload = () => {
                         try {
-                        const isolated = isolateSymbols(tempImg);
+                        const isolated = isolateGlyphs(tempImg);
                         const isolatedWithThumbnails = isolated.map(region => ({
                             ...region,
                             thumbnail: extractRegionThumbnail(tempImg, region)
                         }));
-                        setIsolatedSymbols(isolatedWithThumbnails);
+                        setIsolatedGlyphs(isolatedWithThumbnails);
                         console.log('✓ Isolated', isolated.length, 'regions');
                         if (isolated.length === 0) {
                             console.log('No regions found - check image contrast and size');
@@ -593,16 +593,16 @@
                             let bestMatch = null;
                             let bestRawConfidence = 0; // Track unweighted confidence for fair comparison
 
-                            for (const symbol of equivalenceChart.symbols) {
+                            for (const glyph of equivalenceChart.glyphs) {
                                 // Check primary image
-                                if (loadedSymbolImages[symbol.id]) {
-                                    const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[symbol.id], region, symbol.id);
+                                if (loadedGlyphImages[glyph.id]) {
+                                    const matches = performTemplateMatchingOnRegion(tempImg, loadedGlyphImages[glyph.id], region, glyph.id);
                                     totalMatches += matches.length;
                                     for (const match of matches) {
                                         if (match.confidence > bestRawConfidence) {
                                             bestRawConfidence = match.confidence;
                                             bestMatch = {
-                                                symbol,
+                                                glyph,
                                                 confidence: match.confidence,
                                                 position: region.bounds,
                                                 matchType: 'primary'
@@ -612,17 +612,17 @@
                                 }
 
                                 // Check variant images
-                                if (symbol.images && symbol.images.variants) {
-                                    for (let i = 0; i < symbol.images.variants.length; i++) {
-                                        const variantKey = `${symbol.id}_variant_${i}`;
-                                        if (loadedSymbolImages[variantKey]) {
-                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[variantKey], region, `${symbol.id}_v${i}`);
+                                if (glyph.images && glyph.images.variants) {
+                                    for (let i = 0; i < glyph.images.variants.length; i++) {
+                                        const variantKey = `${glyph.id}_variant_${i}`;
+                                        if (loadedGlyphImages[variantKey]) {
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedGlyphImages[variantKey], region, `${glyph.id}_v${i}`);
                                             for (const match of matches) {
                                                 const weightedConfidence = match.confidence * 0.95; // Less penalty
                                                 if (match.confidence > bestRawConfidence) { // Compare UNWEIGHTED
                                                     bestRawConfidence = match.confidence;
                                                     bestMatch = {
-                                                        symbol,
+                                                        glyph,
                                                         confidence: weightedConfidence, // Store weighted
                                                         position: region.bounds,
                                                         matchType: 'variant',
@@ -635,17 +635,17 @@
                                 }
 
                                 // Check example images
-                                if (symbol.images && symbol.images.examples) {
-                                    for (let i = 0; i < symbol.images.examples.length; i++) {
-                                        const exampleKey = `${symbol.id}_example_${i}`;
-                                        if (loadedSymbolImages[exampleKey]) {
-                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedSymbolImages[exampleKey], region, `${symbol.id}_ex${i}`);
+                                if (glyph.images && glyph.images.examples) {
+                                    for (let i = 0; i < glyph.images.examples.length; i++) {
+                                        const exampleKey = `${glyph.id}_example_${i}`;
+                                        if (loadedGlyphImages[exampleKey]) {
+                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedGlyphImages[exampleKey], region, `${glyph.id}_ex${i}`);
                                             for (const match of matches) {
                                                 const weightedConfidence = match.confidence * 0.90; // Less penalty
                                                 if (match.confidence > bestRawConfidence) { // Compare UNWEIGHTED
                                                     bestRawConfidence = match.confidence;
                                                     bestMatch = {
-                                                        symbol,
+                                                        glyph,
                                                         confidence: weightedConfidence, // Store weighted
                                                         position: region.bounds,
                                                         matchType: 'example',
@@ -663,7 +663,7 @@
                                     ...bestMatch,
                                     regionIndex: regionIndex
                                 });
-                                console.log(`✅ Region ${regionIndex + 1}: ${bestMatch.symbol.name} (${Math.round(bestMatch.confidence * 100)}%)`);
+                                console.log(`✅ Region ${regionIndex + 1}: ${bestMatch.glyph.name} (${Math.round(bestMatch.confidence * 100)}%)`);
                             }
                         }
                         // Reset progress when done
@@ -671,14 +671,14 @@
 
                         // Apply non-maximum suppression to remove overlapping detections
                         const filteredResults = applyNonMaximumSuppression(results, 0.3);
-                        console.log(`✓ Recognition complete: ${filteredResults.length} symbols detected (${results.length - filteredResults.length} overlapping removed)`);
+                        console.log(`✓ Recognition complete: ${filteredResults.length} glyphs detected (${results.length - filteredResults.length} overlapping removed)`);
 
                         // Apply confidence threshold filter based on slider value
                         const confidenceFilteredResults = filteredResults.filter(r =>
                             r.confidence >= (confidenceThreshold / 100)
                         );
 
-                        console.log(`✓ After confidence filter (${confidenceThreshold}%): ${confidenceFilteredResults.length} symbols (${filteredResults.length - confidenceFilteredResults.length} filtered out)`);
+                        console.log(`✓ After confidence filter (${confidenceThreshold}%): ${confidenceFilteredResults.length} glyphs (${filteredResults.length - confidenceFilteredResults.length} filtered out)`);
 
                         setRecognitionResults(confidenceFilteredResults);
                         setIsProcessing(false);
@@ -688,7 +688,7 @@
                     }
                 };
                 tempImg.src = image;
-            };  // end recognizeSymbols
+            };  // end recognizeGlyphs
 
             // ============================================
             // DETECTION MANIPULATION
@@ -713,11 +713,11 @@
             const deleteIsolatedRegion = (regionIndex) => {
                 recordAction('delete_isolated_region', {
                     index: regionIndex,
-                    region: isolatedSymbols[regionIndex]
+                    region: isolatedGlyphs[regionIndex]
                 });
 
                 // Remove the isolated region
-                setIsolatedSymbols(prev => prev.filter((_, i) => i !== regionIndex));
+                setIsolatedGlyphs(prev => prev.filter((_, i) => i !== regionIndex));
 
                 // Remove any detections that reference this region
                 setRecognitionResults(prev => prev.filter(r => r.regionIndex !== regionIndex).map(r => ({
@@ -798,7 +798,7 @@
                     mergedFrom: detectionsToMerge.length,
                     isMerged: true,
                     thumbnail: mergedThumbnail,  // Add the new thumbnail
-                    regionIndex: isolatedSymbols.length  // Will be the next index
+                    regionIndex: isolatedGlyphs.length  // Will be the next index
                 };
 
                 recordAction('merge_detections', {
@@ -814,8 +814,8 @@
                 }
                 newResults.push(mergedDetection);
 
-                // Add merged region to isolated symbols
-                setIsolatedSymbols(prev => [...prev, {
+                // Add merged region to isolated glyphs
+                setIsolatedGlyphs(prev => [...prev, {
                     bounds: mergedBounds,
                     thumbnail: mergedThumbnail,
                     area: mergedBounds.width * mergedBounds.height,
@@ -857,9 +857,9 @@
                     originalBounds: oldBounds
                 };
 
-                // Update isolated symbol if it exists
+                // Update isolated glyph if it exists
                 if (detection.regionIndex !== undefined) {
-                    setIsolatedSymbols(prev => {
+                    setIsolatedGlyphs(prev => {
                         const updated = [...prev];
                         updated[detection.regionIndex] = {
                             bounds: trimmedBounds,
@@ -883,7 +883,7 @@
                 });
 
                 setTrimMode(null);
-                alert('✅ Detection trimmed! You may want to correct the symbol if recognition changed.');
+                alert('✅ Detection trimmed! You may want to correct the glyph if recognition changed.');
             };
 
             const applyExclude = (detectionIndex) => {
@@ -993,13 +993,13 @@
                                 const thumbnail = extractRegionThumbnail(tempImg, { bounds: absoluteBounds });
 
                                 newDetections.push({
-                                    symbol: { id: 'unknown', name: 'Unknown', transliteration: '?' },
+                                    glyph: { id: 'unknown', name: 'Unknown', transliteration: '?' },
                                     confidence: 0.5,
                                     position: absoluteBounds,
                                     matchType: 'excluded',
                                     isExcluded: true,
                                     thumbnail: thumbnail,
-                                    regionIndex: isolatedSymbols.length + newDetections.length
+                                    regionIndex: isolatedGlyphs.length + newDetections.length
                                 });
                             }
                         }
@@ -1013,7 +1013,7 @@
                             return;
                         }
 
-                        const oldSymbol = detection.symbol.name;
+                        const oldGlyph = detection.glyph.name;
 
                         // Remove old detection and add new ones
                         setRecognitionResults(prev => {
@@ -1022,9 +1022,9 @@
                             return [...updated, ...newDetections]; // Add new ones
                         });
 
-                        // Add to isolated symbols
+                        // Add to isolated glyphs
                         newDetections.forEach(det => {
-                            setIsolatedSymbols(prev => [...prev, {
+                            setIsolatedGlyphs(prev => [...prev, {
                                 bounds: det.position,
                                 thumbnail: det.thumbnail,
                                 area: det.position.width * det.position.height,
@@ -1034,7 +1034,7 @@
 
                         recordAction('exclude_regions', {
                             originalIndex: detectionIndex,
-                            originalSymbol: oldSymbol,
+                            originalGlyph: oldGlyph,
                             exclusions: excludeRegions,
                             newDetections: newDetections.length
                         });
@@ -1042,7 +1042,7 @@
                         setExcludeMode(null);
                         setExcludeRegions([]);
 
-                        alert(`✅ Excluded regions from "${oldSymbol}"!\n\n` +
+                        alert(`✅ Excluded regions from "${oldGlyph}"!\n\n` +
                             `Created ${newDetections.length} new detection(s).\n` +
                             `Original detection removed.\n\n` +
                             `💡 Tip: The new detections are marked as "Unknown" - correct them using the ✏️ button.`);
@@ -1082,7 +1082,7 @@
                 const ctx = canvas.getContext('2d');
                 const pos = detection.position;
 
-                // Add padding around the symbol (10%)
+                // Add padding around the glyph (10%)
                 const padding = Math.max(pos.width, pos.height) * 0.1;
                 const cropX = Math.max(0, pos.x - padding);
                 const cropY = Math.max(0, pos.y - padding);
@@ -1104,32 +1104,32 @@
 
                 // Update equivalence chart
                 const updatedChart = { ...equivalenceChart };
-                const symbolIndex = updatedChart.symbols.findIndex(s => s.id === detection.symbol.id);
+                const glyphIndex = updatedChart.glyphs.findIndex(s => s.id === detection.glyph.id);
 
-                if (symbolIndex === -1) {
-                    alert('Symbol not found in chart!');
+                if (glyphIndex === -1) {
+                    alert('Glyph not found in chart!');
                     return;
                 }
 
-                const symbol = updatedChart.symbols[symbolIndex];
+                const glyph = updatedChart.glphys[glyphIndex];
 
                 // Initialize images object if it doesn't exist
-                if (!symbol.images) {
-                    symbol.images = { primary: null, variants: [], examples: [] };
+                if (!glyph.images) {
+                    glyph.images = { primary: null, variants: [], examples: [] };
                 }
 
                 // Add based on template type
                 if (templateType === 'primary') {
-                    symbol.images.primary = imageDataUrl;
-                    alert(`✅ Saved as PRIMARY template for "${symbol.name}"\n\nNote: This replaces the existing primary image.`);
+                    glyph.images.primary = imageDataUrl;
+                    alert(`✅ Saved as PRIMARY template for "${glyph.name}"\n\nNote: This replaces the existing primary image.`);
                 } else if (templateType === 'variant') {
-                    if (!symbol.images.variants) symbol.images.variants = [];
-                    symbol.images.variants.push(imageDataUrl);
-                    alert(`✅ Saved as VARIANT template for "${symbol.name}"\n\nVariants: ${symbol.images.variants.length}`);
+                    if (!glyph.images.variants) glyph.images.variants = [];
+                    glyph.images.variants.push(imageDataUrl);
+                    alert(`✅ Saved as VARIANT template for "${glyph.name}"\n\nVariants: ${glyph.images.variants.length}`);
                 } else if (templateType === 'example') {
-                    if (!symbol.images.examples) symbol.images.examples = [];
-                    symbol.images.examples.push(imageDataUrl);
-                    alert(`✅ Saved as EXAMPLE template for "${symbol.name}"\n\nExamples: ${symbol.images.examples.length}`);
+                    if (!glyph.images.examples) glyph.images.examples = [];
+                    glyph.images.examples.push(imageDataUrl);
+                    alert(`✅ Saved as EXAMPLE template for "${glyph.name}"\n\nExamples: ${glyph.images.examples.length}`);
                 }
 
                 setEquivalenceChart(updatedChart);
@@ -1137,21 +1137,21 @@
                 // Reload the image in the cache
                 const img = new Image();
                 img.onload = () => {
-                    const newCache = { ...loadedSymbolImages };
+                    const newCache = { ...loadedGlyphImages };
                     if (templateType === 'primary') {
-                        newCache[symbol.id] = img;
+                        newCache[glyph.id] = img;
                     } else if (templateType === 'variant') {
-                        newCache[`${symbol.id}_variant_${symbol.images.variants.length - 1}`] = img;
+                        newCache[`${glyph.id}_variant_${glyph.images.variants.length - 1}`] = img;
                     } else if (templateType === 'example') {
-                        newCache[`${symbol.id}_example_${symbol.images.examples.length - 1}`] = img;
+                        newCache[`${glyph.id}_example_${glyph.images.examples.length - 1}`] = img;
                     }
-                    setLoadedSymbolImages(newCache);
+                    setLoadedGlyphImages(newCache);
                 };
                 img.src = imageDataUrl;
 
                 recordAction('save_template', {
-                    symbolId: detection.symbol.id,
-                    symbolName: detection.symbol.name,
+                    glyphId: detection.glyph.id,
+                    glyphName: detection.glyph.name,
                     templateType: templateType,
                     confidence: detection.confidence
                 });
@@ -1187,7 +1187,7 @@
                             uploadDate: new Date().toISOString(),
                             corrections: corrections,
                             stats: {
-                                totalSymbols: Object.keys(corrections).length,
+                                totalGlyphs: Object.keys(corrections).length,
                                 totalCorrections: Object.values(corrections).reduce((sum, c) =>
                                     sum + c.corrections.reduce((s, cor) => s + cor.count, 0), 0)
                             },
@@ -1215,7 +1215,7 @@
                             `3. Attach the downloaded JSON file to the issue\n` +
                             `4. Submit the issue\n\n` +
                             `Your corrections will be reviewed and added to the master collection!\n\n` +
-                            `Stats: ${exportData.stats.totalCorrections} corrections for ${exportData.stats.totalSymbols} symbols`;
+                            `Stats: ${exportData.stats.totalCorrections} corrections for ${exportData.stats.totalGlyphs} glyphs`;
 
                         if (confirm(message)) {
                             window.open(issueUrl, '_blank');
@@ -1287,7 +1287,7 @@
                         alert(`✅ Community corrections downloaded!\n\n` +
                             `${newCorrections} new corrections added\n` +
                             `${updatedCorrections} existing corrections updated\n\n` +
-                            `Total symbols in your memory: ${Object.keys(existing).length}` +
+                            `Total glyphs in your memory: ${Object.keys(existing).length}` +
                             contributorInfo);
 
                         recordAction('download_from_cloud', {
@@ -1308,27 +1308,27 @@
             // CORRECTION MEMORY
             // ============================================
 
-            const saveCorrectionToMemory = (originalSymbol, correctedSymbol, confidence) => {
+            const saveCorrectionToMemory = (originalGlyph, correctedGlyph, confidence) => {
                 try {
                     const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
-                    const key = originalSymbol.id;
+                    const key = originalGlyph.id;
 
                     if (!corrections[key]) {
                         corrections[key] = {
-                            originalSymbol: originalSymbol,
+                            originalGlyph: originalGlyph,
                             corrections: []
                         };
                     }
 
                     // Find if this correction already exists
-                    const existingIndex = corrections[key].corrections.findIndex(c => c.to.id === correctedSymbol.id);
+                    const existingIndex = corrections[key].corrections.findIndex(c => c.to.id === correctedGlyph.id);
 
                     if (existingIndex >= 0) {
                         corrections[key].corrections[existingIndex].count++;
                         corrections[key].corrections[existingIndex].lastUsed = new Date().toISOString();
                     } else {
                         corrections[key].corrections.push({
-                            to: correctedSymbol,
+                            to: correctedGlyph,
                             count: 1,
                             firstUsed: new Date().toISOString(),
                             lastUsed: new Date().toISOString(),
@@ -1337,18 +1337,18 @@
                     }
 
                     localStorage.setItem('hakliCorrections', JSON.stringify(corrections));
-                    console.log('Correction saved to memory:', originalSymbol.name, '→', correctedSymbol.name);
+                    console.log('Correction saved to memory:', originalGlyph.name, '→', correctedGlyph.name);
                 } catch (error) {
                     console.error('Failed to save correction:', error);
                 }
             };
 
-            const getCorrectionSuggestion = (symbolId) => {
+            const getCorrectionSuggestion = (glyphId) => {
                 try {
                     const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
-                    if (corrections[symbolId] && corrections[symbolId].corrections.length > 0) {
+                    if (corrections[glyphId] && corrections[glyphId].corrections.length > 0) {
                         // Return most frequently used correction
-                        const sorted = [...corrections[symbolId].corrections].sort((a, b) => b.count - a.count);
+                        const sorted = [...corrections[glyphId].corrections].sort((a, b) => b.count - a.count);
                         return sorted[0];
                     }
                     return null;
@@ -1366,7 +1366,7 @@
                         exportDate: new Date().toISOString(),
                         corrections: corrections,
                         stats: {
-                            totalSymbols: Object.keys(corrections).length,
+                            totalGlyphs: Object.keys(corrections).length,
                             totalCorrections: Object.values(corrections).reduce((sum, c) => sum + c.corrections.reduce((s, cor) => s + cor.count, 0), 0)
                         }
                     };
@@ -1381,7 +1381,7 @@
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
 
-                    alert(`Exported ${exportData.stats.totalCorrections} corrections for ${exportData.stats.totalSymbols} symbols!`);
+                    alert(`Exported ${exportData.stats.totalCorrections} corrections for ${exportData.stats.totalGlyphs} glyphs!`);
                 } catch (error) {
                     console.error('Export failed:', error);
                     alert('Failed to export corrections');
@@ -1411,7 +1411,7 @@
                     });
 
                     localStorage.setItem('hakliCorrections', JSON.stringify(existing));
-                    alert(`Imported corrections successfully! Total symbols in memory: ${Object.keys(existing).length}`);
+                    alert(`Imported corrections successfully! Total glyphs in memory: ${Object.keys(existing).length}`);
                 } catch (error) {
                     console.error('Import failed:', error);
                     alert('Failed to import corrections - invalid file format');
@@ -1427,7 +1427,7 @@
                 let transcription = '';
 
                 orderedResults.forEach((result, index) => {
-                    transcription += result.symbol.transliteration || result.symbol.name;
+                    transcription += result.glyph.transliteration || result.glyph.name;
                     if (viewMode === 'reading' && wordBoundaries.has(index)) {
                         transcription += ' | ';
                     } else if (index < orderedResults.length - 1) {
@@ -1456,8 +1456,8 @@
                     readingDirection: readingDirection,
                     detections: recognitionResults.map((result, index) => ({
                         index: index,
-                        symbol: result.symbol.name,
-                        transliteration: result.symbol.transliteration,
+                        glyph: result.glyph.name,
+                        transliteration: result.glyph.transliteration,
                         confidence: result.confidence,
                         position: result.position,
                         matchType: result.matchType,
@@ -1513,7 +1513,7 @@
 
                     // Draw semi-transparent background for label
                     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-                    const labelText = detection.symbol.name;
+                    const labelText = detection.glyph.name;
                     ctx.font = '16px Arial';
                     const textWidth = ctx.measureText(labelText).width;
                     ctx.fillRect(pos.x, pos.y - 25, textWidth + 10, 25);
@@ -1563,7 +1563,7 @@
                 let transcription = '';
 
                 orderedResults.forEach((result, index) => {
-                    transcription += result.symbol.transliteration || result.symbol.name;
+                    transcription += result.glyph.transliteration || result.glyph.name;
                     if (viewMode === 'reading' && wordBoundaries.has(index)) {
                         transcription += ' | ';
                     } else if (index < orderedResults.length - 1) {
@@ -1592,7 +1592,7 @@
                     ctx.lineWidth = 4;
                     ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
                     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-                    const labelText = detection.symbol.name;
+                    const labelText = detection.glyph.name;
                     ctx.font = '16px Arial';
                     const textWidth = ctx.measureText(labelText).width;
                     ctx.fillRect(pos.x, pos.y - 25, textWidth + 10, 25);
@@ -1645,7 +1645,7 @@
 
                 // Add styles
                 const style = iframeDoc.createElement('style');
-                style.textContent = '* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; padding: 20px; } .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; } .header h1 { font-size: 28px; margin-bottom: 10px; } .header .date { opacity: 0.9; font-size: 14px; } .section { padding: 30px; border-bottom: 1px solid #e5e7eb; } .section:last-child { border-bottom: none; } .section-title { font-size: 20px; font-weight: 600; margin-bottom: 15px; color: #1f2937; } .image-container { text-align: center; margin: 20px 0; } .image-container img { max-width: 100%; height: auto; border: 2px solid #e5e7eb; border-radius: 4px; } .image-toggle { margin: 20px 0; text-align: center; } .toggle-btn { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; } .toggle-btn:hover { background: #2563eb; } .toggle-btn.active { background: #10b981; } .transcription-box { background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 6px; padding: 20px; font-family: "Courier New", monospace; font-size: 18px; line-height: 1.8; word-wrap: break-word; margin: 15px 0; } .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; } .stat-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; text-align: center; } .stat-value { font-size: 32px; font-weight: 700; color: #3b82f6; margin-bottom: 5px; } .stat-label { font-size: 14px; color: #6b7280; } .detection-list { margin: 15px 0; } .detection-item { background: #f9fafb; border-left: 4px solid #3b82f6; padding: 12px 15px; margin: 8px 0; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; } .detection-item.correct { border-left-color: #10b981; } .detection-item.incorrect { border-left-color: #ef4444; } .detection-symbol { font-weight: 600; font-size: 16px; } .detection-confidence { color: #6b7280; font-size: 14px; } .footer { background: #f9fafb; padding: 20px 30px; text-align: center; color: #6b7280; font-size: 14px; } .legend { display: flex; gap: 20px; justify-content: center; margin: 15px 0; flex-wrap: wrap; } .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; } .legend-box { width: 20px; height: 20px; border-radius: 3px; }';
+                style.textContent = '* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; padding: 20px; } .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; } .header h1 { font-size: 28px; margin-bottom: 10px; } .header .date { opacity: 0.9; font-size: 14px; } .section { padding: 30px; border-bottom: 1px solid #e5e7eb; } .section:last-child { border-bottom: none; } .section-title { font-size: 20px; font-weight: 600; margin-bottom: 15px; color: #1f2937; } .image-container { text-align: center; margin: 20px 0; } .image-container img { max-width: 100%; height: auto; border: 2px solid #e5e7eb; border-radius: 4px; } .image-toggle { margin: 20px 0; text-align: center; } .toggle-btn { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; } .toggle-btn:hover { background: #2563eb; } .toggle-btn.active { background: #10b981; } .transcription-box { background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 6px; padding: 20px; font-family: "Courier New", monospace; font-size: 18px; line-height: 1.8; word-wrap: break-word; margin: 15px 0; } .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; } .stat-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; text-align: center; } .stat-value { font-size: 32px; font-weight: 700; color: #3b82f6; margin-bottom: 5px; } .stat-label { font-size: 14px; color: #6b7280; } .detection-list { margin: 15px 0; } .detection-item { background: #f9fafb; border-left: 4px solid #3b82f6; padding: 12px 15px; margin: 8px 0; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; } .detection-item.correct { border-left-color: #10b981; } .detection-item.incorrect { border-left-color: #ef4444; } .detection-glyph { font-weight: 600; font-size: 16px; } .detection-confidence { color: #6b7280; font-size: 14px; } .footer { background: #f9fafb; padding: 20px 30px; text-align: center; color: #6b7280; font-size: 14px; } .legend { display: flex; gap: 20px; justify-content: center; margin: 15px 0; flex-wrap: wrap; } .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; } .legend-box { width: 20px; height: 20px; border-radius: 3px; }';
                 iframeDoc.head.appendChild(style);
 
                 // Header
@@ -1657,7 +1657,7 @@
                 // Statistics section
                 const statsSection = iframeDoc.createElement('div');
                 statsSection.className = 'section';
-                statsSection.innerHTML = '<div class="section-title">📊 Recognition Statistics</div><div class="stats-grid"><div class="stat-card"><div class="stat-value">' + totalDetections + '</div><div class="stat-label">Total Symbols</div></div><div class="stat-card"><div class="stat-value">' + avgConfidence + '%</div><div class="stat-label">Avg Confidence</div></div><div class="stat-card"><div class="stat-value">' + validatedCorrect + '</div><div class="stat-label">Validated Correct</div></div><div class="stat-card"><div class="stat-value">' + corrected + '</div><div class="stat-label">Corrected</div></div></div>';
+                statsSection.innerHTML = '<div class="section-title">📊 Recognition Statistics</div><div class="stats-grid"><div class="stat-card"><div class="stat-value">' + totalDetections + '</div><div class="stat-label">Total Glyphs</div></div><div class="stat-card"><div class="stat-value">' + avgConfidence + '%</div><div class="stat-label">Avg Confidence</div></div><div class="stat-card"><div class="stat-value">' + validatedCorrect + '</div><div class="stat-label">Validated Correct</div></div><div class="stat-card"><div class="stat-value">' + corrected + '</div><div class="stat-label">Corrected</div></div></div>';
                 container.appendChild(statsSection);
 
                 // Transcription section
@@ -1682,7 +1682,7 @@
                     const validationClass = validation ? (validation.isCorrect ? 'correct' : 'incorrect') : '';
                     const correctedBadge = result.corrected ? '<span style="background: #fef3c7; padding: 2px 8px; border-radius: 3px; font-size: 12px;">✏️ Corrected</span>' : '';
                     const orderPrefix = viewMode === 'reading' ? (index + 1) + '. ' : '';
-                    detectionHtml += '<div class="detection-item ' + validationClass + '"><div><span class="detection-symbol">' + orderPrefix + result.symbol.name + '</span><span style="color: #6b7280; margin-left: 10px;">' + (result.symbol.transliteration || '') + '</span>' + correctedBadge + '</div><div class="detection-confidence">' + Math.round(result.confidence * 100) + '%</div></div>';
+                    detectionHtml += '<div class="detection-item ' + validationClass + '"><div><span class="detection-glyph">' + orderPrefix + result.glyph.name + '</span><span style="color: #6b7280; margin-left: 10px;">' + (result.glyph.transliteration || '') + '</span>' + correctedBadge + '</div><div class="detection-confidence">' + Math.round(result.confidence * 100) + '%</div></div>';
                 });
                 detectionHtml += '</div>';
                 detectionSection.innerHTML = detectionHtml;
@@ -1691,7 +1691,7 @@
                 // Footer
                 const footer = iframeDoc.createElement('div');
                 footer.className = 'footer';
-                footer.textContent = 'Generated by Hakli Glyph Recognizer (beta v251105)';
+                footer.textContent = 'Generated by Hakli Glyph Recognizer (beta v251024)';
                 container.appendChild(footer);
 
                 // Add script
@@ -1717,7 +1717,7 @@
                 URL.revokeObjectURL(url);
 
                 recordAction('export_html_report', {
-                    symbolCount: recognitionResults.length,
+                    glyphCount: recognitionResults.length,
                     transcriptionLength: transcription.length
                 });
 
@@ -1729,7 +1729,7 @@
                 let transcription = '';
 
                 orderedResults.forEach((result, index) => {
-                    transcription += result.symbol.transliteration || result.symbol.name;
+                    transcription += result.glyph.transliteration || result.glyph.name;
                     if (viewMode === 'reading' && wordBoundaries.has(index)) {
                         transcription += ' | ';
                     } else if (index < orderedResults.length - 1) {
@@ -1812,8 +1812,8 @@
                 return recognitionResults.filter(result => result.confidence >= confidenceThreshold / 100);
             };   
 
-            const addToIsolatedSymbols = (bounds, thumbnail) => {
-                setIsolatedSymbols(prev => [...prev, {
+            const addToIsolatedGlyphs = (bounds, thumbnail) => {
+                setIsolatedGlyphs(prev => [...prev, {
                     bounds: bounds,
                     thumbnail: thumbnail,
                     area: bounds.width * bounds.height,
@@ -1829,7 +1829,7 @@
                         image: image,
                         recognitionResults: recognitionResults,
                         validations: validations,
-                        isolatedSymbols: isolatedSymbols,
+                        isolatedGlyphs: isolatedGlyphs,
                         wordBoundaries: Array.from(wordBoundaries),
                         readingOrder: readingOrder,
                         readingDirection: readingDirection,
@@ -1863,11 +1863,11 @@
 
                     const session = JSON.parse(saved);
 
-                    if (confirm(`📂 Load saved session?\n\nFrom: ${new Date(session.timestamp).toLocaleString()}\nSymbols: ${session.recognitionResults.length}\n\nThis will replace your current work!`)) {
+                    if (confirm(`📂 Load saved session?\n\nFrom: ${new Date(session.timestamp).toLocaleString()}\nGlyphs: ${session.recognitionResults.length}\n\nThis will replace your current work!`)) {
                         setImage(session.image);
                         setRecognitionResults(session.recognitionResults || []);
                         setValidations(session.validations || {});
-                        setIsolatedSymbols(session.isolatedSymbols || []);
+                        setIsolatedGlyphs(session.isolatedGlyphs || []);
                         setWordBoundaries(new Set(session.wordBoundaries || []));
                         setReadingOrder(session.readingOrder || []);
                         setReadingDirection(session.readingDirection || 'detection');
@@ -1912,7 +1912,7 @@
                 }
                 // Take snapshot after modifying actions
                 const modifyingActions = ['validation', 'delete_detection', 'merge_detections', 
-                                        'add_manual_detection', 'correct_symbol', 'reorder_reading', 
+                                        'add_manual_detection', 'correct_glyph', 'reorder_reading', 
                                         'toggle_word_boundary'];
                 if (modifyingActions.includes(actionType)) {
                     setTimeout(takeSnapshot, 0);
@@ -1926,7 +1926,7 @@
                     selectedRegions: new Set(selectedRegions),
                     wordBoundaries: new Set(wordBoundaries),
                     readingOrder: [...readingOrder],
-                    isolatedSymbols: [...isolatedSymbols]
+                    isolatedGlyphs: [...isolatedGlyphs]
                 };
                 
                 // Remove any "future" history if we're not at the end
@@ -2000,16 +2000,16 @@
                     const thumbnail = extractRegionThumbnail(imageRef.current, { bounds: bounds });
 
                     const manualDetection = {
-                        symbol: { id: 'unknown', name: 'Unknown', transliteration: '?' },
+                        glyph: { id: 'unknown', name: 'Unknown', transliteration: '?' },
                         confidence: 0.5,
                         position: bounds,
                         matchType: 'manual',
                         isManual: true,
-                        regionIndex: isolatedSymbols.length,
+                        regionIndex: isolatedGlyphs.length,
                         thumbnail: thumbnail
                     };
 
-                    setIsolatedSymbols(prev => [...prev, {
+                    setIsolatedGlyphs(prev => [...prev, {
                         bounds: bounds,
                         thumbnail: thumbnail,
                         area: bounds.width * bounds.height,
@@ -2101,7 +2101,7 @@
                 // Prevent dragging in detection order mode
                 if (readingDirection === 'detection') {
                     e.preventDefault();
-                    alert('⚠️ Cannot reorder in Detection Order mode.\n\nPlease select a reading direction (LTR, RTL, or TTB) to manually reorder symbols.');
+                    alert('⚠️ Cannot reorder in Detection Order mode.\n\nPlease select a reading direction (LTR, RTL, or TTB) to manually reorder glyphs.');
                     return;
                 }
                 setDraggedItem(index);
@@ -2153,26 +2153,26 @@
                 setCorrectionMode(detectionIndex);
             };
 
-            const applyCorrection = (detectionIndex, newSymbol) => {
-                const oldSymbol = recognitionResults[detectionIndex].symbol;
+            const applyCorrection = (detectionIndex, newGlyph) => {
+                const oldGlyph = recognitionResults[detectionIndex].glyph;
                 const confidence = recognitionResults[detectionIndex].confidence;
 
-                recordAction('correct_symbol', {
+                recordAction('correct_glyph', {
                     detectionIndex: detectionIndex,
-                    oldSymbol: oldSymbol,
-                    newSymbol: newSymbol
+                    oldGlyph: oldGlyph,
+                    newGlyph: newGlyph
                 });
 
                 // Save to correction memory
-                saveCorrectionToMemory(oldSymbol, newSymbol, confidence);
+                saveCorrectionToMemory(oldGlyph, newGlyph, confidence);
 
                 setRecognitionResults(prev => prev.map((result, index) => {
                     if (index === detectionIndex) {
                         return {
                             ...result,
-                            symbol: newSymbol,
+                            glyph: newGlyph,
                             corrected: true,
-                            originalSymbol: result.symbol
+                            originalGlyph: result.glyph
                         };
                     }
                     return result;
@@ -2195,7 +2195,7 @@
                 setSelectedRegions(previousState.selectedRegions);
                 setWordBoundaries(previousState.wordBoundaries);
                 setReadingOrder(previousState.readingOrder);
-                setIsolatedSymbols(previousState.isolatedSymbols);
+                setIsolatedGlyphs(previousState.isolatedGlyphs);
                 setHistoryIndex(historyIndex - 1);
                 
                 console.log('Undo to state', historyIndex - 1);
@@ -2210,7 +2210,7 @@
                 setSelectedRegions(nextState.selectedRegions);
                 setWordBoundaries(nextState.wordBoundaries);
                 setReadingOrder(nextState.readingOrder);
-                setIsolatedSymbols(nextState.isolatedSymbols);
+                setIsolatedGlyphs(nextState.isolatedGlyphs);
                 setHistoryIndex(historyIndex + 1);
                 
                 console.log('Redo to state', historyIndex + 1);
@@ -2225,7 +2225,7 @@
                         setRecognitionResults([]);
                         setValidations({});
                         setActionHistory([]);
-                        setIsolatedSymbols([]);
+                        setIsolatedGlyphs([]);
                         setSelectedRegions(new Set());
                         setMergeIndicator(null);
                     };
@@ -2287,34 +2287,34 @@
                             // Count total images to load
                             let totalImagesToLoad = 0;
 
-                            for (const symbol of chartData.symbols) {
-                                if (symbol.images && symbol.images.primary) totalImagesToLoad++;
-                                if (symbol.images && symbol.images.variants) totalImagesToLoad += symbol.images.variants.length;
-                                if (symbol.images && symbol.images.examples) totalImagesToLoad += symbol.images.examples.length;
+                            for (const glyph of chartData.glyphs) {
+                                if (glyph.images && glyph.images.primary) totalImagesToLoad++;
+                                if (glyph.images && glyph.images.variants) totalImagesToLoad += glyph.images.variants.length;
+                                if (glyph.images && glyph.images.examples) totalImagesToLoad += glyph.images.examples.length;
                             }
 
                             setImageLoadingProgress({ loaded: 0, total: totalImagesToLoad });
-                            console.log(`📦 Loading ${totalImagesToLoad} images for ${chartData.symbols.length} symbols...`);
+                            console.log(`📦 Loading ${totalImagesToLoad} images for ${chartData.glyphs.length} glyphs...`);
 
                             let loadedCount = 0;
 
-                            for (const symbol of chartData.symbols) {
+                            for (const glyph of chartData.glyphs) {
                                 // Load primary image
-                                if (symbol.images && symbol.images.primary) {
-                                    const fullUrl = convertToGitHubUrl(symbol.images.primary);
+                                if (glyph.images && glyph.images.primary) {
+                                    const fullUrl = convertToGitHubUrl(glyph.images.primary);
                                     if (fullUrl) {
                                         const promise = new Promise((resolve) => {
                                             const img = new Image();
                                             img.crossOrigin = 'anonymous';
                                             img.onload = () => {
-                                                imageCache[symbol.id] = img;
+                                                imageCache[glyph.id] = img;
                                                 loadedCount++;
                                                 setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
-                                                console.log(`✓ Loaded ${loadedCount}/${totalImagesToLoad}: ${symbol.id}`);
+                                                console.log(`✓ Loaded ${loadedCount}/${totalImagesToLoad}: ${glyph.id}`);
                                                 resolve();
                                             };
                                             img.onerror = () => {
-                                                console.log(`✗ Failed to load: ${symbol.id}`);
+                                                console.log(`✗ Failed to load: ${glyph.id}`);
                                                 loadedCount++;
                                                 setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
                                                 resolve();
@@ -2326,11 +2326,11 @@
                                 }
 
                                 // Load variant images
-                                if (symbol.images && symbol.images.variants) {
-                                    for (let i = 0; i < symbol.images.variants.length; i++) {
-                                        const fullUrl = convertToGitHubUrl(symbol.images.variants[i]);
+                                if (glyph.images && glyph.images.variants) {
+                                    for (let i = 0; i < glyph.images.variants.length; i++) {
+                                        const fullUrl = convertToGitHubUrl(glyph.images.variants[i]);
                                         if (fullUrl) {
-                                            const variantKey = `${symbol.id}_variant_${i}`;
+                                            const variantKey = `${glyph.id}_variant_${i}`;
                                             const promise = new Promise((resolve) => {
                                                 const img = new Image();
                                                 img.crossOrigin = 'anonymous';
@@ -2355,11 +2355,11 @@
                                 }
 
                                 // Load example images
-                                if (symbol.images && symbol.images.examples) {
-                                    for (let i = 0; i < symbol.images.examples.length; i++) {
-                                        const fullUrl = convertToGitHubUrl(symbol.images.examples[i]);
+                                if (glyph.images && glyph.images.examples) {
+                                    for (let i = 0; i < glyph.images.examples.length; i++) {
+                                        const fullUrl = convertToGitHubUrl(glyph.images.examples[i]);
                                         if (fullUrl) {
-                                            const exampleKey = `${symbol.id}_example_${i}`;
+                                            const exampleKey = `${glyph.id}_example_${i}`;
                                             const promise = new Promise((resolve) => {
                                                 const img = new Image();
                                                 img.crossOrigin = 'anonymous';
@@ -2385,8 +2385,8 @@
                             }
 
                             Promise.all(loadPromises).then(() => {
-                                console.log(`✅ Loaded ${Object.keys(imageCache).length} total images for ${chartData.symbols.length} symbols`);
-                                setLoadedSymbolImages(imageCache);
+                                console.log(`✅ Loaded ${Object.keys(imageCache).length} total images for ${chartData.glyphs.length} glyphs`);
+                                setLoadedGlyphImages(imageCache);
                                 setChartLoadStatus('loaded');
                                 setImageLoadingProgress({ loaded: 0, total: 0 }); // Reset
                             });
@@ -2409,7 +2409,7 @@
                                 <div className="flex items-center gap-2 mt-1">
                                     {chartLoadStatus === 'loading' && (
                                         <span className="text-blue-600">
-                                            Loading {equivalenceChart?.symbols?.length || '...'} symbols...
+                                            Loading {equivalenceChart?.glyphs?.length || '...'} glyphs...
                                             {imageLoadingProgress.total > 0 && (
                                                 <span className="ml-2">({imageLoadingProgress.loaded}/{imageLoadingProgress.total} images)</span>
                                             )}
@@ -2417,7 +2417,7 @@
                                     )}
                                     {chartLoadStatus === 'loaded' && (
                                         <span className="text-green-600">
-                                            ✅ Loaded {equivalenceChart?.symbols?.length || 0} symbols, {Object.keys(loadedSymbolImages).length} images
+                                            ✅ Loaded {equivalenceChart?.glyphs?.length || 0} glyphs, {Object.keys(loadedGlyphImages).length} images
                                         </span>
                                     )}
                                     {chartLoadStatus === 'error' && <span className="text-red-600">❌ Error loading chart</span>}
@@ -2502,7 +2502,7 @@
                             {viewMode === 'detection' && (
                                 <div className="pt-4 border-t border-gray-300">
                                     <div className="p-3 bg-gray-100 border border-gray-300 rounded text-sm text-gray-700">
-                                        📷 Detection View shows symbols in the order they were detected (left-to-right on the image). Use this mode for validation and editing.
+                                        📷 Detection View shows glyphs in the order they were detected (left-to-right on the image). Use this mode for validation and editing.
                                     </div>
                                 </div>
                             )}
@@ -2513,8 +2513,8 @@
                     {image && (
                         <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                             <div className="flex flex-wrap gap-3 items-center mb-4">
-                                <button onClick={recognizeSymbols} disabled={isProcessing || !equivalenceChart} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50">
-                                    {isProcessing ? 'Processing...' : 'Recognize Symbols'}
+                                <button onClick={recognizeGlyphs} disabled={isProcessing || !equivalenceChart} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50">
+                                    {isProcessing ? 'Processing...' : 'Recognize Glyphs'}
                                 </button>
                                 {/* 👇 ADD THIS PROGRESS BAR */}
                                 {isProcessing && processingProgress.total > 0 && (
@@ -2555,7 +2555,7 @@
                                         </p>
                                         <div className="text-xs text-purple-600 space-y-1">
                                             <div>• <strong>Primary:</strong> The main reference image (replaces existing)</div>
-                                            <div>• <strong>Variant:</strong> Alternative style of the same symbol (adds to collection)</div>
+                                            <div>• <strong>Variant:</strong> Alternative style of the same glyph (adds to collection)</div>
                                             <div>• <strong>Example:</strong> Additional training data (adds to collection)</div>
                                             <div>• replace Hakli_glyphs.JSON </div>
                                         </div>
@@ -2575,11 +2575,11 @@
                                 </button>
                                 <button
                                     onClick={() => {
-                                        if (confirm('🗑️ Clear all detections and start over?\n\nThis will remove:\n• All detected symbols\n• All validations\n• Manual selections\n• Reading order\n\nThis cannot be undone!')) {
+                                        if (confirm('🗑️ Clear all detections and start over?\n\nThis will remove:\n• All detected glyphs\n• All validations\n• Manual selections\n• Reading order\n\nThis cannot be undone!')) {
                                             setRecognitionResults([]);
                                             setValidations({});
                                             setSelectedRegions(new Set());
-                                            setIsolatedSymbols([]);
+                                            setIsolatedGlyphs([]);
                                             setWordBoundaries(new Set());
                                             setReadingOrder([]);
                                             setMergeIndicator(null);
@@ -2596,12 +2596,12 @@
                                 >
                                     🗑️ Clear All
                                 </button>
-                                {isolatedSymbols.length > 0 && (
+                                {isolatedGlyphs.length > 0 && (
                                     <button
                                         onClick={() => setShowRegionBoundaries(!showRegionBoundaries)}
                                         className="px-4 py-2 bg-teal-500 text-white rounded hover:bg-teal-600"
                                     >
-                                        {showRegionBoundaries ? 'Hide' : 'Show'} Isolated Regions ({isolatedSymbols.length})
+                                        {showRegionBoundaries ? 'Hide' : 'Show'} Isolated Regions ({isolatedGlyphs.length})
                                     </button>
                                 )}
                                 <span className="text-sm text-gray-600">{recognitionResults.length} detections</span>
@@ -2823,7 +2823,7 @@
                                     );
                                 })()}
                                 
-                                {showRegionBoundaries && isolatedSymbols.map((region, index) => {
+                                {showRegionBoundaries && isolatedGlyphs.map((region, index) => {
                                     if (!imageRef.current) return null;
                                     const imageRect = imageRef.current.getBoundingClientRect();
                                     const scaleX = imageRect.width / imageRef.current.naturalWidth;
@@ -2879,7 +2879,7 @@
                                             }}
                                         >
                                             <div className="detection-label" style={{ backgroundColor: boxColor + 'e6' }}>
-                                                {detection.symbol.name}
+                                                {detection.glyph.name}
                                                 {detection.corrected && <span className="ml-1">✏️</span>}
                                             </div>
 
@@ -2896,7 +2896,7 @@
                                                     onClick={(e) => e.stopPropagation()}
                                                 >
                                                     <div className="font-semibold text-sm mb-2 text-purple-900">
-                                                        Save &quot;{detection.symbol.name}&quot; as:
+                                                        Save &quot;{detection.glyph.name}&quot; as:
                                                     </div>
                                                     <div className="flex flex-col gap-2">
                                                         <button
@@ -2960,14 +2960,14 @@
                             </div>
                         </div>
                     )}
-                        {isolatedSymbols.length > 0 && showRegionBoundaries && (
+                        {isolatedGlyphs.length > 0 && showRegionBoundaries && (
                         <div className="mt-4 p-4 bg-gray-50 border-2 border-teal-300 rounded-lg">
-                            <h4 className="font-semibold text-gray-900 mb-3">Isolated Symbol Regions ({isolatedSymbols.length})</h4>
+                            <h4 className="font-semibold text-gray-900 mb-3">Isolated Glyph Regions ({isolatedGlyphs.length})</h4>
                             <div className="mb-2 text-sm text-gray-600">
                                 💡 Hover over a region to see the delete button
                             </div>
                             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
-                                {isolatedSymbols.map((region, index) => {
+                                {isolatedGlyphs.map((region, index) => {
                                     const letter = String.fromCharCode(65 + index);
                                     return (
                                         <div
@@ -3003,7 +3003,7 @@
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={cancelCorrection}>
                             <div className="bg-white rounded-lg p-6 max-w-5xl w-full max-h-[85vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-2xl font-bold text-gray-900">Select Correct Symbol</h3>
+                                    <h3 className="text-2xl font-bold text-gray-900">Select Correct Glyph</h3>
                                     <button 
                                         onClick={cancelCorrection} 
                                         className="text-gray-400 hover:text-gray-600 text-3xl leading-none w-8 h-8 flex items-center justify-center"
@@ -3018,9 +3018,9 @@
                                         <div className="flex-1">
                                             <span className="text-sm text-gray-600">Currently detected as:</span>
                                             <div className="text-xl font-bold text-gray-900 mt-1">
-                                                {recognitionResults[correctionMode].symbol.name}
+                                                {recognitionResults[correctionMode].glyph.name}
                                                 <span className="ml-3 text-base font-normal text-gray-600">
-                                                    ({recognitionResults[correctionMode].symbol.transliteration || recognitionResults[correctionMode].symbol.name})
+                                                    ({recognitionResults[correctionMode].glyph.transliteration || recognitionResults[correctionMode].glyph.name})
                                                 </span>
                                             </div>
                                             <div className="text-sm text-gray-500 mt-1">
@@ -3028,11 +3028,11 @@
                                             </div>
                                         </div>
                                         {recognitionResults[correctionMode].regionIndex !== undefined &&
-                                            isolatedSymbols[recognitionResults[correctionMode].regionIndex]?.thumbnail && (
+                                            isolatedGlyphs[recognitionResults[correctionMode].regionIndex]?.thumbnail && (
                                                 <div className="flex-shrink-0">
                                                     <div className="text-xs text-gray-600 mb-1 text-center">Detected Region:</div>
                                                     <img
-                                                        src={isolatedSymbols[recognitionResults[correctionMode].regionIndex].thumbnail}
+                                                        src={isolatedGlyphs[recognitionResults[correctionMode].regionIndex].thumbnail}
                                                         alt="Isolated region"
                                                         className="w-32 h-auto border-2 border-blue-300 rounded"
                                                     />
@@ -3043,12 +3043,12 @@
                                 <div className="mb-4">
                                     <input
                                         type="text"
-                                        placeholder="Search symbols by name or transliteration..."
+                                        placeholder="Search glyphs by name or transliteration..."
                                         className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
                                         onChange={(e) => {
                                             const searchTerm = e.target.value.toLowerCase();
-                                            const symbolGrid = e.target.parentElement.nextElementSibling;
-                                            const buttons = symbolGrid.querySelectorAll('button');
+                                            const glyphGrid = e.target.parentElement.nextElementSibling;
+                                            const buttons = glyphGrid.querySelectorAll('button');
                                             buttons.forEach(btn => {
                                                 const text = btn.textContent.toLowerCase();
                                                 btn.style.display = text.includes(searchTerm) ? '' : 'none';
@@ -3058,7 +3058,7 @@
                                 </div>
                                 
                                 {(() => {
-                                    const suggestion = getCorrectionSuggestion(recognitionResults[correctionMode].symbol.id);
+                                    const suggestion = getCorrectionSuggestion(recognitionResults[correctionMode].glyph.id);
                                     if (suggestion) {
                                         return (
                                             <div className="mb-4 p-3 bg-green-50 border-2 border-green-300 rounded-lg">
@@ -3083,24 +3083,24 @@
                                 })()}
 
                                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                                    {equivalenceChart.symbols.map((symbol, index) => {
-                                        const isCurrentSymbol = symbol.id === recognitionResults[correctionMode].symbol.id;
+                                    {equivalenceChart.glyphs.map((glyph, index) => {
+                                        const isCurrentGlyph = glyph.id === recognitionResults[correctionMode].glyph.id;
                                         return (
                                             <button
-                                                key={`symbol-${symbol.id}-${index}`}
-                                                onClick={() => applyCorrection(correctionMode, symbol)}
+                                                key={`glyph-${glyph.id}-${index}`}
+                                                onClick={() => applyCorrection(correctionMode, glyph)}
                                                 className={`p-3 border-2 rounded-lg flex flex-col items-center gap-1 transition-all hover:scale-105 ${
-                                                    isCurrentSymbol 
+                                                    isCurrentGlyph 
                                                         ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-300' 
                                                         : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50'
                                                 }`}
-                                                title={`${symbol.name} (${symbol.transliteration || symbol.name})`}
+                                                title={`${glyph.name} (${glyph.transliteration || glyph.name})`}
                                             >
-                                                <div className="font-bold text-xl">{symbol.name}</div>
+                                                <div className="font-bold text-xl">{glyph.name}</div>
                                                 <div className="text-xs text-gray-600 text-center leading-tight">
-                                                    {symbol.transliteration || symbol.name}
+                                                    {glyph.transliteration || glyph.name}
                                                 </div>
-                                                {isCurrentSymbol && (
+                                                {isCurrentGlyph && (
                                                     <div className="text-xs text-blue-600 font-semibold mt-1">Current</div>
                                                 )}
                                             </button>
@@ -3110,7 +3110,7 @@
                                 
                                 <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between">
                                     <div className="text-sm text-gray-500">
-                                        💡 Tip: You can also search symbols above to find them quickly
+                                        💡 Tip: You can also search glyphs above to find them quickly
                                     </div>
                                     <button 
                                         onClick={cancelCorrection}
@@ -3186,7 +3186,7 @@
                                                 )}
                                                 <div className="flex-1">
                                                     <div className="font-medium text-gray-900 flex items-center gap-2">
-                                                        {result.symbol.name}
+                                                        {result.glyph.name}
                                                         {result.corrected && (
                                                             <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-300">
                                                                 ✏️ Corrected
@@ -3195,20 +3195,20 @@
                                                         {result.isMerged && <span className="text-xs text-gray-500">(merged)</span>}
                                                         {result.isManual && <span className="text-xs text-gray-500">(manual)</span>}
                                                     </div>
-                                                    {result.corrected && result.originalSymbol && (
+                                                    {result.corrected && result.originalGlyph && (
                                                         <div className="text-xs text-gray-500 mt-0.5">
-                                                            Originally: <span className="line-through">{result.originalSymbol.name}</span>
+                                                            Originally: <span className="line-through">{result.originalGlyph.name}</span>
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="text-sm text-gray-600 mt-1">{result.symbol.transliteration || result.symbol.name}</div>
+                                            <div className="text-sm text-gray-600 mt-1">{result.glyph.transliteration || result.glyph.name}</div>
                                             <div className="text-xs text-gray-500">Confidence: {Math.round(result.confidence * 100)}%</div>
-                                            {result.regionIndex !== undefined && isolatedSymbols[result.regionIndex]?.thumbnail && (
+                                            {result.regionIndex !== undefined && isolatedGlyphs[result.regionIndex]?.thumbnail && (
                                                 <div className="mt-2 flex items-center gap-2">
                                                     <span className="text-xs text-gray-500">Region:</span>
                                                     <img
-                                                        src={isolatedSymbols[result.regionIndex].thumbnail}
+                                                        src={isolatedGlyphs[result.regionIndex].thumbnail}
                                                         alt="Isolated region"
                                                         className="w-16 h-auto border border-gray-300 rounded"
                                                     />
@@ -3219,7 +3219,7 @@
                                             <button 
                                                 onClick={() => startCorrection(originalIndex)} 
                                                 className="text-orange-500 hover:text-orange-700 text-sm"
-                                                title="Change symbol"
+                                                title="Change glyph"
                                             >
                                                 ✏️
                                             </button>
@@ -3249,7 +3249,7 @@
                                             <button 
                                                 onClick={() => toggleWordBoundary(displayIndex)} 
                                                 className={`px-3 py-1 text-xs rounded ${wordBoundaries.has(displayIndex) ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-                                                title="Mark word boundary after this symbol"
+                                                title="Mark word boundary after this glyph"
                                             >
                                                 | Word Break
                                             </button>
@@ -3288,7 +3288,7 @@
                                 <div className="font-mono text-lg leading-relaxed">
                                     {getReadingOrderedResults().map((result, index) => (
                                         <span key={index}>
-                                            <span className="text-gray-900">{result.symbol.transliteration || result.symbol.name}</span>
+                                            <span className="text-gray-900">{result.glyph.transliteration || result.glyph.name}</span>
                                             {wordBoundaries.has(index) && <span className="text-blue-600 font-bold mx-1">|</span>}
                                             {!wordBoundaries.has(index) && index < getReadingOrderedResults().length - 1 && <span className="text-gray-400">·</span>}
                                         </span>
@@ -3298,7 +3298,7 @@
 
                             <div className="mt-3 text-xs text-gray-600">
                                 <span className="text-blue-600 font-bold">|</span> = word boundary &middot; 
-                                <span className="text-gray-400">&middot;</span> = symbol separator
+                                <span className="text-gray-400">&middot;</span> = glyph separator
                             </div>
                         </div>
                     )}
@@ -3356,7 +3356,7 @@
                                     </button>
                                 </div>
                                 <div className="text-xs text-gray-600">
-                                    💡 Import previously exported corrections to continue learning from your past work. Your corrections are automatically saved and will suggest symbols you've corrected before.
+                                    💡 Import previously exported corrections to continue learning from your past work. Your corrections are automatically saved and will suggest glyphs you've corrected before.
                                 </div>
                             </div>
                     )}
@@ -3507,10 +3507,8 @@
             );
         }
 
-        ReactDOM.createRoot(document.getElementById('root')).render(<HakliSymbolRecognizer />);
+        ReactDOM.createRoot(document.getElementById('root')).render(<HakliGlyphRecognizer />);
     </script>
 </body>
 
 </html>
-
-
