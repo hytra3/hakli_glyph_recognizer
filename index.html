@@ -2276,7 +2276,7 @@
             useEffect(() => {
                 if (chartLoadStatus === 'not-loaded') {
                     setChartLoadStatus('loading');
-                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/Hakli_symbols.JSON';
+                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/Hakli_symbols.JSON';
                     fetch(githubJsonUrl)
                         .then(response => response.json())
                         .then(chartData => {
