@@ -1,0 +1,435 @@
+{
+  "source_image": "Jallad-2025.pdf",
+  "extraction_date": "2025-09-15T21:20:14.597Z",
+  "symbols": [
+    {
+      "id": 10,
+      "name": "h",
+      "arabic": "ح",
+           "images": 
+        {
+          "primary": "symbols/h_00.png",
+          "variants": [
+            "symbols/h_01.png"
+          ],
+          "examples": [
+                     ]
+        },
+      "description": "ح or h"
+    },
+    {
+      "id": 11,
+      "name": "l",
+      "arabic": "ل",
+           "images": 
+        {
+          "primary": "symbols/l_00.png",
+          "variants": [
+            "symbols/l_01.png"
+          ],
+          "examples": [
+           
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 12,
+      "name": "ḥ",
+      "arabic": "ه",
+           "images": 
+        {
+          "primary": "symbols/h-dot_00.png",
+          "variants": [
+            "symbols/h-dot_01.png"
+          ],
+          "examples": [
+            "examples/h-dot_Jallad-2025p30.jpg"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 13,
+      "name": "m",
+      "arabic": "م",
+           "images": 
+        {
+          "primary": "symbols/m_00.png",
+          "variants": [
+            "symbols/m_01.png"
+          ],
+          "examples": [
+            "examples/m_10.jpg"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 14,
+      "name": "q",
+      "arabic": "ق",
+           "images": 
+        {
+          "primary": "symbols/q_00.png",
+          "variants": [
+            "symbols/q_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 15,
+      "name": "w",
+      "arabic": "و",
+           "images": 
+        {
+          "primary": "symbols/w_00.png",
+          "variants": [
+            "symbols/w_01.png"
+          ],
+          "examples": [
+            "examples/w_Jallad-2025p30.jpg"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 16,
+      "name": "s²",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/s-2_00.png",
+          "variants": [
+            "symbols/s-2_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 17,
+      "name": "r",
+      "arabic": "ر",
+           "images": 
+        {
+          "primary": "symbols/r_00.png",
+          "variants": [
+            "symbols/r_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 18,
+      "name": "b",
+      "arabic": "ب",
+           "images": 
+        {
+          "primary": "symbols/b_00.png",
+          "variants": [
+            "symbols/b_01.png"
+          ],
+          "examples": [
+             "examples/b_Jallad-2025p30.jpg"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 19,
+      "name": "t",
+      "arabic": "ت",
+           "images": 
+        {
+          "primary": "symbols/t_00.png",
+          "variants": [
+            "symbols/t_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 20,
+      "name": "s¹",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/s-1_00.png",
+          "variants": [
+            "symbols/s-1_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 21,
+      "name": "k",
+      "arabic": "ك",
+           "images": 
+        {
+          "primary": "symbols/k_00.png",
+          "variants": [
+            "symbols/k_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 22,
+      "name": "n",
+      "arabic": "ن",
+           "images": 
+        {
+          "primary": "symbols/n_00.png",
+          "variants": [
+            "symbols/n_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 23,
+      "name": "ḫ",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/h-breve_00.png",
+          "variants": [
+            
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 24,
+      "name": "f",
+      "arabic": "ف",
+           "images": 
+        {
+          "primary": "symbols/f_00.png",
+          "variants": [
+            
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 25,
+      "name": ")",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/)_00.png",
+          "variants": [
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 26,
+      "name": "(",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/(_00.png",
+          "variants": [
+            "symbols/(_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 27,
+      "name": "ḍ",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/d-dot_00.png",
+          "variants": [
+            "symbols/d-dot_01.png"
+          ],
+          "examples": [
+            "examples/d-dot_10.jpg"
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 28,
+      "name": "g",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/g_00.png",
+          "variants": [
+            "symbols/g_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 29,
+      "name": "d",
+      "arabic": "د",
+           "images": 
+        {
+          "primary": "symbols/d_00.png",
+          "variants": [
+            "symbols/d_01.png"
+          ],
+          "examples": [
+            "examples/d_10.jpg",
+            "examples/d_Jallad-2025p30.jpg"
+          ]
+        },
+      "description": "d"
+    },
+    {
+      "id": 30,
+      "name": "ġ",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/g-dot_00.png",
+          "variants": [
+            "symbols/g-dot_01.png"
+          ],
+          "examples": [
+           
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 31,
+      "name": "ṭ",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/t-dot_00.png",
+          "variants": [
+            "symbols/t-dot_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 32,
+      "name": "ḏ",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/d-bar_00.png",
+          "variants": [
+            "symbols/d-bar_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 33,
+      "name": "y",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/y_00.png",
+          "variants": [
+            "symbols/y_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "description"
+    },
+    {
+      "id": 34,
+      "name": "ṯ",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/t-bar_00.png",
+          "variants": [
+            "symbols/t-bar_01.png"
+          ],
+          "examples": [
+            
+          ]
+        },
+      "description": "t-bar"
+    },
+    {
+      "id": 37,
+      "name": "ẓ",
+      "arabic": "x",
+           "images": 
+        {
+          "primary": "symbols/z-dot_00.png",
+          "variants": [
+            "symbols/z-dot_01.png"
+          ],
+          "examples": [
+                      ]
+        },
+      "description": "z-dot"
+    },
+    {
+      "id": 38,
+      "name": "?",
+      "arabic": "؟",
+      "images": {
+        "primary": "symbols/z-dot_00.png",
+        "variants": [
+                    ],
+        "examples": [
+          "examples/KMD_28-31.png",
+          "examples/KMG_120-126.png"
+        ]
+      },
+      "description": "unknown"
+    }
+  ]
+}
