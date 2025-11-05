@@ -1165,7 +1165,7 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `Hakli_symbols_updated_${new Date().toISOString().slice(0, 10)}.json`;
+                a.download = `Hakli_gylphs_training_${new Date().toISOString().slice(0, 10)}.json`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -2276,7 +2276,7 @@
             useEffect(() => {
                 if (chartLoadStatus === 'not-loaded') {
                     setChartLoadStatus('loading');
-                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/Hakli_symbols.JSON';
+                    const githubJsonUrl = 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/Hakli_glyphs.JSON';
                     fetch(githubJsonUrl)
                         .then(response => response.json())
                         .then(chartData => {
@@ -2557,13 +2557,14 @@
                                             <div>• <strong>Primary:</strong> The main reference image (replaces existing)</div>
                                             <div>• <strong>Variant:</strong> Alternative style of the same symbol (adds to collection)</div>
                                             <div>• <strong>Example:</strong> Additional training data (adds to collection)</div>
+                                            <div>• replace Hakli_glyphs.JSON </div>
                                         </div>
                                         {equivalenceChart && (
                                             <button
                                                 onClick={exportUpdatedChart}
                                                 className="mt-3 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm"
                                             >
-                                                💾 Export Updated Chart
+                                                💾 Export Training Chart
                                             </button>
                                         )}
                                     </div>
