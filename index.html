@@ -139,7 +139,7 @@
                     return githubUrl;
                 }
                 if (typeof githubUrl === 'string' && githubUrl.length > 0) {
-                    const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli-recognizer/main/';
+                    const baseUrl = 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/';
                     const cleanPath = githubUrl.indexOf('/') === 0 ? githubUrl.substring(1) : githubUrl;
                     return baseUrl + cleanPath;
                 }
