@@ -2301,7 +2301,7 @@
                             for (const glyph of chartData.glyphs) {
                                 // Load primary image
                                 if (glyph.images && glyph.images.primary) {
-                                    const fullUrl = convertToGitHubUrl(glyph.images.primary);
+                                    const fullUrl = glyph.images.primary;
                                     if (fullUrl) {
                                         const promise = new Promise((resolve) => {
                                             const img = new Image();
@@ -2328,7 +2328,7 @@
                                 // Load variant images
                                 if (glyph.images && glyph.images.variants) {
                                     for (let i = 0; i < glyph.images.variants.length; i++) {
-                                        const fullUrl = convertToGitHubUrl(glyph.images.variants[i]);
+                                        const fullUrl = glyph.images.variants[i];
                                         if (fullUrl) {
                                             const variantKey = `${glyph.id}_variant_${i}`;
                                             const promise = new Promise((resolve) => {
@@ -2357,7 +2357,7 @@
                                 // Load example images
                                 if (glyph.images && glyph.images.examples) {
                                     for (let i = 0; i < glyph.images.examples.length; i++) {
-                                        const fullUrl = convertToGitHubUrl(glyph.images.examples[i]);
+                                        const fullUrl = glyph.images.examples[i];
                                         if (fullUrl) {
                                             const exampleKey = `${glyph.id}_example_${i}`;
                                             const promise = new Promise((resolve) => {
