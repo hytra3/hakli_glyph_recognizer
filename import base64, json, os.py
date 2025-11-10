@@ -1,7 +1,7 @@
 import base64, json, os
 from pathlib import Path
 
-folder = Path('primary')
+folder = Path('variant')
 results = {}
 
 for img in folder.iterdir():
