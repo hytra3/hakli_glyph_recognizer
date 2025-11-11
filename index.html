@@ -3438,7 +3438,7 @@
 
                                 <div className="space-y-6">
                                     {equivalenceChart.glyphs.map((glyph) => {
-                                        const primaryLoaded = loadedGlyphImages[`${glyph.id}_primary`];
+                                        const primaryLoaded = loadedGlyphImages[glyph.id]; 
                                         const variantCount = glyph.images.variants?.length || 0;
                                         const exampleCount = glyph.images.examples?.length || 0;
                                         const variantsLoaded = glyph.images.variants?.filter((_, idx) => 
