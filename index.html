@@ -1235,7 +1235,7 @@
             const downloadCorrectionsFromCloud = async (url = null) => {
                     try {
                         // Default to master collection
-                        const masterUrl = url || 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/community-corrections/master.json';
+                        const masterUrl = url || 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/community-corrections/hakli_corrections_master.json';
 
                         // Fetch the corrections data
                         const response = await fetch(masterUrl);
