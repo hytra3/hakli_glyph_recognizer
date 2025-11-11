@@ -98,7 +98,6 @@
             const [isolatedGlyphs, setIsolatedGlyphs] = useState([]);
             const [showRegionBoundaries, setShowRegionBoundaries] = useState(false);
             const [mergeIndicator, setMergeIndicator] = useState(null);
-            const [showChartViewer, setShowChartViewer] = useState(false);
             const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
             const [imageLoadingProgress, setImageLoadingProgress] = useState({ loaded: 0, total: 0 });
 
@@ -2424,22 +2423,9 @@
                                     {chartLoadStatus === 'error' && <span className="text-red-600">❌ Error loading chart</span>}
                                 </div>
                             </div>
-                            <div className="flex gap-2">
-                                <button 
-                                    onClick={() => setShowChartViewer(true)} 
-                                    className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600" 
-                                    disabled={chartLoadStatus !== 'loaded'}
-                                >
-                                    📊 View Chart
-                                </button>
-                                <button 
-                                    onClick={() => setChartLoadStatus('not-loaded')} 
-                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" 
-                                    disabled={chartLoadStatus === 'loading'}
-                                >
-                                    Reload Chart
-                                </button>
-                            </div>
+                            <button onClick={() => setChartLoadStatus('not-loaded')} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" disabled={chartLoadStatus === 'loading'}>
+                                Reload Chart
+                            </button>
                         </div>
                     </div>
 
@@ -3413,171 +3399,6 @@
                             </div>
                             <div className="mt-3 text-xs text-gray-600">
                                 Export your work in different formats: JSON for data analysis, annotated images for presentations, or plain text transcriptions.
-                            </div>
-                        </div>
-                    )}
-                    
-                    {showChartViewer && equivalenceChart && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowChartViewer(false)}>
-                            <div className="bg-white rounded-lg p-6 max-w-7xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center justify-between mb-4 sticky top-0 bg-white pb-4 border-b">
-                                    <h3 className="text-2xl font-bold text-gray-900">📊 Glyph Equivalence Chart</h3>
-                                    <button
-                                        onClick={() => setShowChartViewer(false)}
-                                        className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
-                                    >
-                                        &times;
-                                    </button>
-                                </div>
-
-                                <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                                    <div className="text-sm text-gray-700">
-                                        <strong>{equivalenceChart.glyphs.length}</strong> glyphs loaded with <strong>{Object.keys(loadedGlyphImages).length}</strong> total images
-                                    </div>
-                                </div>
-
-                                <div className="space-y-6">
-                                    {equivalenceChart.glyphs.map((glyph) => {
-                                        const primaryLoaded = loadedGlyphImages[`${glyph.id}_primary`];
-                                        const variantCount = glyph.images.variants?.length || 0;
-                                        const exampleCount = glyph.images.examples?.length || 0;
-                                        const variantsLoaded = glyph.images.variants?.filter((_, idx) => 
-                                            loadedGlyphImages[`${glyph.id}_variant_${idx}`]
-                                        ).length || 0;
-                                        const examplesLoaded = glyph.images.examples?.filter((_, idx) => 
-                                            loadedGlyphImages[`${glyph.id}_example_${idx}`]
-                                        ).length || 0;
-                                        
-                                        return (
-                                            <div key={glyph.id} className="border-2 border-gray-200 rounded-lg p-4 hover:border-purple-300 transition-colors">
-                                                <div className="flex items-start gap-4">
-                                                    {/* Glyph Info */}
-                                                    <div className="flex-shrink-0 text-center">
-                                                        <div className="text-4xl font-bold text-purple-600 mb-1">
-                                                            {glyph.arabic || '?'}
-                                                        </div>
-                                                        <div className="text-sm font-mono text-gray-600">
-                                                            {glyph.name}
-                                                        </div>
-                                                        <div className="text-xs text-gray-500 mt-1">
-                                                            ID: {glyph.id}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Images Grid */}
-                                                    <div className="flex-1">
-                                                        {/* Primary Image */}
-                                                        <div className="mb-3">
-                                                            <div className="flex items-center gap-2 mb-2">
-                                                                <h4 className="text-sm font-semibold text-gray-700">Primary</h4>
-                                                                {primaryLoaded ? (
-                                                                    <span className="text-xs text-green-600">✅ Loaded</span>
-                                                                ) : (
-                                                                    <span className="text-xs text-red-600">❌ Not loaded</span>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {primaryLoaded ? (
-                                                                    <div className="relative group">
-                                                                        <img 
-                                                                            src={primaryLoaded.src} 
-                                                                            alt={`Primary: ${glyph.name}`}
-                                                                            className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
-                                                                        />
-                                                                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="h-16 w-16 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
-                                                                        No image
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Variants */}
-                                                        {variantCount > 0 && (
-                                                            <div className="mb-3">
-                                                                <div className="flex items-center gap-2 mb-2">
-                                                                    <h4 className="text-sm font-semibold text-gray-700">
-                                                                        Variants ({variantsLoaded}/{variantCount})
-                                                                    </h4>
-                                                                    {variantsLoaded === variantCount ? (
-                                                                        <span className="text-xs text-green-600">✅ All loaded</span>
-                                                                    ) : (
-                                                                        <span className="text-xs text-orange-600">⚠️ {variantCount - variantsLoaded} missing</span>
-                                                                    )}
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    {glyph.images.variants.map((_, idx) => {
-                                                                        const variantImg = loadedGlyphImages[`${glyph.id}_variant_${idx}`];
-                                                                        return variantImg ? (
-                                                                            <div key={idx} className="relative group">
-                                                                                <img 
-                                                                                    src={variantImg.src} 
-                                                                                    alt={`Variant ${idx + 1}: ${glyph.name}`}
-                                                                                    className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
-                                                                                />
-                                                                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div key={idx} className="h-16 w-16 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
-                                                                                V{idx + 1}
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Examples */}
-                                                        {exampleCount > 0 && (
-                                                            <div>
-                                                                <div className="flex items-center gap-2 mb-2">
-                                                                    <h4 className="text-sm font-semibold text-gray-700">
-                                                                        Examples ({examplesLoaded}/{exampleCount})
-                                                                    </h4>
-                                                                    {examplesLoaded === exampleCount ? (
-                                                                        <span className="text-xs text-green-600">✅ All loaded</span>
-                                                                    ) : (
-                                                                        <span className="text-xs text-orange-600">⚠️ {exampleCount - examplesLoaded} missing</span>
-                                                                    )}
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    {glyph.images.examples.map((_, idx) => {
-                                                                        const exampleImg = loadedGlyphImages[`${glyph.id}_example_${idx}`];
-                                                                        return exampleImg ? (
-                                                                            <div key={idx} className="relative group">
-                                                                                <img 
-                                                                                    src={exampleImg.src} 
-                                                                                    alt={`Example ${idx + 1}: ${glyph.name}`}
-                                                                                    className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
-                                                                                />
-                                                                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div key={idx} className="h-16 w-16 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
-                                                                                E{idx + 1}
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                <div className="mt-6 pt-4 border-t border-gray-200 sticky bottom-0 bg-white">
-                                    <button
-                                        onClick={() => setShowChartViewer(false)}
-                                        className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
-                                    >
-                                        Close Chart Viewer
-                                    </button>
-                                </div>
                             </div>
                         </div>
                     )}
