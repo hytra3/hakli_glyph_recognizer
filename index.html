@@ -100,6 +100,7 @@
             const [mergeIndicator, setMergeIndicator] = useState(null);
             const [showChartViewer, setShowChartViewer] = useState(false);
             const [showCorrectionAnalysis, setShowCorrectionAnalysis] = useState(false);
+            const [showArabicLabels, setShowArabicLabels] = useState(false);
             const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
             const [imageLoadingProgress, setImageLoadingProgress] = useState({ loaded: 0, total: 0 });
 
@@ -2470,6 +2471,13 @@
                                     >
                                         📖 Reading Order View
                                     </button>
+                                    <button 
+                                        onClick={() => setShowArabicLabels(!showArabicLabels)}
+                                        className={`px-4 py-2 rounded font-medium ${showArabicLabels ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                        title={showArabicLabels ? 'Showing Arabic labels' : 'Showing English labels'}
+                                    >
+                                        {showArabicLabels ? '🔤 Arabic' : 'ABC English'}
+                                    </button>
                                 </div>
                             </div>
                             
@@ -2894,7 +2902,7 @@
                                             }}
                                         >
                                             <div className="detection-label" style={{ backgroundColor: boxColor + 'e6' }}>
-                                                {detection.glyph.name}
+                                                {showArabicLabels ? (detection.glyph.arabic || detection.glyph.name) : detection.glyph.name}
                                                 {detection.corrected && <span className="ml-1">✏️</span>}
                                             </div>
 
