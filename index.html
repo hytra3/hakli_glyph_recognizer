@@ -99,6 +99,7 @@
             const [showRegionBoundaries, setShowRegionBoundaries] = useState(false);
             const [mergeIndicator, setMergeIndicator] = useState(null);
             const [showChartViewer, setShowChartViewer] = useState(false);
+            const [showCorrectionAnalysis, setShowCorrectionAnalysis] = useState(false);
             const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
             const [imageLoadingProgress, setImageLoadingProgress] = useState({ loaded: 0, total: 0 });
 
@@ -1235,7 +1236,7 @@
             const downloadCorrectionsFromCloud = async (url = null) => {
                     try {
                         // Default to master collection
-                        const masterUrl = url || 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/community-corrections/hakli_corrections_master.json';
+                        const masterUrl = url || 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/community-corrections/master.json';
 
                         // Fetch the corrections data
                         const response = await fetch(masterUrl);
@@ -3346,12 +3347,6 @@
                                          className="block text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200"
                                  />
                                     <button
-                                        onClick={exportCorrectionMemory}
-                                        className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
-                                    >
-                                        📥 Export Memory
-                                    </button>
-                                    <button
                                         onClick={() => setShowCloudSyncModal(true)}
                                         className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                                         >
@@ -3359,7 +3354,7 @@
                                     </button>
                                     <button
                                         onClick={() => {
-                                            if (confirm('Clear all correction memory? This cannot be undone.')) {
+                                            if (confirm('Clear ALL correction memory permanently? This cannot be undone. Consider exporting first (see Export Options below).')) {
                                                 localStorage.removeItem('hakliCorrections');
                                                 alert('Correction memory cleared!');
                                             }
@@ -3409,6 +3404,12 @@
                                     className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 flex items-center gap-2"
                                 >
                                     🧠 Export Correction Memory
+                                </button>
+                                <button
+                                    onClick={() => setShowCorrectionAnalysis(true)}
+                                    className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 flex items-center gap-2"
+                                >
+                                    📊 Analyze Corrections
                                 </button>
                             </div>
                             <div className="mt-3 text-xs text-gray-600">
@@ -3583,6 +3584,229 @@
                                         className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
                                     >
                                         Close Chart Viewer
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {showCorrectionAnalysis && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowCorrectionAnalysis(false)}>
+                            <div className="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                                {/* Header */}
+                                <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 flex-shrink-0">
+                                    <h3 className="text-2xl font-bold text-gray-900">📊 Correction Analysis</h3>
+                                    <button
+                                        onClick={() => setShowCorrectionAnalysis(false)}
+                                        className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
+                                    >
+                                        &times;
+                                    </button>
+                                </div>
+
+                                {/* Scrollable Content */}
+                                <div className="overflow-y-auto p-6 pt-4 flex-1">
+                                    {(() => {
+                                        const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
+                                        const correctionKeys = Object.keys(corrections);
+                                        
+                                        if (correctionKeys.length === 0) {
+                                            return (
+                                                <div className="text-center py-12">
+                                                    <div className="text-6xl mb-4">📭</div>
+                                                    <h4 className="text-xl font-semibold text-gray-700 mb-2">No Corrections Yet</h4>
+                                                    <p className="text-gray-600">
+                                                        Start correcting misidentified glyphs to build up your correction memory.
+                                                        This analysis will help you identify which glyphs need better template images.
+                                                    </p>
+                                                </div>
+                                            );
+                                        }
+
+                                        // Calculate statistics
+                                        const stats = correctionKeys.map(key => {
+                                            const data = corrections[key];
+                                            const totalCorrections = data.corrections.reduce((sum, c) => sum + c.count, 0);
+                                            const uniqueCorrections = data.corrections.length;
+                                            const mostCommon = data.corrections.sort((a, b) => b.count - a.count)[0];
+                                            
+                                            return {
+                                                originalGlyph: data.originalGlyph,
+                                                totalCorrections,
+                                                uniqueCorrections,
+                                                mostCommon,
+                                                allCorrections: data.corrections
+                                            };
+                                        }).sort((a, b) => b.totalCorrections - a.totalCorrections);
+
+                                        const totalAllCorrections = stats.reduce((sum, s) => sum + s.totalCorrections, 0);
+
+                                        return (
+                                            <>
+                                                {/* Summary Stats */}
+                                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                                                        <div className="text-3xl font-bold text-blue-600">{correctionKeys.length}</div>
+                                                        <div className="text-sm text-gray-600">Glyphs Corrected</div>
+                                                    </div>
+                                                    <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                                                        <div className="text-3xl font-bold text-green-600">{totalAllCorrections}</div>
+                                                        <div className="text-sm text-gray-600">Total Corrections</div>
+                                                    </div>
+                                                    <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
+                                                        <div className="text-3xl font-bold text-purple-600">
+                                                            {stats.length > 0 ? Math.round(totalAllCorrections / stats.length) : 0}
+                                                        </div>
+                                                        <div className="text-sm text-gray-600">Avg per Glyph</div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Priority List */}
+                                                <div className="mb-4">
+                                                    <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                                                        🎯 Priority: Glyphs Needing Better Templates
+                                                    </h4>
+                                                    <p className="text-sm text-gray-600 mb-4">
+                                                        Sorted by frequency of corrections. High correction counts indicate template images may need improvement.
+                                                    </p>
+                                                </div>
+
+                                                {/* Detailed List */}
+                                                <div className="space-y-4">
+                                                    {stats.map((stat, idx) => {
+                                                        const priority = stat.totalCorrections >= 10 ? 'high' : 
+                                                                       stat.totalCorrections >= 5 ? 'medium' : 'low';
+                                                        const priorityColors = {
+                                                            high: 'border-red-300 bg-red-50',
+                                                            medium: 'border-orange-300 bg-orange-50',
+                                                            low: 'border-gray-300 bg-gray-50'
+                                                        };
+                                                        const priorityBadges = {
+                                                            high: 'bg-red-500',
+                                                            medium: 'bg-orange-500',
+                                                            low: 'bg-gray-500'
+                                                        };
+
+                                                        return (
+                                                            <div key={stat.originalGlyph.id} className={`border-2 rounded-lg p-4 ${priorityColors[priority]}`}>
+                                                                <div className="flex items-start gap-4">
+                                                                    {/* Rank & Priority */}
+                                                                    <div className="flex-shrink-0 text-center">
+                                                                        <div className="text-2xl font-bold text-gray-600">#{idx + 1}</div>
+                                                                        <div className={`mt-1 px-2 py-1 ${priorityBadges[priority]} text-white text-xs rounded uppercase font-semibold`}>
+                                                                            {priority}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Glyph Info */}
+                                                                    <div className="flex-shrink-0">
+                                                                        <div className="text-4xl font-bold text-purple-600 mb-1">
+                                                                            {stat.originalGlyph.arabic || '?'}
+                                                                        </div>
+                                                                        <div className="text-sm font-mono text-gray-600">
+                                                                            {stat.originalGlyph.name}
+                                                                        </div>
+                                                                        <div className="text-xs text-gray-500">
+                                                                            ID: {stat.originalGlyph.id}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Statistics */}
+                                                                    <div className="flex-1">
+                                                                        <div className="mb-3">
+                                                                            <div className="text-sm font-semibold text-gray-700 mb-1">
+                                                                                Correction Statistics:
+                                                                            </div>
+                                                                            <div className="flex gap-4 text-sm">
+                                                                                <div>
+                                                                                    <span className="font-semibold text-gray-900">{stat.totalCorrections}</span>
+                                                                                    <span className="text-gray-600"> total corrections</span>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <span className="font-semibold text-gray-900">{stat.uniqueCorrections}</span>
+                                                                                    <span className="text-gray-600"> unique targets</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="mb-2">
+                                                                            <div className="text-sm font-semibold text-gray-700 mb-2">
+                                                                                Most Often Corrected To:
+                                                                            </div>
+                                                                            <div className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
+                                                                                <div className="text-2xl font-bold text-green-600">
+                                                                                    {stat.mostCommon.to.arabic || '?'}
+                                                                                </div>
+                                                                                <div className="flex-1">
+                                                                                    <div className="text-sm font-mono text-gray-700">
+                                                                                        {stat.mostCommon.to.name}
+                                                                                    </div>
+                                                                                    <div className="text-xs text-gray-500">
+                                                                                        {stat.mostCommon.count} times 
+                                                                                        ({Math.round(stat.mostCommon.count / stat.totalCorrections * 100)}% of corrections)
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {stat.allCorrections.length > 1 && (
+                                                                            <div className="mt-2">
+                                                                                <div className="text-xs text-gray-600 mb-1">Other corrections:</div>
+                                                                                <div className="flex flex-wrap gap-2">
+                                                                                    {stat.allCorrections.slice(1).map((c, i) => (
+                                                                                        <div key={i} className="px-2 py-1 bg-white border border-gray-200 rounded text-xs">
+                                                                                            <span className="font-bold">{c.to.arabic || c.to.name}</span>
+                                                                                            <span className="text-gray-500 ml-1">×{c.count}</span>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+
+                                                                        <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                                                                            <div className="text-xs font-semibold text-yellow-800 mb-1">💡 Recommendation:</div>
+                                                                            <div className="text-xs text-gray-700">
+                                                                                {priority === 'high' && 
+                                                                                    `High priority! This glyph is frequently misidentified. Add clearer template images or more variants to Hakli_glyphs.JSON.`
+                                                                                }
+                                                                                {priority === 'medium' && 
+                                                                                    `Consider reviewing this glyph's template images. Add variants if different inscription styles exist.`
+                                                                                }
+                                                                                {priority === 'low' && 
+                                                                                    `Low correction frequency suggests templates are working reasonably well.`
+                                                                                }
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                {/* Action Tips */}
+                                                <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                                                    <h4 className="font-semibold text-blue-900 mb-2">📝 Next Steps:</h4>
+                                                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                                                        <li>Focus on high-priority glyphs (10+ corrections) first</li>
+                                                        <li>Add clearer <strong>primary</strong> images to Hakli_glyphs.JSON</li>
+                                                        <li>Add <strong>variants</strong> for different carving styles</li>
+                                                        <li>Add <strong>examples</strong> from actual inscriptions where confusion occurs</li>
+                                                        <li>Re-test with problematic inscriptions after updating templates</li>
+                                                    </ul>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+
+                                {/* Footer */}
+                                <div className="p-6 pt-4 border-t border-gray-200 flex-shrink-0">
+                                    <button
+                                        onClick={() => setShowCorrectionAnalysis(false)}
+                                        className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
+                                    >
+                                        Close Analysis
                                     </button>
                                 </div>
                             </div>
