@@ -2402,7 +2402,7 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
-                        <p className="text-gray-600">beta v251112 ©marty heaton</p>
+                        <p className="text-gray-600">beta v251113 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -2580,7 +2580,7 @@
                                             <div>• <strong>Primary:</strong> The main reference image (replaces existing)</div>
                                             <div>• <strong>Variant:</strong> Alternative style of the same glyph (adds to collection)</div>
                                             <div>• <strong>Example:</strong> Additional training data (adds to collection)</div>
-                                            <div> export, then merge with Hakli_glyphs.JSON </div>
+                                            <div> then replace Hakli_glyphs.JSON </div>
                                         </div>
                                         {equivalenceChart && (
                                             <div className="mt-3 flex gap-2">
@@ -2591,7 +2591,7 @@
                                                     💾 Export Training Chart
                                                 </button>
                                                 <button
-                                                    onClick={() => window.open('merge_training_glyphs.html', '_blank')}
+                                                    onClick={() => window.open('merge_glyphs.html', '_blank')}
                                                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
                                                     title="Open the tool to merge training file with base Hakli_glyphs.JSON"
                                                 >
@@ -2717,9 +2717,15 @@
                                 <div className="flex flex-wrap gap-3 items-center pt-3 border-t border-gray-200">
                                     <span className="text-sm text-gray-600">{selectedRegions.size} selected</span>
                                     {selectedRegions.size >= 2 && (
-                                        <button onClick={mergeSelectedDetections} className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
-                                            Merge Selected
-                                        </button>
+                                        <>
+                                            <button onClick={mergeSelectedDetections} className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 font-semibold">
+                                                ⚡ Merge Selected
+                                            </button>
+                                            <span className="text-xs text-gray-500">Combines {selectedRegions.size} detections into one</span>
+                                        </>
+                                    )}
+                                    {selectedRegions.size === 1 && (
+                                        <span className="text-xs text-blue-600">Select 1+ more (click ⚡) to merge</span>
                                     )}
                                     <button onClick={() => setSelectedRegions(new Set())} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
                                         Clear Selection
@@ -3264,6 +3270,13 @@
                                                 title="Exclude regions from this detection"
                                             >
                                                 🔥
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleRegionSelection(originalIndex)} 
+                                                className={`text-sm ${selectedRegions.has(originalIndex) ? 'text-blue-600' : 'text-blue-400 hover:text-blue-600'}`}
+                                                title="Select for merging (select 2+ then click Merge)"
+                                            >
+                                                ⚡
                                             </button>
                                             <button 
                                                 onClick={() => deleteDetection(originalIndex)} 
