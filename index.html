@@ -2799,9 +2799,9 @@
                                     const scaleY = imageRect.height / imageRef.current.naturalHeight;
                                     return (
                                         <>
-                                            {/* Highlight the detection being edited */}
+                                            {/* Highlight the detection being edited - just the border, no badge */}
                                             <div
-                                                className="absolute border-4 border-dashed border-purple-500 bg-purple-100 bg-opacity-20 pointer-events-none"
+                                                className="absolute border-4 border-dashed border-purple-500 pointer-events-none"
                                                 style={{
                                                     left: det.position.x * scaleX + 'px',
                                                     top: det.position.y * scaleY + 'px',
@@ -2809,12 +2809,7 @@
                                                     height: det.position.height * scaleY + 'px',
                                                     zIndex: 20
                                                 }}
-                                            >
-                                                {/* Small indicator badge */}
-                                                <div className="absolute -top-6 left-0 bg-purple-500 text-white text-xs px-2 py-1 rounded shadow-lg">
-                                                    🔥 Exclude Mode
-                                                </div>
-                                            </div>
+                                            />
 
                                             {/* Show exclusion regions drawn by user */}
                                             {excludeRegions.map((exRegion, idx) => (
@@ -3180,20 +3175,20 @@
                                 </div>
 
                                 <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                    <h4 className="font-semibold text-blue-900 mb-2">📝 Instructions:</h4>
-                                    <ol className="text-sm text-gray-700 space-y-1 list-decimal list-inside">
-                                        <li>Click and drag on the image to draw boxes around areas you want to <strong>remove</strong></li>
-                                        <li>Draw multiple boxes if needed (each red box will be excluded)</li>
-                                        <li>The purple dashed border shows the detection you're editing</li>
-                                        <li>Click "Apply Exclusions" when done, or "Cancel" to abort</li>
+                                    <h4 className="font-semibold text-blue-900 mb-2">📝 How to Exclude Regions:</h4>
+                                    <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
+                                        <li><strong className="text-blue-700">DRAW BOXES on the inscription image</strong> - Click and drag to create red boxes around unwanted portions</li>
+                                        <li>The <strong>purple dashed border</strong> shows which detection you're editing</li>
+                                        <li><strong>Draw multiple boxes</strong> if you need to exclude several areas</li>
+                                        <li>When done drawing, click <strong className="text-green-600">"✓ Apply Exclusions"</strong> below</li>
                                     </ol>
                                 </div>
 
                                 <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
                                     <div className="text-sm text-yellow-800">
                                         <strong>Status:</strong> {excludeRegions.length === 0 ? 
-                                            'Draw boxes on the image to mark regions for exclusion' : 
-                                            `${excludeRegions.length} exclusion region${excludeRegions.length > 1 ? 's' : ''} drawn`}
+                                            '⚠️ No boxes drawn yet - Draw red boxes on the image above!' : 
+                                            `✓ ${excludeRegions.length} exclusion region${excludeRegions.length > 1 ? 's' : ''} drawn - Ready to apply!`}
                                     </div>
                                 </div>
 
