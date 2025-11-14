@@ -117,6 +117,7 @@
             const [stateHistory, setStateHistory] = useState([]);
             const [confidenceThreshold, setConfidenceThreshold] = useState(0);
             const [useConfidenceFilter, setUseConfidenceFilter] = useState(false);
+            const [showConfidenceFilter, setShowConfidenceFilter] = useState(false);
             const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
             const [customGistUrl, setCustomGistUrl] = useState('');
             const [trimMode, setTrimMode] = useState(null); // Index of detection being trimmed, or null
@@ -2680,16 +2681,24 @@
                                 <div className="mt-4 p-4 bg-white border-2 border-gray-300 rounded-lg">
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-3">
-                                            <h4 className="font-semibold text-gray-900">Confidence Filter</h4>
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={useConfidenceFilter}
-                                                    onChange={(e) => setUseConfidenceFilter(e.target.checked)}
-                                                    className="w-4 h-4"
-                                                />
-                                                <span className="text-sm text-gray-700">Enable</span>
-                                            </label>
+                                            <button
+                                                onClick={() => setShowConfidenceFilter(!showConfidenceFilter)}
+                                                className="flex items-center gap-2 text-gray-700 hover:text-gray-900 font-semibold"
+                                            >
+                                                <span>{showConfidenceFilter ? '▼' : '▶'}</span>
+                                                <h4 className="text-gray-900">Confidence Filter</h4>
+                                            </button>
+                                            {!showConfidenceFilter && (
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={useConfidenceFilter}
+                                                        onChange={(e) => setUseConfidenceFilter(e.target.checked)}
+                                                        className="w-4 h-4"
+                                                    />
+                                                    <span className="text-sm text-gray-700">Enable</span>
+                                                </label>
+                                            )}
                                         </div>
                                         <div className="text-sm">
                                             {useConfidenceFilter ? (
@@ -2707,30 +2716,45 @@
                                         </div>
                                     </div>
                                     
-                                    <div className="flex items-center gap-4">
-                                        <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                                            Min Confidence: {confidenceThreshold}%
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="100"
-                                            value={confidenceThreshold}
-                                            onChange={(e) => setConfidenceThreshold(parseInt(e.target.value))}
-                                            disabled={!useConfidenceFilter}
-                                            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                            style={{
-                                                background: useConfidenceFilter 
-                                                    ? `linear-gradient(to right, #ef4444 0%, #f59e0b ${confidenceThreshold / 2}%, #10b981 ${confidenceThreshold}%, #e5e7eb ${confidenceThreshold}%, #e5e7eb 100%)`
-                                                    : '#e5e7eb'
-                                            }}
-                                        />
-                                        <span className="text-xs text-gray-500 whitespace-nowrap">
-                                            {confidenceThreshold < 40 && '🔴 Low'}
-                                            {confidenceThreshold >= 40 && confidenceThreshold < 70 && '🟡 Medium'}
-                                            {confidenceThreshold >= 70 && '🟢 High'}
-                                        </span>
-                                    </div>
+                                    {showConfidenceFilter && (
+                                        <>
+                                            <div className="mb-3 pb-3 border-b border-gray-200">
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={useConfidenceFilter}
+                                                        onChange={(e) => setUseConfidenceFilter(e.target.checked)}
+                                                        className="w-4 h-4"
+                                                    />
+                                                    <span className="text-sm font-medium text-gray-700">Enable Filter</span>
+                                                </label>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                                                    Min Confidence: {confidenceThreshold}%
+                                                </label>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="100"
+                                                    value={confidenceThreshold}
+                                                    onChange={(e) => setConfidenceThreshold(parseInt(e.target.value))}
+                                                    disabled={!useConfidenceFilter}
+                                                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    style={{
+                                                        background: useConfidenceFilter 
+                                                            ? `linear-gradient(to right, #ef4444 0%, #f59e0b ${confidenceThreshold / 2}%, #10b981 ${confidenceThreshold}%, #e5e7eb ${confidenceThreshold}%, #e5e7eb 100%)`
+                                                            : '#e5e7eb'
+                                                    }}
+                                                />
+                                                <span className="text-xs text-gray-500 whitespace-nowrap">
+                                                    {confidenceThreshold < 40 && '🔴 Low'}
+                                                    {confidenceThreshold >= 40 && confidenceThreshold < 70 && '🟡 Medium'}
+                                                    {confidenceThreshold >= 70 && '🟢 High'}
+                                                </span>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
                                 <button 
