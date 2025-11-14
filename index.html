@@ -897,9 +897,9 @@
 
                 const detection = recognitionResults[detectionIndex];
                 const originalBounds = detection.position;
+                const oldGlyph = detection.glyph.name;
 
                 try {
-                    // Create a mask of the original region
                     const tempImg = new Image();
                     tempImg.src = image;
 
@@ -917,13 +917,11 @@
 
                         // Draw exclusion regions on mask
                         excludeRegions.forEach(exRegion => {
-                            // Convert absolute coords to relative coords within detection
                             const relX = exRegion.x - originalBounds.x;
                             const relY = exRegion.y - originalBounds.y;
                             const relWidth = exRegion.width;
                             const relHeight = exRegion.height;
 
-                            // Only process if exclusion overlaps with detection
                             if (relX < regionMat.cols && relY < regionMat.rows &&
                                 relX + relWidth > 0 && relY + relHeight > 0) {
                                 const point1 = new cv.Point(
@@ -934,147 +932,109 @@
                                     Math.min(regionMat.cols, relX + relWidth),
                                     Math.min(regionMat.rows, relY + relHeight)
                                 );
-                                cv.rectangle(mask, point1, point2, new cv.Scalar(0), -1); // Fill with black
+                                cv.rectangle(mask, point1, point2, new cv.Scalar(0), -1);
                             }
                         });
 
-                        // Apply mask to find remaining contours
-                        const gray = new cv.Mat();
-                        const binary = new cv.Mat();
+                        // Find bounding box of remaining (white) pixels in mask
+                        let minX = mask.cols, minY = mask.rows, maxX = 0, maxY = 0;
+                        let hasPixels = false;
 
-                        if (regionMat.channels() > 1) {
-                            cv.cvtColor(regionMat, gray, cv.COLOR_RGBA2GRAY);
-                        } else {
-                            regionMat.copyTo(gray);
+                        for (let y = 0; y < mask.rows; y++) {
+                            for (let x = 0; x < mask.cols; x++) {
+                                if (mask.ucharAt(y, x) > 0) {
+                                    hasPixels = true;
+                                    minX = Math.min(minX, x);
+                                    minY = Math.min(minY, y);
+                                    maxX = Math.max(maxX, x);
+                                    maxY = Math.max(maxY, y);
+                                }
+                            }
                         }
 
-                        cv.threshold(gray, binary, 127, 255, cv.THRESH_BINARY);
+                        src.delete();
+                        regionMat.delete();
+                        mask.delete();
 
-                        // Apply mask
-                        const masked = new cv.Mat();
-                        cv.bitwise_and(binary, mask, masked);
+                        if (!hasPixels) {
+                            alert('❌ Exclusion removed all content. Canceling.');
+                            setExcludeMode(null);
+                            setExcludeRegions([]);
+                            return;
+                        }
 
-                        // Find contours in masked region
-                        const contours = new cv.MatVector();
-                        const hierarchy = new cv.Mat();
-                        cv.findContours(masked, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-                        // Cleanup function defined BEFORE use
-                        const cleanupMats = () => {
-                            src.delete();
-                            regionMat.delete();
-                            mask.delete();
-                            gray.delete();
-                            binary.delete();
-                            masked.delete();
-                            contours.delete();
-                            hierarchy.delete();
+                        // Create new bounds
+                        const newBounds = {
+                            x: originalBounds.x + minX,
+                            y: originalBounds.y + minY,
+                            width: maxX - minX + 1,
+                            height: maxY - minY + 1
                         };
 
-                        if (contours.size() === 0) {
-                            alert('❌ Exclusion removed all content. Canceling.');
-                            cleanupMats();
+                        if (newBounds.width < 10 || newBounds.height < 10) {
+                            alert('❌ Remaining region too small after exclusion.');
                             setExcludeMode(null);
                             setExcludeRegions([]);
                             return;
                         }
 
-                        // Get bounding boxes of remaining contours
-                        const newDetections = [];
-                        for (let i = 0; i < contours.size(); i++) {
-                            const boundingRect = cv.boundingRect(contours.get(i));
-                            const area = boundingRect.width * boundingRect.height;
+                        const thumbnail = extractRegionThumbnail(tempImg, { bounds: newBounds });
 
-                            if (area > 100) { // Minimum size
-                                const absoluteBounds = {
-                                    x: originalBounds.x + boundingRect.x,
-                                    y: originalBounds.y + boundingRect.y,
-                                    width: boundingRect.width,
-                                    height: boundingRect.height
-                                };
+                        const newDetection = {
+                            glyph: { id: 'unknown', name: 'Unknown', transliteration: '?' },
+                            confidence: 0.5,
+                            position: newBounds,
+                            matchType: 'excluded',
+                            isExcluded: true,
+                            thumbnail: thumbnail,
+                            regionIndex: isolatedGlyphs.length
+                        };
 
-                                const thumbnail = extractRegionThumbnail(tempImg, { bounds: absoluteBounds });
-
-                                newDetections.push({
-                                    glyph: { id: 'unknown', name: 'Unknown', transliteration: '?' },
-                                    confidence: 0.5,
-                                    position: absoluteBounds,
-                                    matchType: 'excluded',
-                                    isExcluded: true,
-                                    thumbnail: thumbnail,
-                                    regionIndex: isolatedGlyphs.length + newDetections.length
-                                });
-                            }
-                        }
-
-                        cleanupMats();
-
-                        if (newDetections.length === 0) {
-                            alert('❌ No valid regions remained after exclusion.');
-                            setExcludeMode(null);
-                            setExcludeRegions([]);
-                            return;
-                        }
-
-                        const oldGlyph = detection.glyph.name;
-
-                        // Remove old detection and add new ones
                         setRecognitionResults(prev => {
                             const updated = [...prev];
-                            updated.splice(detectionIndex, 1); // Remove original
-                            return [...updated, ...newDetections]; // Add new ones
+                            updated.splice(detectionIndex, 1);
+                            updated.push(newDetection);
+                            return updated;
                         });
 
-                        // Add to isolated glyphs
-                        newDetections.forEach(det => {
-                            setIsolatedGlyphs(prev => [...prev, {
-                                bounds: det.position,
-                                thumbnail: det.thumbnail,
-                                area: det.position.width * det.position.height,
-                                aspectRatio: det.position.width / det.position.height
-                            }]);
-                        });
+                        setIsolatedGlyphs(prev => [...prev, {
+                            bounds: newBounds,
+                            thumbnail: thumbnail,
+                            area: newBounds.width * newBounds.height,
+                            aspectRatio: newBounds.width / newBounds.height
+                        }]);
 
                         recordAction('exclude_regions', {
                             originalIndex: detectionIndex,
                             originalGlyph: oldGlyph,
                             exclusions: excludeRegions,
-                            newDetections: newDetections.length
+                            newBounds: newBounds
                         });
 
                         setExcludeMode(null);
                         setExcludeRegions([]);
 
-                        alert(`✅ Excluded regions from "${oldGlyph}"!\n\n` +
-                            `Created ${newDetections.length} new detection(s).\n` +
-                            `Original detection removed.\n\n` +
-                            `💡 Tip: The new detections are marked as "Unknown" - correct them using the ✏️ button.`);
+                        alert(`✅ Excluded regions from "${oldGlyph}"!\n\nNew detection created with adjusted boundaries.\nOriginal detection removed.\n\n💡 Tip: Correct the new "Unknown" detection using ✏️`);
 
-                        // Optional: Auto-scroll to show new detections
                         setTimeout(() => {
-                            const detectionCards = document.querySelectorAll('.p-3.bg-white.rounded.border');
-                            if (detectionCards.length > 0) {
-                                detectionCards[detectionCards.length - 1].scrollIntoView({
-                                    behavior: 'smooth',
-                                    block: 'center'
-                                });
-                            }
+                            const cards = document.querySelectorAll('.p-3.bg-white.rounded.border');
+                            if (cards.length > 0) cards[cards.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
                         }, 200);
                     };
 
                     tempImg.onerror = () => {
-                        console.error('❌ Failed to load image');
                         alert('❌ Failed to load image for exclusion');
                         setExcludeMode(null);
                         setExcludeRegions([]);
                     };
                 } catch (error) {
                     console.error('Exclude error:', error);
-                    alert('❌ Failed to apply exclusions. Check console for details.');
+                    alert('❌ Failed to apply exclusions.');
                     setExcludeMode(null);
                     setExcludeRegions([]);
                 }
             };
+
 
             const saveAsTemplate = (detectionIndex, templateType) => {
                 const detection = recognitionResults[detectionIndex];
@@ -2402,7 +2362,7 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
-                        <p className="text-gray-600">beta v251113 ©marty heaton</p>
+                        <p className="text-gray-600">beta v251114 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
