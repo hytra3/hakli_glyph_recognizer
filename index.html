@@ -98,6 +98,9 @@
             const [isolatedGlyphs, setIsolatedGlyphs] = useState([]);
             const [showRegionBoundaries, setShowRegionBoundaries] = useState(false);
             const [mergeIndicator, setMergeIndicator] = useState(null);
+            const [showChartViewer, setShowChartViewer] = useState(false);
+            const [showCorrectionAnalysis, setShowCorrectionAnalysis] = useState(false);
+            const [showArabicLabels, setShowArabicLabels] = useState(false);
             const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
             const [imageLoadingProgress, setImageLoadingProgress] = useState({ loaded: 0, total: 0 });
 
@@ -1682,7 +1685,6 @@
                     const validationClass = validation ? (validation.isCorrect ? 'correct' : 'incorrect') : '';
                     const correctedBadge = result.corrected ? '<span style="background: #fef3c7; padding: 2px 8px; border-radius: 3px; font-size: 12px;">✏️ Corrected</span>' : '';
                     const orderPrefix = viewMode === 'reading' ? (index + 1) + '. ' : '';
-
                     detectionHtml += '<div class="detection-item ' + validationClass + '"><div><span class="detection-glyph">' + orderPrefix + result.glyph.name + '</span><span style="color: #6b7280; margin-left: 10px;">' + (result.glyph.transliteration || '') + '</span>' + correctedBadge + '</div><div class="detection-confidence">' + Math.round(result.confidence * 100) + '%</div></div>';
                 });
                 detectionHtml += '</div>';
@@ -2400,7 +2402,7 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
-                        <p className="text-gray-600">beta v251106 ©marty heaton</p>
+                        <p className="text-gray-600">beta v251113 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -2424,9 +2426,22 @@
                                     {chartLoadStatus === 'error' && <span className="text-red-600">❌ Error loading chart</span>}
                                 </div>
                             </div>
-                            <button onClick={() => setChartLoadStatus('not-loaded')} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" disabled={chartLoadStatus === 'loading'}>
-                                Reload Chart
-                            </button>
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => setShowChartViewer(true)} 
+                                    className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600" 
+                                    disabled={chartLoadStatus !== 'loaded'}
+                                >
+                                    📊 View Chart
+                                </button>
+                                <button 
+                                    onClick={() => setChartLoadStatus('not-loaded')} 
+                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" 
+                                    disabled={chartLoadStatus === 'loading'}
+                                >
+                                    Reload Chart
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -2455,6 +2470,13 @@
                                         className={`px-4 py-2 rounded font-medium ${viewMode === 'reading' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                     >
                                         📖 Reading Order View
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowArabicLabels(!showArabicLabels)}
+                                        className={`px-4 py-2 rounded font-medium ${showArabicLabels ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                        title={showArabicLabels ? 'Showing Arabic labels' : 'Showing English labels'}
+                                    >
+                                        {showArabicLabels ? '🔤 Arabic' : 'ABC English'}
                                     </button>
                                 </div>
                             </div>
@@ -2561,12 +2583,21 @@
                                             <div> then replace Hakli_glyphs.JSON </div>
                                         </div>
                                         {equivalenceChart && (
-                                            <button
-                                                onClick={exportUpdatedChart}
-                                                className="mt-3 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm"
-                                            >
-                                                💾 Export Training Chart
-                                            </button>
+                                            <div className="mt-3 flex gap-2">
+                                                <button
+                                                    onClick={exportUpdatedChart}
+                                                    className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm"
+                                                >
+                                                    💾 Export Training Chart
+                                                </button>
+                                                <button
+                                                    onClick={() => window.open('merge_glyphs.html', '_blank')}
+                                                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                                                    title="Open the tool to merge training file with base Hakli_glyphs.JSON"
+                                                >
+                                                    🔀 Merge Training File
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 )}
@@ -2686,9 +2717,15 @@
                                 <div className="flex flex-wrap gap-3 items-center pt-3 border-t border-gray-200">
                                     <span className="text-sm text-gray-600">{selectedRegions.size} selected</span>
                                     {selectedRegions.size >= 2 && (
-                                        <button onClick={mergeSelectedDetections} className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">
-                                            Merge Selected
-                                        </button>
+                                        <>
+                                            <button onClick={mergeSelectedDetections} className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 font-semibold">
+                                                ⚡ Merge Selected
+                                            </button>
+                                            <span className="text-xs text-gray-500">Combines {selectedRegions.size} detections into one</span>
+                                        </>
+                                    )}
+                                    {selectedRegions.size === 1 && (
+                                        <span className="text-xs text-blue-600">Select 1+ more (click ⚡) to merge</span>
                                     )}
                                     <button onClick={() => setSelectedRegions(new Set())} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
                                         Clear Selection
@@ -2762,8 +2799,9 @@
                                     const scaleY = imageRect.height / imageRef.current.naturalHeight;
                                     return (
                                         <>
+                                            {/* Highlight the detection being edited - just the border, no badge */}
                                             <div
-                                                className="absolute border-4 border-dashed border-purple-500 bg-purple-100 bg-opacity-20 pointer-events-none"
+                                                className="absolute border-4 border-dashed border-purple-500 pointer-events-none"
                                                 style={{
                                                     left: det.position.x * scaleX + 'px',
                                                     top: det.position.y * scaleY + 'px',
@@ -2771,13 +2809,9 @@
                                                     height: det.position.height * scaleY + 'px',
                                                     zIndex: 20
                                                 }}
-                                            >
-                                                <div className="absolute top-1 left-1 bg-purple-500 text-white text-xs px-2 py-1 rounded">
-                                                    🚫 Draw box(es) to exclude
-                                                </div>
-                                            </div>
+                                            />
 
-                                            {/* Show exclusion regions */}
+                                            {/* Show exclusion regions drawn by user */}
                                             {excludeRegions.map((exRegion, idx) => (
                                                 <div
                                                     key={`exclude-${idx}`}
@@ -2791,35 +2825,6 @@
                                                     }}
                                                 />
                                             ))}
-
-                                            {/* Apply/Cancel buttons for exclude mode */}
-                                            {excludeRegions.length > 0 && (
-                                                <div
-                                                    className="absolute flex gap-2"
-                                                    style={{
-                                                        left: det.position.x * scaleX + 'px',
-                                                        bottom: 'calc(100% - ' + ((det.position.y + det.position.height) * scaleY) + 'px - 40px)',
-                                                        zIndex: 22,
-                                                        pointerEvents: 'auto'
-                                                    }}
-                                                >
-                                                    <button
-                                                        onClick={() => applyExclude(excludeMode)}
-                                                        className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 font-semibold"
-                                                    >
-                                                        ✓ Apply Exclusions
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setExcludeMode(null);
-                                                            setExcludeRegions([]);
-                                                        }}
-                                                        className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600"
-                                                    >
-                                                        ✕ Cancel
-                                                    </button>
-                                                </div>
-                                            )}
                                         </>
                                     );
                                 })()}
@@ -2880,10 +2885,9 @@
                                             }}
                                         >
                                             <div className="detection-label" style={{ backgroundColor: boxColor + 'e6' }}>
-                                                {detection.glyph.name}
+                                                {showArabicLabels ? (detection.glyph.arabic || detection.glyph.name) : detection.glyph.name}
                                                 {detection.corrected && <span className="ml-1">✏️</span>}
                                             </div>
-
 
                                             {viewMode === 'reading' && (
                                                 <div className="reading-order-badge">
@@ -3125,6 +3129,92 @@
                         </div>
                     )}
 
+                    {/* Exclude Mode Modal */}
+                    {excludeMode !== null && recognitionResults[excludeMode] && (
+                        <div className="fixed right-4 top-20 z-50 w-96 max-h-[calc(100vh-6rem)] overflow-y-auto">
+                            <div className="bg-white rounded-lg p-6 shadow-2xl border-4 border-purple-400" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                                        <span>🔥</span> Exclude Regions
+                                    </h3>
+                                    <button 
+                                        onClick={() => {
+                                            setExcludeMode(null);
+                                            setExcludeRegions([]);
+                                        }} 
+                                        className="text-gray-400 hover:text-gray-600 text-3xl leading-none w-8 h-8 flex items-center justify-center"
+                                        title="Close (Esc)"
+                                    >
+                                        &times;
+                                    </button>
+                                </div>
+                                
+                                <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg">
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex-1">
+                                            <span className="text-sm text-gray-600">Cleaning detection:</span>
+                                            <div className="text-xl font-bold text-gray-900 mt-1">
+                                                {recognitionResults[excludeMode].glyph.name}
+                                            </div>
+                                            <div className="text-sm text-gray-500 mt-1">
+                                                Remove unwanted portions from this detection
+                                            </div>
+                                        </div>
+                                        {recognitionResults[excludeMode].regionIndex !== undefined &&
+                                            isolatedGlyphs[recognitionResults[excludeMode].regionIndex]?.thumbnail && (
+                                                <div className="flex-shrink-0">
+                                                    <div className="text-xs text-gray-600 mb-1 text-center">Current Region:</div>
+                                                    <img
+                                                        src={isolatedGlyphs[recognitionResults[excludeMode].regionIndex].thumbnail}
+                                                        alt="Current region"
+                                                        className="w-24 h-auto border-2 border-purple-300 rounded"
+                                                    />
+                                                </div>
+                                            )}
+                                    </div>
+                                </div>
+
+                                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <h4 className="font-semibold text-blue-900 mb-2">📝 How to Exclude Regions:</h4>
+                                    <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
+                                        <li><strong className="text-blue-700">DRAW BOXES on the inscription image</strong> - Click and drag to create red boxes around unwanted portions</li>
+                                        <li>The <strong>purple dashed border</strong> shows which detection you're editing</li>
+                                        <li><strong>Draw multiple boxes</strong> if you need to exclude several areas</li>
+                                        <li>When done drawing, click <strong className="text-green-600">"✓ Apply Exclusions"</strong> below</li>
+                                    </ol>
+                                </div>
+
+                                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                                    <div className="text-sm text-yellow-800">
+                                        <strong>Status:</strong> {excludeRegions.length === 0 ? 
+                                            '⚠️ No boxes drawn yet - Draw red boxes on the image above!' : 
+                                            `✓ ${excludeRegions.length} exclusion region${excludeRegions.length > 1 ? 's' : ''} drawn - Ready to apply!`}
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3">
+                                    {excludeRegions.length > 0 && (
+                                        <button
+                                            onClick={() => applyExclude(excludeMode)}
+                                            className="flex-1 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold text-lg"
+                                        >
+                                            ✓ Apply Exclusions
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => {
+                                            setExcludeMode(null);
+                                            setExcludeRegions([]);
+                                        }}
+                                        className={`${excludeRegions.length > 0 ? 'flex-1' : 'w-full'} px-4 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 font-semibold text-lg`}
+                                    >
+                                        ✕ Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {recognitionResults.length > 0 && (
                         <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                             <h3 className="font-semibold text-gray-900 mb-3">
@@ -3153,7 +3243,6 @@
                                 <div className="flex items-center gap-2">
                                     <span className="text-orange-600">✏️ Corrected:</span>
                                     <span className="font-semibold text-orange-700">
-
                                         {recognitionResults.filter(r => r.corrected).length}
                                     </span>
                                 </div>
@@ -3194,7 +3283,6 @@
                                                             <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-300">
                                                                 ✏️ Corrected
                                                             </span>
-
                                                         )}
                                                         {result.isMerged && <span className="text-xs text-gray-500">(merged)</span>}
                                                         {result.isManual && <span className="text-xs text-gray-500">(manual)</span>}
@@ -3239,7 +3327,7 @@
                                             </button>
                                             <button 
                                                 onClick={() => toggleRegionSelection(originalIndex)} 
-                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
+                                                className={`text-sm ${selectedRegions.has(originalIndex) ? 'text-blue-600' : 'text-blue-400 hover:text-blue-600'}`}
                                                 title="Select for merging (select 2+ then click Merge)"
                                             >
                                                 ⚡
@@ -3353,12 +3441,6 @@
                                          className="block text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200"
                                  />
                                     <button
-                                        onClick={exportCorrectionMemory}
-                                        className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
-                                    >
-                                        📥 Export Memory
-                                    </button>
-                                    <button
                                         onClick={() => setShowCloudSyncModal(true)}
                                         className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                                         >
@@ -3366,7 +3448,7 @@
                                     </button>
                                     <button
                                         onClick={() => {
-                                            if (confirm('Clear all correction memory? This cannot be undone.')) {
+                                            if (confirm('Clear ALL correction memory permanently? This cannot be undone. Consider exporting first (see Export Options below).')) {
                                                 localStorage.removeItem('hakliCorrections');
                                                 alert('Correction memory cleared!');
                                             }
@@ -3417,9 +3499,427 @@
                                 >
                                     🧠 Export Correction Memory
                                 </button>
+                                <button
+                                    onClick={() => setShowCorrectionAnalysis(true)}
+                                    className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 flex items-center gap-2"
+                                >
+                                    📊 Analyze Corrections
+                                </button>
                             </div>
                             <div className="mt-3 text-xs text-gray-600">
                                 Export your work in different formats: JSON for data analysis, annotated images for presentations, or plain text transcriptions.
+                            </div>
+                        </div>
+                    )}
+                    
+                    {showChartViewer && equivalenceChart && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowChartViewer(false)}>
+                            <div className="bg-white rounded-lg max-w-7xl w-full max-h-[90vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                                {/* Sticky Header - Outside scrollable area */}
+                                <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 flex-shrink-0">
+                                    <h3 className="text-2xl font-bold text-gray-900">📊 Glyph Equivalence Chart</h3>
+                                    <button
+                                        onClick={() => setShowChartViewer(false)}
+                                        className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
+                                    >
+                                        &times;
+                                    </button>
+                                </div>
+
+                                {/* Scrollable Content */}
+                                <div className="overflow-y-auto p-6 pt-4 flex-1">
+
+                                <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                                    <div className="text-sm text-gray-700">
+                                        <strong>{equivalenceChart.glyphs.length}</strong> glyphs loaded with <strong>{Object.keys(loadedGlyphImages).length}</strong> total images
+                                    </div>
+                                </div>
+
+                                <div className="space-y-6">
+                                    {equivalenceChart.glyphs.map((glyph) => {
+                                        const primaryLoaded = loadedGlyphImages[glyph.id]; // Primary uses just the glyph.id
+                                        const variantCount = glyph.images.variants?.length || 0;
+                                        const exampleCount = glyph.images.examples?.length || 0;
+                                        const variantsLoaded = glyph.images.variants?.filter((_, idx) => 
+                                            loadedGlyphImages[`${glyph.id}_variant_${idx}`]
+                                        ).length || 0;
+                                        const examplesLoaded = glyph.images.examples?.filter((_, idx) => 
+                                            loadedGlyphImages[`${glyph.id}_example_${idx}`]
+                                        ).length || 0;
+                                        
+                                        return (
+                                            <div key={glyph.id} className="border-2 border-gray-200 rounded-lg p-4 hover:border-purple-300 transition-colors">
+                                                <div className="flex items-start gap-4">
+                                                    {/* Glyph Info */}
+                                                    <div className="flex-shrink-0 text-center">
+                                                        <div className="text-4xl font-bold text-purple-600 mb-1">
+                                                            {glyph.arabic || '?'}
+                                                        </div>
+                                                        <div className="text-sm font-mono text-gray-600">
+                                                            {glyph.name}
+                                                        </div>
+                                                        <div className="text-xs text-gray-500 mt-1">
+                                                            ID: {glyph.id}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Images Grid */}
+                                                    <div className="flex-1">
+                                                        {/* Primary Image */}
+                                                        <div className="mb-3">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <h4 className="text-sm font-semibold text-gray-700">Primary</h4>
+                                                                {primaryLoaded ? (
+                                                                    <span className="text-xs text-green-600">✅ Loaded</span>
+                                                                ) : (
+                                                                    <span className="text-xs text-red-600">❌ Not loaded</span>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {primaryLoaded ? (
+                                                                    <div className="relative group">
+                                                                        <img 
+                                                                            src={primaryLoaded.src} 
+                                                                            alt={`Primary: ${glyph.name}`}
+                                                                            className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
+                                                                        />
+                                                                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="h-16 w-16 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
+                                                                        No image
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Variants */}
+                                                        {variantCount > 0 && (
+                                                            <div className="mb-3">
+                                                                <div className="flex items-center gap-2 mb-2">
+                                                                    <h4 className="text-sm font-semibold text-gray-700">
+                                                                        Variants ({variantsLoaded}/{variantCount})
+                                                                    </h4>
+                                                                    {variantsLoaded === variantCount ? (
+                                                                        <span className="text-xs text-green-600">✅ All loaded</span>
+                                                                    ) : (
+                                                                        <span className="text-xs text-orange-600">⚠️ {variantCount - variantsLoaded} missing</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {glyph.images.variants.map((_, idx) => {
+                                                                        const variantImg = loadedGlyphImages[`${glyph.id}_variant_${idx}`];
+                                                                        return variantImg ? (
+                                                                            <div key={idx} className="relative group">
+                                                                                <img 
+                                                                                    src={variantImg.src} 
+                                                                                    alt={`Variant ${idx + 1}: ${glyph.name}`}
+                                                                                    className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
+                                                                                />
+                                                                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div key={idx} className="h-16 w-16 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
+                                                                                V{idx + 1}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Examples */}
+                                                        {exampleCount > 0 && (
+                                                            <div>
+                                                                <div className="flex items-center gap-2 mb-2">
+                                                                    <h4 className="text-sm font-semibold text-gray-700">
+                                                                        Examples ({examplesLoaded}/{exampleCount})
+                                                                    </h4>
+                                                                    {examplesLoaded === exampleCount ? (
+                                                                        <span className="text-xs text-green-600">✅ All loaded</span>
+                                                                    ) : (
+                                                                        <span className="text-xs text-orange-600">⚠️ {exampleCount - examplesLoaded} missing</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {glyph.images.examples.map((_, idx) => {
+                                                                        const exampleImg = loadedGlyphImages[`${glyph.id}_example_${idx}`];
+                                                                        return exampleImg ? (
+                                                                            <div key={idx} className="relative group">
+                                                                                <img 
+                                                                                    src={exampleImg.src} 
+                                                                                    alt={`Example ${idx + 1}: ${glyph.name}`}
+                                                                                    className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
+                                                                                />
+                                                                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div key={idx} className="h-16 w-16 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
+                                                                                E{idx + 1}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                </div>
+                                {/* End of Scrollable Content */}
+
+                                {/* Sticky Footer - Outside scrollable area */}
+                                <div className="p-6 pt-4 border-t border-gray-200 flex-shrink-0">
+                                    <button
+                                        onClick={() => setShowChartViewer(false)}
+                                        className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
+                                    >
+                                        Close Chart Viewer
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {showCorrectionAnalysis && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowCorrectionAnalysis(false)}>
+                            <div className="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                                {/* Header */}
+                                <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 flex-shrink-0">
+                                    <h3 className="text-2xl font-bold text-gray-900">📊 Correction Analysis</h3>
+                                    <button
+                                        onClick={() => setShowCorrectionAnalysis(false)}
+                                        className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
+                                    >
+                                        &times;
+                                    </button>
+                                </div>
+
+                                {/* Scrollable Content */}
+                                <div className="overflow-y-auto p-6 pt-4 flex-1">
+                                    {(() => {
+                                        const corrections = JSON.parse(localStorage.getItem('hakliCorrections') || '{}');
+                                        const correctionKeys = Object.keys(corrections);
+                                        
+                                        if (correctionKeys.length === 0) {
+                                            return (
+                                                <div className="text-center py-12">
+                                                    <div className="text-6xl mb-4">📭</div>
+                                                    <h4 className="text-xl font-semibold text-gray-700 mb-2">No Corrections Yet</h4>
+                                                    <p className="text-gray-600">
+                                                        Start correcting misidentified glyphs to build up your correction memory.
+                                                        This analysis will help you identify which glyphs need better template images.
+                                                    </p>
+                                                </div>
+                                            );
+                                        }
+
+                                        // Calculate statistics
+                                        const stats = correctionKeys.map(key => {
+                                            const data = corrections[key];
+                                            
+                                            // Safety check: ensure data structure is valid
+                                            if (!data || !data.corrections || !Array.isArray(data.corrections) || data.corrections.length === 0) {
+                                                return null;
+                                            }
+                                            
+                                            // Safety check: ensure originalGlyph exists
+                                            if (!data.originalGlyph || !data.originalGlyph.id) {
+                                                return null;
+                                            }
+                                            
+                                            const totalCorrections = data.corrections.reduce((sum, c) => sum + (c.count || 0), 0);
+                                            const uniqueCorrections = data.corrections.length;
+                                            const mostCommon = [...data.corrections].sort((a, b) => (b.count || 0) - (a.count || 0))[0];
+                                            
+                                            return {
+                                                originalGlyph: data.originalGlyph,
+                                                totalCorrections,
+                                                uniqueCorrections,
+                                                mostCommon,
+                                                allCorrections: data.corrections
+                                            };
+                                        }).filter(s => s !== null).sort((a, b) => b.totalCorrections - a.totalCorrections);
+
+                                        const totalAllCorrections = stats.reduce((sum, s) => sum + s.totalCorrections, 0);
+
+                                        return (
+                                            <>
+                                                {/* Summary Stats */}
+                                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                                                        <div className="text-3xl font-bold text-blue-600">{correctionKeys.length}</div>
+                                                        <div className="text-sm text-gray-600">Glyphs Corrected</div>
+                                                    </div>
+                                                    <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                                                        <div className="text-3xl font-bold text-green-600">{totalAllCorrections}</div>
+                                                        <div className="text-sm text-gray-600">Total Corrections</div>
+                                                    </div>
+                                                    <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
+                                                        <div className="text-3xl font-bold text-purple-600">
+                                                            {stats.length > 0 ? Math.round(totalAllCorrections / stats.length) : 0}
+                                                        </div>
+                                                        <div className="text-sm text-gray-600">Avg per Glyph</div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Priority List */}
+                                                <div className="mb-4">
+                                                    <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                                                        🎯 Priority: Glyphs Needing Better Templates
+                                                    </h4>
+                                                    <p className="text-sm text-gray-600 mb-4">
+                                                        Sorted by frequency of corrections. High correction counts indicate template images may need improvement.
+                                                    </p>
+                                                </div>
+
+                                                {/* Detailed List */}
+                                                <div className="space-y-4">
+                                                    {stats.map((stat, idx) => {
+                                                        const priority = stat.totalCorrections >= 10 ? 'high' : 
+                                                                       stat.totalCorrections >= 5 ? 'medium' : 'low';
+                                                        const priorityColors = {
+                                                            high: 'border-red-300 bg-red-50',
+                                                            medium: 'border-orange-300 bg-orange-50',
+                                                            low: 'border-gray-300 bg-gray-50'
+                                                        };
+                                                        const priorityBadges = {
+                                                            high: 'bg-red-500',
+                                                            medium: 'bg-orange-500',
+                                                            low: 'bg-gray-500'
+                                                        };
+
+                                                        return (
+                                                            <div key={stat.originalGlyph.id} className={`border-2 rounded-lg p-4 ${priorityColors[priority]}`}>
+                                                                <div className="flex items-start gap-4">
+                                                                    {/* Rank & Priority */}
+                                                                    <div className="flex-shrink-0 text-center">
+                                                                        <div className="text-2xl font-bold text-gray-600">#{idx + 1}</div>
+                                                                        <div className={`mt-1 px-2 py-1 ${priorityBadges[priority]} text-white text-xs rounded uppercase font-semibold`}>
+                                                                            {priority}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Glyph Info */}
+                                                                    <div className="flex-shrink-0">
+                                                                        <div className="text-4xl font-bold text-purple-600 mb-1">
+                                                                            {stat.originalGlyph.arabic || '?'}
+                                                                        </div>
+                                                                        <div className="text-sm font-mono text-gray-600">
+                                                                            {stat.originalGlyph.name}
+                                                                        </div>
+                                                                        <div className="text-xs text-gray-500">
+                                                                            ID: {stat.originalGlyph.id}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Statistics */}
+                                                                    <div className="flex-1">
+                                                                        <div className="mb-3">
+                                                                            <div className="text-sm font-semibold text-gray-700 mb-1">
+                                                                                Correction Statistics:
+                                                                            </div>
+                                                                            <div className="flex gap-4 text-sm">
+                                                                                <div>
+                                                                                    <span className="font-semibold text-gray-900">{stat.totalCorrections}</span>
+                                                                                    <span className="text-gray-600"> total corrections</span>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <span className="font-semibold text-gray-900">{stat.uniqueCorrections}</span>
+                                                                                    <span className="text-gray-600"> unique targets</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="mb-2">
+                                                                            <div className="text-sm font-semibold text-gray-700 mb-2">
+                                                                                Most Often Corrected To:
+                                                                            </div>
+                                                                            {stat.mostCommon && stat.mostCommon.to ? (
+                                                                            <div className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
+                                                                                <div className="text-2xl font-bold text-green-600">
+                                                                                    {stat.mostCommon.to.arabic || stat.mostCommon.to.name || '?'}
+                                                                                </div>
+                                                                                <div className="flex-1">
+                                                                                    <div className="text-sm font-mono text-gray-700">
+                                                                                        {stat.mostCommon.to.name || 'Unknown'}
+                                                                                    </div>
+                                                                                    <div className="text-xs text-gray-500">
+                                                                                        {stat.mostCommon.count || 0} times 
+                                                                                        ({Math.round((stat.mostCommon.count || 0) / stat.totalCorrections * 100)}% of corrections)
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                            ) : (
+                                                                                <div className="p-2 bg-gray-100 rounded text-sm text-gray-600">
+                                                                                    No correction data available
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {stat.allCorrections.length > 1 && (
+                                                                            <div className="mt-2">
+                                                                                <div className="text-xs text-gray-600 mb-1">Other corrections:</div>
+                                                                                <div className="flex flex-wrap gap-2">
+                                                                                    {stat.allCorrections.slice(1).map((c, i) => (
+                                                                                        <div key={i} className="px-2 py-1 bg-white border border-gray-200 rounded text-xs">
+                                                                                            <span className="font-bold">{c.to.arabic || c.to.name}</span>
+                                                                                            <span className="text-gray-500 ml-1">×{c.count}</span>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+
+                                                                        <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                                                                            <div className="text-xs font-semibold text-yellow-800 mb-1">💡 Recommendation:</div>
+                                                                            <div className="text-xs text-gray-700">
+                                                                                {priority === 'high' && 
+                                                                                    `High priority! This glyph is frequently misidentified. Add clearer template images or more variants to Hakli_glyphs.JSON.`
+                                                                                }
+                                                                                {priority === 'medium' && 
+                                                                                    `Consider reviewing this glyph's template images. Add variants if different inscription styles exist.`
+                                                                                }
+                                                                                {priority === 'low' && 
+                                                                                    `Low correction frequency suggests templates are working reasonably well.`
+                                                                                }
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+
+                                                {/* Action Tips */}
+                                                <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                                                    <h4 className="font-semibold text-blue-900 mb-2">📝 Next Steps:</h4>
+                                                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                                                        <li>Focus on high-priority glyphs (10+ corrections) first</li>
+                                                        <li>Add clearer <strong>primary</strong> images to Hakli_glyphs.JSON</li>
+                                                        <li>Add <strong>variants</strong> for different carving styles</li>
+                                                        <li>Add <strong>examples</strong> from actual inscriptions where confusion occurs</li>
+                                                        <li>Re-test with problematic inscriptions after updating templates</li>
+                                                    </ul>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+
+                                {/* Footer */}
+                                <div className="p-6 pt-4 border-t border-gray-200 flex-shrink-0">
+                                    <button
+                                        onClick={() => setShowCorrectionAnalysis(false)}
+                                        className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
+                                    >
+                                        Close Analysis
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
