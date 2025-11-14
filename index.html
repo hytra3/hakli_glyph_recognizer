@@ -2914,12 +2914,14 @@
                                     );
                                 })}
                                 
-                                {recognitionResults.map((detection, index) => {
+                                {getFilteredResults().map((detection, filteredIndex) => {
                                     if (!imageRef.current) return null;
                                     const imageRect = imageRef.current.getBoundingClientRect();
                                     const scaleX = imageRect.width / imageRef.current.naturalWidth;
                                     const scaleY = imageRect.height / imageRef.current.naturalHeight;
 
+                                    // Get the original index from recognitionResults
+                                    const index = recognitionResults.indexOf(detection);
                                     let boxColor = '#3b82f6';
                                     const isSelected = selectedRegions.has(index);
                                     const isValidated = validations[index];
