@@ -894,9 +894,9 @@
 
                 const detection = recognitionResults[detectionIndex];
                 const originalBounds = detection.position;
-                const oldGlyph = detection.glyph.name;
 
                 try {
+                    // Create a mask of the original region
                     const tempImg = new Image();
                     tempImg.src = image;
 
@@ -914,11 +914,13 @@
 
                         // Draw exclusion regions on mask
                         excludeRegions.forEach(exRegion => {
+                            // Convert absolute coords to relative coords within detection
                             const relX = exRegion.x - originalBounds.x;
                             const relY = exRegion.y - originalBounds.y;
                             const relWidth = exRegion.width;
                             const relHeight = exRegion.height;
 
+                            // Only process if exclusion overlaps with detection
                             if (relX < regionMat.cols && relY < regionMat.rows &&
                                 relX + relWidth > 0 && relY + relHeight > 0) {
                                 const point1 = new cv.Point(
@@ -929,109 +931,160 @@
                                     Math.min(regionMat.cols, relX + relWidth),
                                     Math.min(regionMat.rows, relY + relHeight)
                                 );
-                                cv.rectangle(mask, point1, point2, new cv.Scalar(0), -1);
+                                cv.rectangle(mask, point1, point2, new cv.Scalar(0), -1); // Fill with black
                             }
                         });
 
-                        // Find bounding box of remaining (white) pixels in mask
-                        let minX = mask.cols, minY = mask.rows, maxX = 0, maxY = 0;
-                        let hasPixels = false;
+                        // Apply mask to find remaining contours
+                        const gray = new cv.Mat();
+                        const binary = new cv.Mat();
 
-                        for (let y = 0; y < mask.rows; y++) {
-                            for (let x = 0; x < mask.cols; x++) {
-                                if (mask.ucharAt(y, x) > 0) {
-                                    hasPixels = true;
-                                    minX = Math.min(minX, x);
-                                    minY = Math.min(minY, y);
-                                    maxX = Math.max(maxX, x);
-                                    maxY = Math.max(maxY, y);
-                                }
+                        if (regionMat.channels() > 1) {
+                            cv.cvtColor(regionMat, gray, cv.COLOR_RGBA2GRAY);
+                        } else {
+                            regionMat.copyTo(gray);
+                        }
+
+                        cv.threshold(gray, binary, 127, 255, cv.THRESH_BINARY);
+
+                        // Apply mask
+                        const masked = new cv.Mat();
+                        cv.bitwise_and(binary, mask, masked);
+
+                        // Find contours in masked region
+                        const contours = new cv.MatVector();
+                        const hierarchy = new cv.Mat();
+                        cv.findContours(masked, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                        // Cleanup function defined BEFORE use
+                        const cleanupMats = () => {
+                            src.delete();
+                            regionMat.delete();
+                            mask.delete();
+                            gray.delete();
+                            binary.delete();
+                            masked.delete();
+                            contours.delete();
+                            hierarchy.delete();
+                        };
+
+                        if (contours.size() === 0) {
+                            alert('❌ Exclusion removed all content. Canceling.');
+                            cleanupMats();
+                            setExcludeMode(null);
+                            setExcludeRegions([]);
+                            return;
+                        }
+
+                        // Get bounding boxes of remaining contours
+                        const newDetections = [];
+                        for (let i = 0; i < contours.size(); i++) {
+                            const boundingRect = cv.boundingRect(contours.get(i));
+                            const area = boundingRect.width * boundingRect.height;
+
+                            if (area > 100) { // Minimum size
+                                const absoluteBounds = {
+                                    x: originalBounds.x + boundingRect.x,
+                                    y: originalBounds.y + boundingRect.y,
+                                    width: boundingRect.width,
+                                    height: boundingRect.height
+                                };
+
+                                const thumbnail = extractRegionThumbnail(tempImg, { bounds: absoluteBounds });
+
+                                newDetections.push({
+                                    glyph: { id: 'unknown', name: 'Unknown', transliteration: '?' },
+                                    confidence: 0.5,
+                                    position: absoluteBounds,
+                                    matchType: 'excluded',
+                                    isExcluded: true,
+                                    thumbnail: thumbnail,
+                                    regionIndex: isolatedGlyphs.length + newDetections.length
+                                });
                             }
                         }
 
-                        src.delete();
-                        regionMat.delete();
-                        mask.delete();
+                        cleanupMats();
 
-                        if (!hasPixels) {
-                            alert('❌ Exclusion removed all content. Canceling.');
+                        if (newDetections.length === 0) {
+                            alert('❌ No valid regions remained after exclusion.');
                             setExcludeMode(null);
                             setExcludeRegions([]);
                             return;
                         }
 
-                        // Create new bounds
-                        const newBounds = {
-                            x: originalBounds.x + minX,
-                            y: originalBounds.y + minY,
-                            width: maxX - minX + 1,
-                            height: maxY - minY + 1
-                        };
+                        const oldGlyph = detection.glyph.name;
 
-                        if (newBounds.width < 10 || newBounds.height < 10) {
-                            alert('❌ Remaining region too small after exclusion.');
-                            setExcludeMode(null);
-                            setExcludeRegions([]);
-                            return;
-                        }
-
-                        const thumbnail = extractRegionThumbnail(tempImg, { bounds: newBounds });
-
-                        const newDetection = {
-                            glyph: { id: 'unknown', name: 'Unknown', transliteration: '?' },
-                            confidence: 0.5,
-                            position: newBounds,
-                            matchType: 'excluded',
-                            isExcluded: true,
-                            thumbnail: thumbnail,
-                            regionIndex: isolatedGlyphs.length
-                        };
-
+                        // Remove old detection and add new ones
                         setRecognitionResults(prev => {
                             const updated = [...prev];
-                            updated.splice(detectionIndex, 1);
-                            updated.push(newDetection);
-                            return updated;
+                            updated.splice(detectionIndex, 1); // Remove original
+                            return [...updated, ...newDetections]; // Add new ones
                         });
 
-                        setIsolatedGlyphs(prev => [...prev, {
-                            bounds: newBounds,
-                            thumbnail: thumbnail,
-                            area: newBounds.width * newBounds.height,
-                            aspectRatio: newBounds.width / newBounds.height
-                        }]);
+                        // Add to isolated glyphs
+                        newDetections.forEach(det => {
+                            setIsolatedGlyphs(prev => [...prev, {
+                                bounds: det.position,
+                                thumbnail: det.thumbnail,
+                                area: det.position.width * det.position.height,
+                                aspectRatio: det.position.width / det.position.height
+                            }]);
+                        });
 
                         recordAction('exclude_regions', {
                             originalIndex: detectionIndex,
                             originalGlyph: oldGlyph,
                             exclusions: excludeRegions,
-                            newBounds: newBounds
+                            newDetections: newDetections.length
                         });
 
                         setExcludeMode(null);
                         setExcludeRegions([]);
 
-                        alert(`✅ Excluded regions from "${oldGlyph}"!
+                        alert(`✅ Excluded regions from "${oldGlyph}"!\n\n` +
+                            `Created ${newDetections.length} new detection(s).\n` +
+                            `Original detection removed.\n\n` +
+                            `💡 Tip: The new detections are marked as "Unknown" - correct them using the ✏️ button.`);
 
-New detection created with adjusted boundaries.
-Original detection removed.
-
-💡 Tip: Correct the new "Unknown" detection using ✏️`);
-
+                                            <button 
+                                                onClick={() => {
+                                                    setExcludeMode(originalIndex);
+                                                    setExcludeRegions([]);
+                                                }} 
+                                                className="text-purple-500 hover:text-purple-700 text-sm"
+                                                title="Exclude regions from this detection"
+                                            >
+                                                🔥
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleRegionSelection(originalIndex)} 
+                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
+                                                title="Select for merging (select 2+ then click Merge)"
+                                            >
+                                                ⚡
+                                            </button>
+                        // Optional: Auto-scroll to show new detections
                         setTimeout(() => {
-                            const cards = document.querySelectorAll('.p-3.bg-white.rounded.border');
-                            if (cards.length > 0) cards[cards.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            const detectionCards = document.querySelectorAll('.p-3.bg-white.rounded.border');
+                            if (detectionCards.length > 0) {
+                                detectionCards[detectionCards.length - 1].scrollIntoView({
+                                    behavior: 'smooth',
+                                    block: 'center'
+                                });
+                            }
                         }, 200);
                     };
 
                     tempImg.onerror = () => {
+                        console.error('❌ Failed to load image');
                         alert('❌ Failed to load image for exclusion');
                         setExcludeMode(null);
                         setExcludeRegions([]);
                     };
                 } catch (error) {
                     console.error('Exclude error:', error);
-                    alert('❌ Failed to apply exclusions.');
+                    alert('❌ Failed to apply exclusions. Check console for details.');
                     setExcludeMode(null);
                     setExcludeRegions([]);
                 }
@@ -1646,6 +1699,23 @@ Original detection removed.
                     const validationClass = validation ? (validation.isCorrect ? 'correct' : 'incorrect') : '';
                     const correctedBadge = result.corrected ? '<span style="background: #fef3c7; padding: 2px 8px; border-radius: 3px; font-size: 12px;">✏️ Corrected</span>' : '';
                     const orderPrefix = viewMode === 'reading' ? (index + 1) + '. ' : '';
+                                            <button 
+                                                onClick={() => {
+                                                    setExcludeMode(originalIndex);
+                                                    setExcludeRegions([]);
+                                                }} 
+                                                className="text-purple-500 hover:text-purple-700 text-sm"
+                                                title="Exclude regions from this detection"
+                                            >
+                                                🔥
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleRegionSelection(originalIndex)} 
+                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
+                                                title="Select for merging (select 2+ then click Merge)"
+                                            >
+                                                ⚡
+                                            </button>
                     detectionHtml += '<div class="detection-item ' + validationClass + '"><div><span class="detection-glyph">' + orderPrefix + result.glyph.name + '</span><span style="color: #6b7280; margin-left: 10px;">' + (result.glyph.transliteration || '') + '</span>' + correctedBadge + '</div><div class="detection-confidence">' + Math.round(result.confidence * 100) + '%</div></div>';
                 });
                 detectionHtml += '</div>';
@@ -2666,7 +2736,7 @@ Original detection removed.
                             )}
                             {recognitionResults.length > 0 && (
                                 <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-                                    💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) Merge (⚡) and exclude buttons will appear.
+                                    💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) Merge (⚡) and Exclude (🔥) buttons will appear.
                                 </div>
                             )}
                         </div>
@@ -2846,6 +2916,23 @@ Original detection removed.
                                                 {detection.glyph.name}
                                                 {detection.corrected && <span className="ml-1">✏️</span>}
                                             </div>
+                                            <button 
+                                                onClick={() => {
+                                                    setExcludeMode(originalIndex);
+                                                    setExcludeRegions([]);
+                                                }} 
+                                                className="text-purple-500 hover:text-purple-700 text-sm"
+                                                title="Exclude regions from this detection"
+                                            >
+                                                🔥
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleRegionSelection(originalIndex)} 
+                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
+                                                title="Select for merging (select 2+ then click Merge)"
+                                            >
+                                                ⚡
+                                            </button>
 
                                             {viewMode === 'reading' && (
                                                 <div className="reading-order-badge">
@@ -3115,6 +3202,23 @@ Original detection removed.
                                 <div className="flex items-center gap-2">
                                     <span className="text-orange-600">✏️ Corrected:</span>
                                     <span className="font-semibold text-orange-700">
+                                            <button 
+                                                onClick={() => {
+                                                    setExcludeMode(originalIndex);
+                                                    setExcludeRegions([]);
+                                                }} 
+                                                className="text-purple-500 hover:text-purple-700 text-sm"
+                                                title="Exclude regions from this detection"
+                                            >
+                                                🔥
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleRegionSelection(originalIndex)} 
+                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
+                                                title="Select for merging (select 2+ then click Merge)"
+                                            >
+                                                ⚡
+                                            </button>
                                         {recognitionResults.filter(r => r.corrected).length}
                                     </span>
                                 </div>
@@ -3155,6 +3259,23 @@ Original detection removed.
                                                             <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-300">
                                                                 ✏️ Corrected
                                                             </span>
+                                            <button 
+                                                onClick={() => {
+                                                    setExcludeMode(originalIndex);
+                                                    setExcludeRegions([]);
+                                                }} 
+                                                className="text-purple-500 hover:text-purple-700 text-sm"
+                                                title="Exclude regions from this detection"
+                                            >
+                                                🔥
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleRegionSelection(originalIndex)} 
+                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
+                                                title="Select for merging (select 2+ then click Merge)"
+                                            >
+                                                ⚡
+                                            </button>
                                                         )}
                                                         {result.isMerged && <span className="text-xs text-gray-500">(merged)</span>}
                                                         {result.isManual && <span className="text-xs text-gray-500">(manual)</span>}
@@ -3186,6 +3307,23 @@ Original detection removed.
                                                 title="Change glyph"
                                             >
                                                 ✏️
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    setExcludeMode(originalIndex);
+                                                    setExcludeRegions([]);
+                                                }} 
+                                                className="text-purple-500 hover:text-purple-700 text-sm"
+                                                title="Exclude regions from this detection"
+                                            >
+                                                🔥
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleRegionSelection(originalIndex)} 
+                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
+                                                title="Select for merging (select 2+ then click Merge)"
+                                            >
+                                                ⚡
                                             </button>
                                             <button 
                                                 onClick={() => deleteDetection(originalIndex)} 
