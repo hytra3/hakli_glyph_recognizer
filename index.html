@@ -180,6 +180,49 @@
                 }
             };
 
+            const extractRegionThumbnailWithExclusions = (inputImage, region, exclusions, originalBounds) => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = region.bounds.width;
+                    canvas.height = region.bounds.height;
+
+                    // Draw the region
+                    ctx.drawImage(
+                        inputImage,
+                        region.bounds.x, region.bounds.y, region.bounds.width, region.bounds.height,
+                        0, 0, region.bounds.width, region.bounds.height
+                    );
+
+                    // Mask out the excluded regions with white rectangles
+                    ctx.fillStyle = 'white';
+                    exclusions.forEach(exRegion => {
+                        // Convert exclusion region coordinates to thumbnail-relative coordinates
+                        const thumbX = exRegion.x - region.bounds.x;
+                        const thumbY = exRegion.y - region.bounds.y;
+                        const thumbWidth = exRegion.width;
+                        const thumbHeight = exRegion.height;
+
+                        // Only draw if the exclusion intersects with the thumbnail region
+                        if (thumbX < region.bounds.width && thumbY < region.bounds.height &&
+                            thumbX + thumbWidth > 0 && thumbY + thumbHeight > 0) {
+                            
+                            const drawX = Math.max(0, thumbX);
+                            const drawY = Math.max(0, thumbY);
+                            const drawWidth = Math.min(region.bounds.width - drawX, thumbX + thumbWidth - drawX);
+                            const drawHeight = Math.min(region.bounds.height - drawY, thumbY + thumbHeight - drawY);
+
+                            ctx.fillRect(drawX, drawY, drawWidth, drawHeight);
+                        }
+                    });
+
+                    return canvas.toDataURL();
+                } catch (error) {
+                    console.error('Thumbnail extraction with exclusions error:', error);
+                    return null;
+                }
+            };
+
             const calculateIoU = (box1, box2) => {
                 const x1 = Math.max(box1.x, box2.x);
                 const y1 = Math.max(box1.y, box2.y);
@@ -1012,7 +1055,7 @@
                             return;
                         }
 
-                        const thumbnail = extractRegionThumbnail(tempImg, { bounds: newBounds });
+                        const thumbnail = extractRegionThumbnailWithExclusions(tempImg, { bounds: newBounds }, excludeRegions, originalBounds);
 
                         const newDetection = {
                             glyph: { id: 'unknown', name: 'Unknown', transliteration: '?' },
