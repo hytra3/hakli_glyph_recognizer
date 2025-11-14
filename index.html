@@ -1047,23 +1047,6 @@
                             `Original detection removed.\n\n` +
                             `💡 Tip: The new detections are marked as "Unknown" - correct them using the ✏️ button.`);
 
-                                            <button 
-                                                onClick={() => {
-                                                    setExcludeMode(originalIndex);
-                                                    setExcludeRegions([]);
-                                                }} 
-                                                className="text-purple-500 hover:text-purple-700 text-sm"
-                                                title="Exclude regions from this detection"
-                                            >
-                                                🔥
-                                            </button>
-                                            <button 
-                                                onClick={() => toggleRegionSelection(originalIndex)} 
-                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
-                                                title="Select for merging (select 2+ then click Merge)"
-                                            >
-                                                ⚡
-                                            </button>
                         // Optional: Auto-scroll to show new detections
                         setTimeout(() => {
                             const detectionCards = document.querySelectorAll('.p-3.bg-white.rounded.border');
@@ -1699,23 +1682,7 @@
                     const validationClass = validation ? (validation.isCorrect ? 'correct' : 'incorrect') : '';
                     const correctedBadge = result.corrected ? '<span style="background: #fef3c7; padding: 2px 8px; border-radius: 3px; font-size: 12px;">✏️ Corrected</span>' : '';
                     const orderPrefix = viewMode === 'reading' ? (index + 1) + '. ' : '';
-                                            <button 
-                                                onClick={() => {
-                                                    setExcludeMode(originalIndex);
-                                                    setExcludeRegions([]);
-                                                }} 
-                                                className="text-purple-500 hover:text-purple-700 text-sm"
-                                                title="Exclude regions from this detection"
-                                            >
-                                                🔥
-                                            </button>
-                                            <button 
-                                                onClick={() => toggleRegionSelection(originalIndex)} 
-                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
-                                                title="Select for merging (select 2+ then click Merge)"
-                                            >
-                                                ⚡
-                                            </button>
+
                     detectionHtml += '<div class="detection-item ' + validationClass + '"><div><span class="detection-glyph">' + orderPrefix + result.glyph.name + '</span><span style="color: #6b7280; margin-left: 10px;">' + (result.glyph.transliteration || '') + '</span>' + correctedBadge + '</div><div class="detection-confidence">' + Math.round(result.confidence * 100) + '%</div></div>';
                 });
                 detectionHtml += '</div>';
@@ -2916,23 +2883,7 @@
                                                 {detection.glyph.name}
                                                 {detection.corrected && <span className="ml-1">✏️</span>}
                                             </div>
-                                            <button 
-                                                onClick={() => {
-                                                    setExcludeMode(originalIndex);
-                                                    setExcludeRegions([]);
-                                                }} 
-                                                className="text-purple-500 hover:text-purple-700 text-sm"
-                                                title="Exclude regions from this detection"
-                                            >
-                                                🔥
-                                            </button>
-                                            <button 
-                                                onClick={() => toggleRegionSelection(originalIndex)} 
-                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
-                                                title="Select for merging (select 2+ then click Merge)"
-                                            >
-                                                ⚡
-                                            </button>
+
 
                                             {viewMode === 'reading' && (
                                                 <div className="reading-order-badge">
@@ -3202,23 +3153,7 @@
                                 <div className="flex items-center gap-2">
                                     <span className="text-orange-600">✏️ Corrected:</span>
                                     <span className="font-semibold text-orange-700">
-                                            <button 
-                                                onClick={() => {
-                                                    setExcludeMode(originalIndex);
-                                                    setExcludeRegions([]);
-                                                }} 
-                                                className="text-purple-500 hover:text-purple-700 text-sm"
-                                                title="Exclude regions from this detection"
-                                            >
-                                                🔥
-                                            </button>
-                                            <button 
-                                                onClick={() => toggleRegionSelection(originalIndex)} 
-                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
-                                                title="Select for merging (select 2+ then click Merge)"
-                                            >
-                                                ⚡
-                                            </button>
+
                                         {recognitionResults.filter(r => r.corrected).length}
                                     </span>
                                 </div>
@@ -3259,23 +3194,7 @@
                                                             <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-300">
                                                                 ✏️ Corrected
                                                             </span>
-                                            <button 
-                                                onClick={() => {
-                                                    setExcludeMode(originalIndex);
-                                                    setExcludeRegions([]);
-                                                }} 
-                                                className="text-purple-500 hover:text-purple-700 text-sm"
-                                                title="Exclude regions from this detection"
-                                            >
-                                                🔥
-                                            </button>
-                                            <button 
-                                                onClick={() => toggleRegionSelection(originalIndex)} 
-                                                className={`text-sm ${selectedRegions.has(originalIndex) ? "text-blue-600" : "text-blue-400 hover:text-blue-600"}`}
-                                                title="Select for merging (select 2+ then click Merge)"
-                                            >
-                                                ⚡
-                                            </button>
+
                                                         )}
                                                         {result.isMerged && <span className="text-xs text-gray-500">(merged)</span>}
                                                         {result.isManual && <span className="text-xs text-gray-500">(manual)</span>}
