@@ -1148,8 +1148,40 @@
                         return;
                     }
 
-                    // Extract new thumbnail from the bounding rectangle
-                    const thumbnail = extractRegionThumbnail(imageRef.current, { bounds: newBounds });
+                    // Extract thumbnail using polygon mask (Option 5)
+                    // This extracts ONLY pixels inside the quadrilateral, excluding unwanted areas
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Set canvas size to bounding box
+                    canvas.width = newBounds.width;
+                    canvas.height = newBounds.height;
+                    
+                    // Fill with white background
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Create clipping path from the quadrilateral corners
+                    ctx.save();
+                    ctx.beginPath();
+                    // Convert corners to canvas coordinates (relative to bounding box)
+                    ctx.moveTo(corners.tl.x - newBounds.x, corners.tl.y - newBounds.y);
+                    ctx.lineTo(corners.tr.x - newBounds.x, corners.tr.y - newBounds.y);
+                    ctx.lineTo(corners.br.x - newBounds.x, corners.br.y - newBounds.y);
+                    ctx.lineTo(corners.bl.x - newBounds.x, corners.bl.y - newBounds.y);
+                    ctx.closePath();
+                    ctx.clip();
+                    
+                    // Draw the image with the clipping mask applied
+                    ctx.drawImage(
+                        imageRef.current,
+                        newBounds.x, newBounds.y, newBounds.width, newBounds.height,
+                        0, 0, newBounds.width, newBounds.height
+                    );
+                    ctx.restore();
+                    
+                    // Convert to data URL
+                    const thumbnail = canvas.toDataURL('image/png');
 
                     // Update the detection with new position and corners
                     setRecognitionResults(prev => {
