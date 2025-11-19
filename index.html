@@ -3264,6 +3264,50 @@
                                                         />
                                                     </>
                                                 )}
+
+                                                {/* Template save menu */}
+                                                {templateTrainingMode && selectedForTemplate === index && (
+                                                    <div
+                                                        className="absolute bg-white rounded-lg shadow-xl border-2 border-purple-400 p-3"
+                                                        style={{ 
+                                                            minWidth: '200px',
+                                                            left: corners.tl.x * scaleX + 'px',
+                                                            top: (corners.br.y * scaleY + 8) + 'px',  // Position below the polygon
+                                                            zIndex: 200
+                                                        }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <div className="font-semibold text-sm mb-2 text-purple-900">
+                                                            Save &quot;{detection.glyph.name}&quot; as:
+                                                        </div>
+                                                        <div className="flex flex-col gap-2">
+                                                            <button
+                                                                onClick={() => saveAsTemplate(index, 'primary')}
+                                                                className="px-3 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+                                                            >
+                                                                🎯 Primary Template
+                                                            </button>
+                                                            <button
+                                                                onClick={() => saveAsTemplate(index, 'variant')}
+                                                                className="px-3 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600"
+                                                            >
+                                                                ⭐ Variant
+                                                            </button>
+                                                            <button
+                                                                onClick={() => saveAsTemplate(index, 'example')}
+                                                                className="px-3 py-2 bg-yellow-500 text-white text-sm rounded hover:bg-yellow-600"
+                                                            >
+                                                                📚 Example
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setSelectedForTemplate(null)}
+                                                                className="px-3 py-2 bg-gray-300 text-gray-700 text-sm rounded hover:bg-gray-400"
+                                                            >
+                                                                ✕ Cancel
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </React.Fragment>
                                         );
                                     }
