@@ -3123,9 +3123,10 @@
                                         });
                                     };
 
-                                    // Render as SVG polygon if corners exist AND have been adjusted (different from rectangle)
-                                    // Check if corners form a non-rectangular shape
-                                    const hasAdjustedCorners = detection.corners && detection.isAdjusted;
+                                    // Render as SVG polygon if:
+                                    // 1. Box has been adjusted (isAdjusted flag), OR
+                                    // 2. Box is currently being adjusted (isAdjusting)
+                                    const hasAdjustedCorners = detection.corners && (detection.isAdjusted || isAdjusting);
                                     
                                     if (hasAdjustedCorners) {
                                         // Use SVG to render the quadrilateral
