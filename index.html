@@ -2442,6 +2442,64 @@
                 return () => window.removeEventListener('keydown', handleKeyDown);
             }, [historyIndex, stateHistory, correctionMode, trimMode, excludeMode, adjustMode]);
 
+            // Global mouse event handler for corner dragging
+            useEffect(() => {
+                if (!draggingCorner || adjustMode === null) return;
+
+                const handleMouseMove = (e) => {
+                    if (!imageRef.current) return;
+                    e.preventDefault();
+                    
+                    const imageRect = imageRef.current.getBoundingClientRect();
+                    const scaleX = imageRect.width / imageRef.current.naturalWidth;
+                    const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                    
+                    const newX = (e.clientX - imageRect.left) / scaleX;
+                    const newY = (e.clientY - imageRect.top) / scaleY;
+
+                    // Update the corner position
+                    setRecognitionResults(prev => {
+                        const updated = [...prev];
+                        const detection = updated[adjustMode];
+                        if (!detection) return prev;
+                        
+                        const newCorners = { ...detection.corners };
+                        newCorners[draggingCorner] = { x: newX, y: newY };
+                        
+                        // Calculate new bounding box from corners
+                        const minX = Math.min(newCorners.tl.x, newCorners.tr.x, newCorners.bl.x, newCorners.br.x);
+                        const maxX = Math.max(newCorners.tl.x, newCorners.tr.x, newCorners.bl.x, newCorners.br.x);
+                        const minY = Math.min(newCorners.tl.y, newCorners.tr.y, newCorners.bl.y, newCorners.br.y);
+                        const maxY = Math.max(newCorners.tl.y, newCorners.tr.y, newCorners.bl.y, newCorners.br.y);
+                        
+                        updated[adjustMode] = {
+                            ...detection,
+                            corners: newCorners,
+                            position: {
+                                x: Math.round(minX),
+                                y: Math.round(minY),
+                                width: Math.round(maxX - minX),
+                                height: Math.round(maxY - minY)
+                            }
+                        };
+                        return updated;
+                    });
+                };
+
+                const handleMouseUp = () => {
+                    setDraggingCorner(null);
+                    setDragStartPos(null);
+                };
+
+                window.addEventListener('mousemove', handleMouseMove);
+                window.addEventListener('mouseup', handleMouseUp);
+                
+                return () => {
+                    window.removeEventListener('mousemove', handleMouseMove);
+                    window.removeEventListener('mouseup', handleMouseUp);
+                };
+            }, [draggingCorner, adjustMode]);
+
             useEffect(() => {
                 if (chartLoadStatus === 'not-loaded') {
                     setChartLoadStatus('loading');
@@ -2568,7 +2626,7 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
-                        <p className="text-gray-600">beta v251118 ©marty heaton</p>
+                        <p className="text-gray-600">beta v251114 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -3072,45 +3130,13 @@
                                         if (adjustMode !== index) return;
                                         setDraggingCorner(corner);
                                         const rect = imageRef.current.getBoundingClientRect();
+                                        const scaleX = rect.width / imageRef.current.naturalWidth;
+                                        const scaleY = rect.height / imageRef.current.naturalHeight;
                                         setDragStartPos({
                                             x: (e.clientX - rect.left) / scaleX,
                                             y: (e.clientY - rect.top) / scaleY
                                         });
                                     };
-
-                                    const handleMouseMove = (e) => {
-                                        if (!draggingCorner || adjustMode !== index) return;
-                                        e.preventDefault();
-                                        const rect = imageRef.current.getBoundingClientRect();
-                                        const newX = (e.clientX - rect.left) / scaleX;
-                                        const newY = (e.clientY - rect.top) / scaleY;
-
-                                        // Update the corner position
-                                        setRecognitionResults(prev => {
-                                            const updated = [...prev];
-                                            const newCorners = { ...updated[index].corners } || { ...corners };
-                                            newCorners[draggingCorner] = { x: newX, y: newY };
-                                            updated[index] = { ...updated[index], corners: newCorners };
-                                            return updated;
-                                        });
-                                    };
-
-                                    const handleMouseUp = () => {
-                                        setDraggingCorner(null);
-                                        setDragStartPos(null);
-                                    };
-
-                                    // Add global mouse event listeners when dragging
-                                    React.useEffect(() => {
-                                        if (draggingCorner && adjustMode === index) {
-                                            window.addEventListener('mousemove', handleMouseMove);
-                                            window.addEventListener('mouseup', handleMouseUp);
-                                            return () => {
-                                                window.removeEventListener('mousemove', handleMouseMove);
-                                                window.removeEventListener('mouseup', handleMouseUp);
-                                            };
-                                        }
-                                    }, [draggingCorner, adjustMode, index]);
 
                                     return (
                                         <div
