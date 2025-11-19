@@ -2646,11 +2646,71 @@
                 }
             }, [chartLoadStatus]);
 
+            // Reload images for a specific glyph when its structure changes
+            const reloadGlyphImages = (glyphId) => {
+                const glyph = equivalenceChart?.glyphs.find(g => g.id === glyphId);
+                if (!glyph || !glyph.images) return;
+
+                console.log(`🔄 Reloading images for glyph ${glyphId}`);
+
+                setLoadedGlyphImages(prev => {
+                    const newCache = { ...prev };
+                    
+                    // Clear old entries for this glyph
+                    delete newCache[glyphId];
+                    Object.keys(newCache).forEach(key => {
+                        if (key.startsWith(`${glyphId}_variant_`) || key.startsWith(`${glyphId}_example_`)) {
+                            delete newCache[key];
+                        }
+                    });
+
+                    // Load primary
+                    if (glyph.images.primary) {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = () => {
+                            setLoadedGlyphImages(current => ({ ...current, [glyphId]: img }));
+                        };
+                        img.src = glyph.images.primary;
+                    }
+
+                    // Load variants
+                    if (glyph.images.variants) {
+                        glyph.images.variants.forEach((url, idx) => {
+                            const img = new Image();
+                            img.crossOrigin = 'anonymous';
+                            const key = `${glyphId}_variant_${idx}`;
+                            img.onload = () => {
+                                setLoadedGlyphImages(current => ({ ...current, [key]: img }));
+                            };
+                            img.src = url;
+                        });
+                    }
+
+                    // Load examples
+                    if (glyph.images.examples) {
+                        glyph.images.examples.forEach((url, idx) => {
+                            const img = new Image();
+                            img.crossOrigin = 'anonymous';
+                            const key = `${glyphId}_example_${idx}`;
+                            img.onload = () => {
+                                setLoadedGlyphImages(current => ({ ...current, [key]: img }));
+                            };
+                            img.src = url;
+                        });
+                    }
+
+                    return newCache;
+                });
+            };
+
             // ============================================
             // GLYPH CHART EDITING FUNCTIONS
             // ============================================
 
             const deleteGlyph = (glyphId, imageType, index = null) => {
+                console.log(`🗑️ Attempting to delete: ${imageType} ${index !== null ? index : ''} for glyph ${glyphId}`);
+                
                 // Create a deep copy of the current chart for undo
                 const chartSnapshot = JSON.parse(JSON.stringify(equivalenceChart));
                 
@@ -2670,32 +2730,35 @@
                     const newChart = JSON.parse(JSON.stringify(prevChart)); // Deep copy
                     const glyph = newChart.glyphs.find(g => g.id === glyphId);
                     
-                    if (!glyph || !glyph.images) return prevChart;
+                    if (!glyph || !glyph.images) {
+                        console.log('❌ Glyph or images not found');
+                        return prevChart;
+                    }
                     
                     if (imageType === 'primary') {
                         // Delete the primary image
                         delete glyph.images.primary;
-                        console.log(`🗑️ Hard deleted primary: ${glyphId}`);
+                        console.log(`✅ Hard deleted primary: ${glyphId}`);
                     } else if (imageType === 'variant' && glyph.images.variants) {
                         // Delete specific variant
+                        console.log(`Variants before: ${glyph.images.variants.length}`);
                         glyph.images.variants.splice(index, 1);
-                        console.log(`🗑️ Hard deleted variant ${index}: ${glyphId}`);
+                        console.log(`Variants after: ${glyph.images.variants.length}`);
+                        console.log(`✅ Hard deleted variant ${index}: ${glyphId}`);
                     } else if (imageType === 'example' && glyph.images.examples) {
                         // Delete specific example
+                        console.log(`Examples before: ${glyph.images.examples.length}`);
                         glyph.images.examples.splice(index, 1);
-                        console.log(`🗑️ Hard deleted example ${index}: ${glyphId}`);
+                        console.log(`Examples after: ${glyph.images.examples.length}`);
+                        console.log(`✅ Hard deleted example ${index}: ${glyphId}`);
                     }
                     
                     return newChart;
                 });
                 
-                // Also remove from loaded images cache
-                const key = imageType === 'primary' ? glyphId : `${glyphId}_${imageType}_${index}`;
-                setLoadedGlyphImages(prev => {
-                    const newCache = { ...prev };
-                    delete newCache[key];
-                    return newCache;
-                });
+                // Reload images for this glyph with correct indices
+                // Use setTimeout to ensure the chart state has updated first
+                setTimeout(() => reloadGlyphImages(glyphId), 100);
             };
 
             const undoDelete = () => {
@@ -2711,7 +2774,8 @@
                 
                 console.log(`↩️ Restored deletion of ${lastDeleted.imageType} for glyph ${lastDeleted.glyphId}`);
                 
-                // Note: We don't restore the image cache - it will reload naturally when the chart re-renders
+                // Reload images for the affected glyph
+                setTimeout(() => reloadGlyphImages(lastDeleted.glyphId), 100);
             };
 
             const clearAllDeletes = () => {
