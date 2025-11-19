@@ -118,10 +118,6 @@
             const [confidenceThreshold, setConfidenceThreshold] = useState(0);
             const [useConfidenceFilter, setUseConfidenceFilter] = useState(false);
             const [showConfidenceFilter, setShowConfidenceFilter] = useState(false);
-            const [chartEditMode, setChartEditMode] = useState(false);
-            const [deleteHistory, setDeleteHistory] = useState([]);
-            const [chartKey, setChartKey] = useState(0);
-            const [isRefreshing, setIsRefreshing] = useState(false);
             const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
             const [customGistUrl, setCustomGistUrl] = useState('');
             const [trimMode, setTrimMode] = useState(null); // Index of detection being trimmed, or null
@@ -510,35 +506,56 @@
                     // Method 3: Template Matching (SECONDARY - only best scale)
                     let templateScore = 0;
                     let bestScale = 1.0;
+                    let bestRotation = 0;
                     try {
                         // Try fewer scales, focus on likely matches :: added more scales because not matching
-                        const scales = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 1.1, 1.2];  
+                        const scales = [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 1.1, 1.2];
+                        // Try rotations for in-situ inscriptions (±10 degrees in 5-degree increments)
+                        const rotations = [-10, -5, 0, 5, 10];
 
-                        for (const scale of scales) {
-                            const scaledTempl = new cv.Mat();
-                            const newSize = new cv.Size(
-                                Math.floor(processedTemplate.cols * scale),
-                                Math.floor(processedTemplate.rows * scale)
-                            );
-
-                            if (newSize.width < 10 || newSize.height < 10 ||
-                                newSize.width > processedRegion.cols || newSize.height > processedRegion.rows) {
-                                continue;
+                        for (const rotation of rotations) {
+                            // Rotate template if needed
+                            let rotatedTemplate = processedTemplate;
+                            if (rotation !== 0) {
+                                rotatedTemplate = new cv.Mat();
+                                const center = new cv.Point(processedTemplate.cols / 2, processedTemplate.rows / 2);
+                                const rotMatrix = cv.getRotationMatrix2D(center, rotation, 1.0);
+                                cv.warpAffine(processedTemplate, rotatedTemplate, rotMatrix, processedTemplate.size());
+                                rotMatrix.delete();
                             }
 
-                            cv.resize(processedTemplate, scaledTempl, newSize, 0, 0, cv.INTER_AREA);
+                            for (const scale of scales) {
+                                const scaledTempl = new cv.Mat();
+                                const newSize = new cv.Size(
+                                    Math.floor(rotatedTemplate.cols * scale),
+                                    Math.floor(rotatedTemplate.rows * scale)
+                                );
 
-                            const dst = new cv.Mat();
-                            cv.matchTemplate(processedRegion, scaledTempl, dst, cv.TM_CCOEFF_NORMED);
-                            const result = cv.minMaxLoc(dst);
+                                if (newSize.width < 10 || newSize.height < 10 ||
+                                    newSize.width > processedRegion.cols || newSize.height > processedRegion.rows) {
+                                    continue;
+                                }
 
-                            if (result.maxVal > templateScore) {
-                                templateScore = result.maxVal;
-                                bestScale = scale;
+                                cv.resize(rotatedTemplate, scaledTempl, newSize, 0, 0, cv.INTER_AREA);
+
+                                const dst = new cv.Mat();
+                                cv.matchTemplate(processedRegion, scaledTempl, dst, cv.TM_CCOEFF_NORMED);
+                                const result = cv.minMaxLoc(dst);
+
+                                if (result.maxVal > templateScore) {
+                                    templateScore = result.maxVal;
+                                    bestScale = scale;
+                                    bestRotation = rotation;
+                                }
+
+                                dst.delete();
+                                scaledTempl.delete();
                             }
 
-                            dst.delete();
-                            scaledTempl.delete();
+                            // Clean up rotated template if we created one
+                            if (rotation !== 0) {
+                                rotatedTemplate.delete();
+                            }
                         }
                     } catch (e) {
                         templateScore = 0;
@@ -557,7 +574,7 @@
 
                     // Only log low confidence matches (might be wrong) and high confidence (definitely right)
                     if (combinedScore < 0.5 || combinedScore > 0.8) {
-                        console.log(`Glyph ${glyphId}: Combined=${(combinedScore * 100).toFixed(1)}% [Shape=${(shapeScore * 100).toFixed(1)}% Aspect=${(aspectScore * 100).toFixed(1)}% Template=${(templateScore * 100).toFixed(1)}%]`);
+                        console.log(`Glyph ${glyphId}: Combined=${(combinedScore * 100).toFixed(1)}% [Shape=${(shapeScore * 100).toFixed(1)}% Aspect=${(aspectScore * 100).toFixed(1)}% Template=${(templateScore * 100).toFixed(1)}%] Scale=${bestScale.toFixed(2)} Rotation=${bestRotation}°`);
                     }
 
                     // Lower threshold since we're focusing on shape (raised to .4 from .3 : .3 was lower shape)
@@ -566,11 +583,13 @@
                             confidence: combinedScore,
                             position: region.bounds,
                             scale: bestScale,
+                            rotation: bestRotation,
                             debug: {
                                 shapeScore: shapeScore,
                                 aspectScore: aspectScore,
                                 templateScore: templateScore,
-                                shapeMethod: shapeMethod
+                                shapeMethod: shapeMethod,
+                                rotation: bestRotation
                             }
                         });
                     }
@@ -2543,233 +2562,97 @@
                             for (const glyph of chartData.glyphs) {
                                 if (glyph.images && glyph.images.primary) totalImagesToLoad++;
                                 if (glyph.images && glyph.images.variants) totalImagesToLoad += glyph.images.variants.length;
-                                if (glyph.images && glyph.images.examples) totalImagesToLoad += glyph.images.examples.length;
+                                // Only count first 3 examples for initial load
+                                if (glyph.images && glyph.images.examples) {
+                                    totalImagesToLoad += Math.min(3, glyph.images.examples.length);
+                                }
                             }
 
                             setImageLoadingProgress({ loaded: 0, total: totalImagesToLoad });
                             console.log(`📦 Loading ${totalImagesToLoad} images for ${chartData.glyphs.length} glyphs...`);
 
                             let loadedCount = 0;
+                            const updateInterval = Math.max(1, Math.floor(totalImagesToLoad / 20)); // Update progress bar ~20 times
+
+                            const createImageLoader = (url, key) => {
+                                return new Promise((resolve) => {
+                                    const img = new Image();
+                                    img.crossOrigin = 'anonymous';
+                                    img.onload = () => {
+                                        imageCache[key] = img;
+                                        loadedCount++;
+                                        // Only update progress every N images to reduce re-renders
+                                        if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad) {
+                                            setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
+                                        }
+                                        resolve();
+                                    };
+                                    img.onerror = () => {
+                                        loadedCount++;
+                                        if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad) {
+                                            setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
+                                        }
+                                        resolve();
+                                    };
+                                    img.src = url;
+                                });
+                            };
 
                             for (const glyph of chartData.glyphs) {
                                 // Load primary image
                                 if (glyph.images && glyph.images.primary) {
-                                    const fullUrl = glyph.images.primary;
-                                    if (fullUrl) {
-                                        const promise = new Promise((resolve) => {
-                                            const img = new Image();
-                                            img.crossOrigin = 'anonymous';
-                                            img.onload = () => {
-                                                imageCache[glyph.id] = img;
-                                                loadedCount++;
-                                                setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
-                                                console.log(`✓ Loaded ${loadedCount}/${totalImagesToLoad}: ${glyph.id}`);
-                                                resolve();
-                                            };
-                                            img.onerror = () => {
-                                                console.log(`✗ Failed to load: ${glyph.id}`);
-                                                loadedCount++;
-                                                setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
-                                                resolve();
-                                            };
-                                            img.src = fullUrl;
-                                        });
-                                        loadPromises.push(promise);
-                                    }
+                                    loadPromises.push(createImageLoader(glyph.images.primary, glyph.id));
                                 }
 
                                 // Load variant images
                                 if (glyph.images && glyph.images.variants) {
                                     for (let i = 0; i < glyph.images.variants.length; i++) {
-                                        const fullUrl = glyph.images.variants[i];
-                                        if (fullUrl) {
-                                            const variantKey = `${glyph.id}_variant_${i}`;
-                                            const promise = new Promise((resolve) => {
-                                                const img = new Image();
-                                                img.crossOrigin = 'anonymous';
-                                                img.onload = () => {
-                                                    imageCache[variantKey] = img;
-                                                    loadedCount++;
-                                                    setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
-                                                    console.log(`✓ Loaded ${loadedCount}/${totalImagesToLoad}: ${variantKey}`);
-                                                    resolve();
-                                                };
-                                                img.onerror = () => {
-                                                    console.log(`✗ Failed to load: ${variantKey}`);
-                                                    loadedCount++;
-                                                    setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
-                                                    resolve();
-                                                };
-                                                img.src = fullUrl;
-                                            });
-                                            loadPromises.push(promise);
-                                        }
+                                        const variantKey = `${glyph.id}_variant_${i}`;
+                                        loadPromises.push(createImageLoader(glyph.images.variants[i], variantKey));
                                     }
                                 }
 
-                                // Load example images
+                                // Load only first 3 examples initially (lazy load rest)
                                 if (glyph.images && glyph.images.examples) {
-                                    for (let i = 0; i < glyph.images.examples.length; i++) {
-                                        const fullUrl = glyph.images.examples[i];
-                                        if (fullUrl) {
-                                            const exampleKey = `${glyph.id}_example_${i}`;
-                                            const promise = new Promise((resolve) => {
-                                                const img = new Image();
-                                                img.crossOrigin = 'anonymous';
-                                                img.onload = () => {
-                                                    imageCache[exampleKey] = img;
-                                                    loadedCount++;
-                                                    setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
-                                                    console.log(`✓ Loaded ${loadedCount}/${totalImagesToLoad}: ${exampleKey}`);
-                                                    resolve();
-                                                };
-                                                img.onerror = () => {
-                                                    console.log(`✗ Failed to load: ${exampleKey}`);
-                                                    loadedCount++;
-                                                    setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
-                                                    resolve();
-                                                };
-                                                img.src = fullUrl;
-                                            });
-                                            loadPromises.push(promise);
-                                        }
+                                    const initialExamples = Math.min(3, glyph.images.examples.length);
+                                    for (let i = 0; i < initialExamples; i++) {
+                                        const exampleKey = `${glyph.id}_example_${i}`;
+                                        loadPromises.push(createImageLoader(glyph.images.examples[i], exampleKey));
                                     }
                                 }
                             }
 
                             Promise.all(loadPromises).then(() => {
-                                console.log(`✅ Loaded ${Object.keys(imageCache).length} total images for ${chartData.glyphs.length} glyphs`);
+                                console.log(`✅ Loaded ${Object.keys(imageCache).length} images for ${chartData.glyphs.length} glyphs`);
                                 setLoadedGlyphImages(imageCache);
                                 setChartLoadStatus('loaded');
                                 setImageLoadingProgress({ loaded: 0, total: 0 }); // Reset
+                                
+                                // Lazy load remaining examples in background
+                                const lazyLoadPromises = [];
+                                for (const glyph of chartData.glyphs) {
+                                    if (glyph.images && glyph.images.examples && glyph.images.examples.length > 3) {
+                                        for (let i = 3; i < glyph.images.examples.length; i++) {
+                                            const exampleKey = `${glyph.id}_example_${i}`;
+                                            const lazyPromise = createImageLoader(glyph.images.examples[i], exampleKey);
+                                            lazyLoadPromises.push(lazyPromise);
+                                        }
+                                    }
+                                }
+                                
+                                // Load remaining examples in background
+                                if (lazyLoadPromises.length > 0) {
+                                    console.log(`🔄 Loading ${lazyLoadPromises.length} additional examples in background...`);
+                                    Promise.all(lazyLoadPromises).then(() => {
+                                        setLoadedGlyphImages(prev => ({...prev, ...imageCache}));
+                                        console.log(`✅ All examples loaded`);
+                                    });
+                                }
                             });
                         })
                         .catch(() => setChartLoadStatus('error'));
                 }
             }, [chartLoadStatus]);
-
-            // ============================================
-            // GLYPH CHART EDITING FUNCTIONS
-            // ============================================
-
-            const deleteGlyph = (glyphId, imageType, index = null) => {
-                console.log(`🗑️ Attempting to delete: ${imageType} ${index !== null ? index : ''} for glyph ${glyphId}`);
-                
-                // Create a deep copy of the current chart for undo
-                const chartSnapshot = JSON.parse(JSON.stringify(equivalenceChart));
-                
-                // Save to delete history for undo
-                const deletedItem = {
-                    glyphId,
-                    imageType,
-                    index,
-                    timestamp: new Date().toISOString(),
-                    chartSnapshot // Store the state before this deletion
-                };
-                
-                setDeleteHistory(prev => [...prev, deletedItem]);
-                
-                // Perform the actual deletion on the chart
-                setEquivalenceChart(prevChart => {
-                    const newChart = JSON.parse(JSON.stringify(prevChart)); // Deep copy
-                    const glyph = newChart.glyphs.find(g => g.id === glyphId);
-                    
-                    if (!glyph || !glyph.images) {
-                        console.log('❌ Glyph or images not found');
-                        return prevChart;
-                    }
-                    
-                    if (imageType === 'primary') {
-                        // Delete the primary image
-                        delete glyph.images.primary;
-                        console.log(`✅ Hard deleted primary: ${glyphId}`);
-                    } else if (imageType === 'variant' && glyph.images.variants) {
-                        // Delete specific variant
-                        console.log(`Variants before: ${glyph.images.variants.length}`);
-                        glyph.images.variants.splice(index, 1);
-                        console.log(`Variants after: ${glyph.images.variants.length}`);
-                        console.log(`✅ Hard deleted variant ${index}: ${glyphId}`);
-                    } else if (imageType === 'example' && glyph.images.examples) {
-                        // Delete specific example
-                        console.log(`Examples before: ${glyph.images.examples.length}`);
-                        glyph.images.examples.splice(index, 1);
-                        console.log(`Examples after: ${glyph.images.examples.length}`);
-                        console.log(`✅ Hard deleted example ${index}: ${glyphId}`);
-                    }
-                    
-                    return newChart;
-                });
-                
-                // Set refreshing state and force re-render by changing the key
-                setIsRefreshing(true);
-                setChartKey(prev => prev + 1);
-                
-                // Clear refreshing state after images have time to load
-                setTimeout(() => {
-                    setIsRefreshing(false);
-                }, 1000);
-            };
-
-            const undoDelete = () => {
-                if (deleteHistory.length === 0) return;
-                
-                const lastDeleted = deleteHistory[deleteHistory.length - 1];
-                
-                // Restore the chart to the snapshot before this deletion
-                setEquivalenceChart(lastDeleted.chartSnapshot);
-                
-                // Remove from history
-                setDeleteHistory(prev => prev.slice(0, -1));
-                
-                console.log(`↩️ Restored deletion of ${lastDeleted.imageType} for glyph ${lastDeleted.glyphId}`);
-                
-                // Set refreshing state and force re-render by changing the key
-                setIsRefreshing(true);
-                setChartKey(prev => prev + 1);
-                
-                // Clear refreshing state after images have time to load
-                setTimeout(() => {
-                    setIsRefreshing(false);
-                }, 1000);
-            };
-
-            const clearAllDeletes = () => {
-                if (deleteHistory.length === 0) return;
-                
-                if (confirm('Reset all deletions and restore the original chart? This will undo all your edits.')) {
-                    // Restore to the very first snapshot (before any deletions)
-                    if (deleteHistory.length > 0) {
-                        setEquivalenceChart(deleteHistory[0].chartSnapshot);
-                    }
-                    setDeleteHistory([]);
-                    console.log('🔄 Reset all deletions');
-                }
-            };
-
-            const exportCleanedDatabase = () => {
-                if (!equivalenceChart) {
-                    alert('No chart data to export');
-                    return;
-                }
-                
-                // Export the current (edited) chart
-                const exportData = JSON.parse(JSON.stringify(equivalenceChart));
-                
-                // Count deletions
-                const deletionCount = deleteHistory.length;
-                
-                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Hakli_glyphs_cleaned_${new Date().toISOString().slice(0, 10)}.JSON`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                alert(`✅ Exported cleaned database!\n\n${deletionCount} deletion(s) applied.\n\nReplace your original Hakli_glyphs.JSON with this file to use the cleaned database.`);
-            };
 
             return (
                 <div className="max-w-6xl mx-auto p-6 bg-white">
@@ -2784,12 +2667,24 @@
                                 <h3 className="font-semibold text-gray-900">Equivalence Chart Status</h3>
                                 <div className="flex items-center gap-2 mt-1">
                                     {chartLoadStatus === 'loading' && (
-                                        <span className="text-blue-600">
-                                            Loading {equivalenceChart?.glyphs?.length || '...'} glyphs...
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-blue-600">
+                                                    Loading {equivalenceChart?.glyphs?.length || '...'} glyphs...
+                                                    {imageLoadingProgress.total > 0 && (
+                                                        <span className="ml-2">({imageLoadingProgress.loaded}/{imageLoadingProgress.total} images)</span>
+                                                    )}
+                                                </span>
+                                            </div>
                                             {imageLoadingProgress.total > 0 && (
-                                                <span className="ml-2">({imageLoadingProgress.loaded}/{imageLoadingProgress.total} images)</span>
+                                                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                                    <div 
+                                                        className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                                                        style={{width: `${(imageLoadingProgress.loaded / imageLoadingProgress.total * 100).toFixed(1)}%`}}
+                                                    ></div>
+                                                </div>
                                             )}
-                                        </span>
+                                        </div>
                                     )}
                                     {chartLoadStatus === 'loaded' && (
                                         <span className="text-green-600">
@@ -4203,80 +4098,21 @@
                     )}
                     
                     {showChartViewer && equivalenceChart && (
-                        <div key={chartKey} className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowChartViewer(false)}>
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowChartViewer(false)}>
                             <div className="bg-white rounded-lg max-w-7xl w-full max-h-[90vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
                                 {/* Sticky Header - Outside scrollable area */}
                                 <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 flex-shrink-0">
                                     <h3 className="text-2xl font-bold text-gray-900">📊 Glyph Equivalence Chart</h3>
-                                    <div className="flex items-center gap-3">
-                                        <button
-                                            onClick={() => setChartEditMode(!chartEditMode)}
-                                            className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                                                chartEditMode 
-                                                    ? 'bg-red-500 text-white hover:bg-red-600' 
-                                                    : 'bg-blue-500 text-white hover:bg-blue-600'
-                                            }`}
-                                        >
-                                            {chartEditMode ? '✓ Done Editing' : '✏️ Edit Mode'}
-                                        </button>
-                                        <button
-                                            onClick={() => setShowChartViewer(false)}
-                                            className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
-                                        >
-                                            &times;
-                                        </button>
-                                    </div>
+                                    <button
+                                        onClick={() => setShowChartViewer(false)}
+                                        className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
+                                    >
+                                        &times;
+                                    </button>
                                 </div>
 
                                 {/* Scrollable Content */}
-                                <div className="overflow-y-auto p-6 pt-4 flex-1 relative">
-
-                                {isRefreshing && (
-                                    <div className="absolute inset-0 bg-white bg-opacity-75 z-50 flex items-center justify-center">
-                                        <div className="text-center">
-                                            <div className="text-2xl mb-2">🔄</div>
-                                            <div className="text-sm font-semibold text-gray-700">Refreshing...</div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {chartEditMode && (
-                                    <div className="mb-4 p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div>
-                                                <h4 className="font-semibold text-gray-900 mb-1">🛠️ Edit Mode Active</h4>
-                                                <p className="text-sm text-gray-600">
-                                                    Click the ✕ button on any glyph to permanently delete it from the database.
-                                                </p>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                {deleteHistory.length > 0 && (
-                                                    <>
-                                                        <button
-                                                            onClick={undoDelete}
-                                                            className="px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-semibold"
-                                                            title="Undo last deletion"
-                                                        >
-                                                            ↩️ Undo
-                                                        </button>
-                                                        <button
-                                                            onClick={clearAllDeletes}
-                                                            className="px-3 py-1.5 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm font-semibold"
-                                                            title="Restore all deleted glyphs"
-                                                        >
-                                                            🔄 Reset All
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                        {deleteHistory.length > 0 && (
-                                            <div className="text-sm text-gray-700">
-                                                <strong>{deleteHistory.length}</strong> deletion(s) made
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                <div className="overflow-y-auto p-6 pt-4 flex-1">
 
                                 <div className="mb-4 p-3 bg-blue-50 rounded-lg">
                                     <div className="text-sm text-gray-700">
@@ -4332,15 +4168,6 @@
                                                                             alt={`Primary: ${glyph.name}`}
                                                                             className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
                                                                         />
-                                                                        {chartEditMode && !isRefreshing && (
-                                                                            <button
-                                                                                onClick={() => deleteGlyph(glyph.id, 'primary')}
-                                                                                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 flex items-center justify-center text-sm font-bold"
-                                                                                title="Delete this glyph"
-                                                                            >
-                                                                                ✕
-                                                                            </button>
-                                                                        )}
                                                                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
                                                                     </div>
                                                                 ) : (
@@ -4374,15 +4201,6 @@
                                                                                     alt={`Variant ${idx + 1}: ${glyph.name}`}
                                                                                     className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
                                                                                 />
-                                                                                {chartEditMode && !isRefreshing && (
-                                                                                    <button
-                                                                                        onClick={() => deleteGlyph(glyph.id, 'variant', idx)}
-                                                                                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 flex items-center justify-center text-sm font-bold"
-                                                                                        title="Delete this variant"
-                                                                                    >
-                                                                                        ✕
-                                                                                    </button>
-                                                                                )}
                                                                                 <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
                                                                             </div>
                                                                         ) : (
@@ -4418,15 +4236,6 @@
                                                                                     alt={`Example ${idx + 1}: ${glyph.name}`}
                                                                                     className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
                                                                                 />
-                                                                                {chartEditMode && !isRefreshing && (
-                                                                                    <button
-                                                                                        onClick={() => deleteGlyph(glyph.id, 'example', idx)}
-                                                                                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 flex items-center justify-center text-sm font-bold"
-                                                                                        title="Delete this example"
-                                                                                    >
-                                                                                        ✕
-                                                                                    </button>
-                                                                                )}
                                                                                 <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
                                                                             </div>
                                                                         ) : (
@@ -4449,22 +4258,12 @@
 
                                 {/* Sticky Footer - Outside scrollable area */}
                                 <div className="p-6 pt-4 border-t border-gray-200 flex-shrink-0">
-                                    <div className="flex gap-3">
-                                        {chartEditMode && deleteHistory.length > 0 && (
-                                            <button
-                                                onClick={exportCleanedDatabase}
-                                                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold flex items-center gap-2"
-                                            >
-                                                💾 Download Cleaned Database ({deleteHistory.length} deletion{deleteHistory.length !== 1 ? 's' : ''})
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={() => setShowChartViewer(false)}
-                                            className="flex-1 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
-                                        >
-                                            Close Chart Viewer
-                                        </button>
-                                    </div>
+                                    <button
+                                        onClick={() => setShowChartViewer(false)}
+                                        className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
+                                    >
+                                        Close Chart Viewer
+                                    </button>
                                 </div>
                             </div>
                         </div>
