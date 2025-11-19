@@ -121,6 +121,7 @@
             const [chartEditMode, setChartEditMode] = useState(false);
             const [deleteHistory, setDeleteHistory] = useState([]);
             const [chartKey, setChartKey] = useState(0);
+            const [isRefreshing, setIsRefreshing] = useState(false);
             const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
             const [customGistUrl, setCustomGistUrl] = useState('');
             const [trimMode, setTrimMode] = useState(null); // Index of detection being trimmed, or null
@@ -2699,8 +2700,14 @@
                     return newChart;
                 });
                 
-                // Force re-render by changing the key
+                // Set refreshing state and force re-render by changing the key
+                setIsRefreshing(true);
                 setChartKey(prev => prev + 1);
+                
+                // Clear refreshing state after images have time to load
+                setTimeout(() => {
+                    setIsRefreshing(false);
+                }, 1000);
             };
 
             const undoDelete = () => {
@@ -2716,8 +2723,14 @@
                 
                 console.log(`↩️ Restored deletion of ${lastDeleted.imageType} for glyph ${lastDeleted.glyphId}`);
                 
-                // Force re-render by changing the key
+                // Set refreshing state and force re-render by changing the key
+                setIsRefreshing(true);
                 setChartKey(prev => prev + 1);
+                
+                // Clear refreshing state after images have time to load
+                setTimeout(() => {
+                    setIsRefreshing(false);
+                }, 1000);
             };
 
             const clearAllDeletes = () => {
@@ -4216,7 +4229,16 @@
                                 </div>
 
                                 {/* Scrollable Content */}
-                                <div className="overflow-y-auto p-6 pt-4 flex-1">
+                                <div className="overflow-y-auto p-6 pt-4 flex-1 relative">
+
+                                {isRefreshing && (
+                                    <div className="absolute inset-0 bg-white bg-opacity-75 z-50 flex items-center justify-center">
+                                        <div className="text-center">
+                                            <div className="text-2xl mb-2">🔄</div>
+                                            <div className="text-sm font-semibold text-gray-700">Refreshing...</div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {chartEditMode && (
                                     <div className="mb-4 p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
@@ -4310,7 +4332,7 @@
                                                                             alt={`Primary: ${glyph.name}`}
                                                                             className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
                                                                         />
-                                                                        {chartEditMode && (
+                                                                        {chartEditMode && !isRefreshing && (
                                                                             <button
                                                                                 onClick={() => deleteGlyph(glyph.id, 'primary')}
                                                                                 className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 flex items-center justify-center text-sm font-bold"
@@ -4352,7 +4374,7 @@
                                                                                     alt={`Variant ${idx + 1}: ${glyph.name}`}
                                                                                     className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
                                                                                 />
-                                                                                {chartEditMode && (
+                                                                                {chartEditMode && !isRefreshing && (
                                                                                     <button
                                                                                         onClick={() => deleteGlyph(glyph.id, 'variant', idx)}
                                                                                         className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 flex items-center justify-center text-sm font-bold"
@@ -4396,7 +4418,7 @@
                                                                                     alt={`Example ${idx + 1}: ${glyph.name}`}
                                                                                     className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
                                                                                 />
-                                                                                {chartEditMode && (
+                                                                                {chartEditMode && !isRefreshing && (
                                                                                     <button
                                                                                         onClick={() => deleteGlyph(glyph.id, 'example', idx)}
                                                                                         className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 flex items-center justify-center text-sm font-bold"
