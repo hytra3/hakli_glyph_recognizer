@@ -2646,150 +2646,6 @@
                 }
             }, [chartLoadStatus]);
 
-            // Watch for changes to equivalenceChart and reload images when counts don't match
-            useEffect(() => {
-                if (!equivalenceChart || chartLoadStatus !== 'loaded') return;
-                
-                // Track which glyphs need reloading
-                const glyphsToReload = [];
-                
-                equivalenceChart.glyphs.forEach(glyph => {
-                    if (!glyph.images) return;
-                    
-                    // Count what should be loaded vs what is loaded
-                    const expectedVariants = glyph.images.variants?.length || 0;
-                    const expectedExamples = glyph.images.examples?.length || 0;
-                    
-                    const loadedVariantKeys = Object.keys(loadedGlyphImages).filter(key => 
-                        key.startsWith(`${glyph.id}_variant_`)
-                    );
-                    const loadedExampleKeys = Object.keys(loadedGlyphImages).filter(key => 
-                        key.startsWith(`${glyph.id}_example_`)
-                    );
-                    
-                    // If counts don't match, this glyph needs reloading
-                    if (loadedVariantKeys.length !== expectedVariants || loadedExampleKeys.length !== expectedExamples) {
-                        glyphsToReload.push(glyph);
-                    }
-                });
-                
-                // Reload images for glyphs that need it
-                if (glyphsToReload.length > 0) {
-                    console.log(`🔄 Reloading images for ${glyphsToReload.length} glyph(s)`);
-                    
-                    glyphsToReload.forEach(glyph => {
-                        // Clear old cached images for this glyph first
-                        setLoadedGlyphImages(prev => {
-                            const newCache = { ...prev };
-                            delete newCache[glyph.id];
-                            Object.keys(prev).forEach(key => {
-                                if (key.startsWith(`${glyph.id}_variant_`) || key.startsWith(`${glyph.id}_example_`)) {
-                                    delete newCache[key];
-                                }
-                            });
-                            return newCache;
-                        });
-                        
-                        // Then load new ones
-                        setTimeout(() => {
-                            // Load primary
-                            if (glyph.images.primary) {
-                                const img = new Image();
-                                img.crossOrigin = 'anonymous';
-                                img.onload = () => {
-                                    setLoadedGlyphImages(current => ({ ...current, [glyph.id]: img }));
-                                };
-                                img.src = glyph.images.primary;
-                            }
-
-                            // Load variants with new indices
-                            if (glyph.images.variants) {
-                                glyph.images.variants.forEach((url, idx) => {
-                                    const img = new Image();
-                                    img.crossOrigin = 'anonymous';
-                                    const key = `${glyph.id}_variant_${idx}`;
-                                    img.onload = () => {
-                                        setLoadedGlyphImages(current => ({ ...current, [key]: img }));
-                                    };
-                                    img.src = url;
-                                });
-                            }
-
-                            // Load examples with new indices
-                            if (glyph.images.examples) {
-                                glyph.images.examples.forEach((url, idx) => {
-                                    const img = new Image();
-                                    img.crossOrigin = 'anonymous';
-                                    const key = `${glyph.id}_example_${idx}`;
-                                    img.onload = () => {
-                                        setLoadedGlyphImages(current => ({ ...current, [key]: img }));
-                                    };
-                                    img.src = url;
-                                });
-                            }
-                        }, 50);
-                    });
-                }
-            }, [equivalenceChart, loadedGlyphImages, chartLoadStatus]);
-
-            // Reload images for a specific glyph when its structure changes
-            const reloadGlyphImages = (glyphId) => {
-                const glyph = equivalenceChart?.glyphs.find(g => g.id === glyphId);
-                if (!glyph || !glyph.images) return;
-
-                console.log(`🔄 Reloading images for glyph ${glyphId}`);
-
-                setLoadedGlyphImages(prev => {
-                    const newCache = { ...prev };
-                    
-                    // Clear old entries for this glyph
-                    delete newCache[glyphId];
-                    Object.keys(newCache).forEach(key => {
-                        if (key.startsWith(`${glyphId}_variant_`) || key.startsWith(`${glyphId}_example_`)) {
-                            delete newCache[key];
-                        }
-                    });
-
-                    // Load primary
-                    if (glyph.images.primary) {
-                        const img = new Image();
-                        img.crossOrigin = 'anonymous';
-                        img.onload = () => {
-                            setLoadedGlyphImages(current => ({ ...current, [glyphId]: img }));
-                        };
-                        img.src = glyph.images.primary;
-                    }
-
-                    // Load variants
-                    if (glyph.images.variants) {
-                        glyph.images.variants.forEach((url, idx) => {
-                            const img = new Image();
-                            img.crossOrigin = 'anonymous';
-                            const key = `${glyphId}_variant_${idx}`;
-                            img.onload = () => {
-                                setLoadedGlyphImages(current => ({ ...current, [key]: img }));
-                            };
-                            img.src = url;
-                        });
-                    }
-
-                    // Load examples
-                    if (glyph.images.examples) {
-                        glyph.images.examples.forEach((url, idx) => {
-                            const img = new Image();
-                            img.crossOrigin = 'anonymous';
-                            const key = `${glyphId}_example_${idx}`;
-                            img.onload = () => {
-                                setLoadedGlyphImages(current => ({ ...current, [key]: img }));
-                            };
-                            img.src = url;
-                        });
-                    }
-
-                    return newCache;
-                });
-            };
-
             // ============================================
             // GLYPH CHART EDITING FUNCTIONS
             // ============================================
@@ -2841,6 +2697,12 @@
                     
                     return newChart;
                 });
+                
+                // Force a refresh by temporarily closing and reopening the viewer
+                setShowChartViewer(false);
+                setTimeout(() => {
+                    setShowChartViewer(true);
+                }, 100);
             };
 
             const undoDelete = () => {
@@ -2855,6 +2717,12 @@
                 setDeleteHistory(prev => prev.slice(0, -1));
                 
                 console.log(`↩️ Restored deletion of ${lastDeleted.imageType} for glyph ${lastDeleted.glyphId}`);
+                
+                // Force a refresh by temporarily closing and reopening the viewer
+                setShowChartViewer(false);
+                setTimeout(() => {
+                    setShowChartViewer(true);
+                }, 100);
             };
 
             const clearAllDeletes = () => {
