@@ -118,6 +118,8 @@
             const [confidenceThreshold, setConfidenceThreshold] = useState(0);
             const [useConfidenceFilter, setUseConfidenceFilter] = useState(false);
             const [showConfidenceFilter, setShowConfidenceFilter] = useState(false);
+            const [chartEditMode, setChartEditMode] = useState(false);
+            const [deleteHistory, setDeleteHistory] = useState([]);
             const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
             const [customGistUrl, setCustomGistUrl] = useState('');
             const [trimMode, setTrimMode] = useState(null); // Index of detection being trimmed, or null
@@ -2644,6 +2646,112 @@
                 }
             }, [chartLoadStatus]);
 
+            // ============================================
+            // GLYPH CHART EDITING FUNCTIONS
+            // ============================================
+
+            const deleteGlyph = (glyphId, imageType, index = null) => {
+                // Create a deep copy of the current chart for undo
+                const chartSnapshot = JSON.parse(JSON.stringify(equivalenceChart));
+                
+                // Save to delete history for undo
+                const deletedItem = {
+                    glyphId,
+                    imageType,
+                    index,
+                    timestamp: new Date().toISOString(),
+                    chartSnapshot // Store the state before this deletion
+                };
+                
+                setDeleteHistory(prev => [...prev, deletedItem]);
+                
+                // Perform the actual deletion on the chart
+                setEquivalenceChart(prevChart => {
+                    const newChart = JSON.parse(JSON.stringify(prevChart)); // Deep copy
+                    const glyph = newChart.glyphs.find(g => g.id === glyphId);
+                    
+                    if (!glyph || !glyph.images) return prevChart;
+                    
+                    if (imageType === 'primary') {
+                        // Delete the primary image
+                        delete glyph.images.primary;
+                        console.log(`🗑️ Hard deleted primary: ${glyphId}`);
+                    } else if (imageType === 'variant' && glyph.images.variants) {
+                        // Delete specific variant
+                        glyph.images.variants.splice(index, 1);
+                        console.log(`🗑️ Hard deleted variant ${index}: ${glyphId}`);
+                    } else if (imageType === 'example' && glyph.images.examples) {
+                        // Delete specific example
+                        glyph.images.examples.splice(index, 1);
+                        console.log(`🗑️ Hard deleted example ${index}: ${glyphId}`);
+                    }
+                    
+                    return newChart;
+                });
+                
+                // Also remove from loaded images cache
+                const key = imageType === 'primary' ? glyphId : `${glyphId}_${imageType}_${index}`;
+                setLoadedGlyphImages(prev => {
+                    const newCache = { ...prev };
+                    delete newCache[key];
+                    return newCache;
+                });
+            };
+
+            const undoDelete = () => {
+                if (deleteHistory.length === 0) return;
+                
+                const lastDeleted = deleteHistory[deleteHistory.length - 1];
+                
+                // Restore the chart to the snapshot before this deletion
+                setEquivalenceChart(lastDeleted.chartSnapshot);
+                
+                // Remove from history
+                setDeleteHistory(prev => prev.slice(0, -1));
+                
+                console.log(`↩️ Restored deletion of ${lastDeleted.imageType} for glyph ${lastDeleted.glyphId}`);
+                
+                // Note: We don't restore the image cache - it will reload naturally when the chart re-renders
+            };
+
+            const clearAllDeletes = () => {
+                if (deleteHistory.length === 0) return;
+                
+                if (confirm('Reset all deletions and restore the original chart? This will undo all your edits.')) {
+                    // Restore to the very first snapshot (before any deletions)
+                    if (deleteHistory.length > 0) {
+                        setEquivalenceChart(deleteHistory[0].chartSnapshot);
+                    }
+                    setDeleteHistory([]);
+                    console.log('🔄 Reset all deletions');
+                }
+            };
+
+            const exportCleanedDatabase = () => {
+                if (!equivalenceChart) {
+                    alert('No chart data to export');
+                    return;
+                }
+                
+                // Export the current (edited) chart
+                const exportData = JSON.parse(JSON.stringify(equivalenceChart));
+                
+                // Count deletions
+                const deletionCount = deleteHistory.length;
+                
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Hakli_glyphs_cleaned_${new Date().toISOString().slice(0, 10)}.JSON`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                alert(`✅ Exported cleaned database!\n\n${deletionCount} deletion(s) applied.\n\nReplace your original Hakli_glyphs.JSON with this file to use the cleaned database.`);
+            };
+
             return (
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
@@ -4081,16 +4189,66 @@
                                 {/* Sticky Header - Outside scrollable area */}
                                 <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 flex-shrink-0">
                                     <h3 className="text-2xl font-bold text-gray-900">📊 Glyph Equivalence Chart</h3>
-                                    <button
-                                        onClick={() => setShowChartViewer(false)}
-                                        className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
-                                    >
-                                        &times;
-                                    </button>
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            onClick={() => setChartEditMode(!chartEditMode)}
+                                            className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                                                chartEditMode 
+                                                    ? 'bg-red-500 text-white hover:bg-red-600' 
+                                                    : 'bg-blue-500 text-white hover:bg-blue-600'
+                                            }`}
+                                        >
+                                            {chartEditMode ? '✓ Done Editing' : '✏️ Edit Mode'}
+                                        </button>
+                                        <button
+                                            onClick={() => setShowChartViewer(false)}
+                                            className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
+                                        >
+                                            &times;
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Scrollable Content */}
                                 <div className="overflow-y-auto p-6 pt-4 flex-1">
+
+                                {chartEditMode && (
+                                    <div className="mb-4 p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div>
+                                                <h4 className="font-semibold text-gray-900 mb-1">🛠️ Edit Mode Active</h4>
+                                                <p className="text-sm text-gray-600">
+                                                    Click the ✕ button on any glyph to permanently delete it from the database.
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                {deleteHistory.length > 0 && (
+                                                    <>
+                                                        <button
+                                                            onClick={undoDelete}
+                                                            className="px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-semibold"
+                                                            title="Undo last deletion"
+                                                        >
+                                                            ↩️ Undo
+                                                        </button>
+                                                        <button
+                                                            onClick={clearAllDeletes}
+                                                            className="px-3 py-1.5 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm font-semibold"
+                                                            title="Restore all deleted glyphs"
+                                                        >
+                                                            🔄 Reset All
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {deleteHistory.length > 0 && (
+                                            <div className="text-sm text-gray-700">
+                                                <strong>{deleteHistory.length}</strong> deletion(s) made
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div className="mb-4 p-3 bg-blue-50 rounded-lg">
                                     <div className="text-sm text-gray-700">
@@ -4146,6 +4304,15 @@
                                                                             alt={`Primary: ${glyph.name}`}
                                                                             className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
                                                                         />
+                                                                        {chartEditMode && (
+                                                                            <button
+                                                                                onClick={() => deleteGlyph(glyph.id, 'primary')}
+                                                                                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 flex items-center justify-center text-sm font-bold"
+                                                                                title="Delete this glyph"
+                                                                            >
+                                                                                ✕
+                                                                            </button>
+                                                                        )}
                                                                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
                                                                     </div>
                                                                 ) : (
@@ -4179,6 +4346,15 @@
                                                                                     alt={`Variant ${idx + 1}: ${glyph.name}`}
                                                                                     className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
                                                                                 />
+                                                                                {chartEditMode && (
+                                                                                    <button
+                                                                                        onClick={() => deleteGlyph(glyph.id, 'variant', idx)}
+                                                                                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 flex items-center justify-center text-sm font-bold"
+                                                                                        title="Delete this variant"
+                                                                                    >
+                                                                                        ✕
+                                                                                    </button>
+                                                                                )}
                                                                                 <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
                                                                             </div>
                                                                         ) : (
@@ -4214,6 +4390,15 @@
                                                                                     alt={`Example ${idx + 1}: ${glyph.name}`}
                                                                                     className="h-16 border-2 border-gray-300 rounded hover:border-purple-500 transition-colors bg-white p-1"
                                                                                 />
+                                                                                {chartEditMode && (
+                                                                                    <button
+                                                                                        onClick={() => deleteGlyph(glyph.id, 'example', idx)}
+                                                                                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 flex items-center justify-center text-sm font-bold"
+                                                                                        title="Delete this example"
+                                                                                    >
+                                                                                        ✕
+                                                                                    </button>
+                                                                                )}
                                                                                 <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
                                                                             </div>
                                                                         ) : (
@@ -4236,12 +4421,22 @@
 
                                 {/* Sticky Footer - Outside scrollable area */}
                                 <div className="p-6 pt-4 border-t border-gray-200 flex-shrink-0">
-                                    <button
-                                        onClick={() => setShowChartViewer(false)}
-                                        className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
-                                    >
-                                        Close Chart Viewer
-                                    </button>
+                                    <div className="flex gap-3">
+                                        {chartEditMode && deleteHistory.length > 0 && (
+                                            <button
+                                                onClick={exportCleanedDatabase}
+                                                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold flex items-center gap-2"
+                                            >
+                                                💾 Download Cleaned Database ({deleteHistory.length} deletion{deleteHistory.length !== 1 ? 's' : ''})
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => setShowChartViewer(false)}
+                                            className="flex-1 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
+                                        >
+                                            Close Chart Viewer
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
