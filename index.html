@@ -3173,7 +3173,7 @@
                                                         top: 0,
                                                         width: '100%',
                                                         height: '100%',
-                                                        pointerEvents: 'none',
+                                                        pointerEvents: templateTrainingMode ? 'auto' : 'none',  // Enable clicks in template training mode
                                                         zIndex: isAdjusting ? 100 : 10,  // Higher when actively adjusting
                                                         opacity: isNotAdjusting ? 0.2 : 1  // Fade when other box is adjusting
                                                     }}
@@ -3181,10 +3181,19 @@
                                                     <polygon
                                                         points={points}
                                                         fill={isAdjusting ? "rgba(251, 146, 60, 0.15)" : `${boxColor}40`}
-                                                        stroke={isAdjusting ? "#fb923c" : boxColor}
-                                                        strokeWidth={isAdjusting ? "3" : "2"}
+                                                        stroke={templateTrainingMode && selectedForTemplate === index ? "#a855f7" : (isAdjusting ? "#fb923c" : boxColor)}
+                                                        strokeWidth={templateTrainingMode && selectedForTemplate === index ? "4" : (isAdjusting ? "3" : "2")}
+                                                        className={templateTrainingMode ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}
+                                                        onClick={(e) => {
+                                                            if (templateTrainingMode) {
+                                                                e.stopPropagation();
+                                                                setSelectedForTemplate(index);
+                                                            }
+                                                        }}
                                                     />
                                                 </svg>
+                                                
+                                                {/* Invisible clickable overlay for template training mode - removed, using polygon click instead */}
                                                 
                                                 {/* Label */}
                                                 <div
