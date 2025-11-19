@@ -1233,30 +1233,39 @@
                 const detection = recognitionResults[detectionIndex];
                 if (!detection || !imageRef.current) return;
 
-                // Create canvas to crop the region
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                const pos = detection.position;
+                let imageDataUrl;
 
-                // Add padding around the glyph (10%)
-                const padding = Math.max(pos.width, pos.height) * 0.1;
-                const cropX = Math.max(0, pos.x - padding);
-                const cropY = Math.max(0, pos.y - padding);
-                const cropWidth = Math.min(imageRef.current.naturalWidth - cropX, pos.width + padding * 2);
-                const cropHeight = Math.min(imageRef.current.naturalHeight - cropY, pos.height + padding * 2);
+                // If the detection has been adjusted (polygon-masked), use the existing thumbnail
+                // Otherwise, extract from the original image with padding
+                if (detection.isAdjusted && detection.thumbnail) {
+                    // Use the already-masked thumbnail
+                    imageDataUrl = detection.thumbnail;
+                } else {
+                    // Create canvas to crop the region with padding
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const pos = detection.position;
 
-                canvas.width = cropWidth;
-                canvas.height = cropHeight;
+                    // Add padding around the glyph (10%)
+                    const padding = Math.max(pos.width, pos.height) * 0.1;
+                    const cropX = Math.max(0, pos.x - padding);
+                    const cropY = Math.max(0, pos.y - padding);
+                    const cropWidth = Math.min(imageRef.current.naturalWidth - cropX, pos.width + padding * 2);
+                    const cropHeight = Math.min(imageRef.current.naturalHeight - cropY, pos.height + padding * 2);
 
-                // Draw the cropped region
-                ctx.drawImage(
-                    imageRef.current,
-                    cropX, cropY, cropWidth, cropHeight,
-                    0, 0, cropWidth, cropHeight
-                );
+                    canvas.width = cropWidth;
+                    canvas.height = cropHeight;
 
-                // Convert to data URL
-                const imageDataUrl = canvas.toDataURL('image/png');
+                    // Draw the cropped region
+                    ctx.drawImage(
+                        imageRef.current,
+                        cropX, cropY, cropWidth, cropHeight,
+                        0, 0, cropWidth, cropHeight
+                    );
+
+                    // Convert to data URL
+                    imageDataUrl = canvas.toDataURL('image/png');
+                }
 
                 // Update equivalence chart
                 const updatedChart = { ...equivalenceChart };
@@ -2639,7 +2648,7 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
-                        <p className="text-gray-600">beta v251118r ©marty heaton</p>
+                        <p className="text-gray-600">beta v251119 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
