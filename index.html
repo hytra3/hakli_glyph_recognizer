@@ -2607,7 +2607,7 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
-                        <p className="text-gray-600">beta v251114 ©marty heaton</p>
+                        <p className="text-gray-600">beta v251118 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -3123,8 +3123,11 @@
                                         });
                                     };
 
-                                    // Render as SVG polygon if corners exist and in adjust mode, otherwise use div
-                                    if (isAdjusting && detection.corners) {
+                                    // Render as SVG polygon if corners exist AND have been adjusted (different from rectangle)
+                                    // Check if corners form a non-rectangular shape
+                                    const hasAdjustedCorners = detection.corners && detection.isAdjusted;
+                                    
+                                    if (hasAdjustedCorners) {
                                         // Use SVG to render the quadrilateral
                                         const points = `${corners.tl.x * scaleX},${corners.tl.y * scaleY} ${corners.tr.x * scaleX},${corners.tr.y * scaleY} ${corners.br.x * scaleX},${corners.br.y * scaleY} ${corners.bl.x * scaleX},${corners.bl.y * scaleY}`;
                                         
@@ -3138,14 +3141,15 @@
                                                         width: '100%',
                                                         height: '100%',
                                                         pointerEvents: 'none',
-                                                        zIndex: 100  // Higher z-index for active adjusting box
+                                                        zIndex: isAdjusting ? 100 : 10,  // Higher when actively adjusting
+                                                        opacity: isNotAdjusting ? 0.2 : 1  // Fade when other box is adjusting
                                                     }}
                                                 >
                                                     <polygon
                                                         points={points}
-                                                        fill="rgba(251, 146, 60, 0.15)"
-                                                        stroke="#fb923c"
-                                                        strokeWidth="3"
+                                                        fill={isAdjusting ? "rgba(251, 146, 60, 0.15)" : `${boxColor}40`}
+                                                        stroke={isAdjusting ? "#fb923c" : boxColor}
+                                                        strokeWidth={isAdjusting ? "3" : "2"}
                                                     />
                                                 </svg>
                                                 
@@ -3155,51 +3159,69 @@
                                                     style={{
                                                         left: corners.tl.x * scaleX + 'px',
                                                         top: (corners.tl.y * scaleY - 24) + 'px',
-                                                        backgroundColor: '#fb923ce6',
-                                                        zIndex: 101
+                                                        backgroundColor: (isAdjusting ? '#fb923c' : boxColor) + 'e6',
+                                                        zIndex: isAdjusting ? 101 : 11,
+                                                        pointerEvents: isNotAdjusting ? 'none' : 'auto'
                                                     }}
                                                 >
                                                     {showArabicLabels ? (detection.glyph.arabic || detection.glyph.name) : detection.glyph.name}
                                                     {detection.corrected && <span className="ml-1">✏️</span>}
                                                 </div>
 
-                                                {/* Corner handles */}
-                                                <div
-                                                    onMouseDown={(e) => handleCornerMouseDown(e, 'tl')}
-                                                    className="absolute w-4 h-4 bg-orange-500 border-2 border-white rounded-full cursor-nwse-resize hover:scale-125 transition-transform"
-                                                    style={{
-                                                        left: corners.tl.x * scaleX - 8 + 'px',
-                                                        top: corners.tl.y * scaleY - 8 + 'px',
-                                                        zIndex: 102
-                                                    }}
-                                                />
-                                                <div
-                                                    onMouseDown={(e) => handleCornerMouseDown(e, 'tr')}
-                                                    className="absolute w-4 h-4 bg-orange-500 border-2 border-white rounded-full cursor-nesw-resize hover:scale-125 transition-transform"
-                                                    style={{
-                                                        left: corners.tr.x * scaleX - 8 + 'px',
-                                                        top: corners.tr.y * scaleY - 8 + 'px',
-                                                        zIndex: 102
-                                                    }}
-                                                />
-                                                <div
-                                                    onMouseDown={(e) => handleCornerMouseDown(e, 'bl')}
-                                                    className="absolute w-4 h-4 bg-orange-500 border-2 border-white rounded-full cursor-nesw-resize hover:scale-125 transition-transform"
-                                                    style={{
-                                                        left: corners.bl.x * scaleX - 8 + 'px',
-                                                        top: corners.bl.y * scaleY - 8 + 'px',
-                                                        zIndex: 102
-                                                    }}
-                                                />
-                                                <div
-                                                    onMouseDown={(e) => handleCornerMouseDown(e, 'br')}
-                                                    className="absolute w-4 h-4 bg-orange-500 border-2 border-white rounded-full cursor-nwse-resize hover:scale-125 transition-transform"
-                                                    style={{
-                                                        left: corners.br.x * scaleX - 8 + 'px',
-                                                        top: corners.br.y * scaleY - 8 + 'px',
-                                                        zIndex: 102
-                                                    }}
-                                                />
+                                                {viewMode === 'reading' && (
+                                                    <div 
+                                                        className="absolute w-6 h-6 rounded-full bg-yellow-400 border-2 border-yellow-600 text-xs font-bold flex items-center justify-center"
+                                                        style={{
+                                                            left: corners.tl.x * scaleX + 'px',
+                                                            top: corners.tl.y * scaleY + 'px',
+                                                            zIndex: isAdjusting ? 101 : 11
+                                                        }}
+                                                    >
+                                                        {getReadingOrderIndex(index)}
+                                                    </div>
+                                                )}
+
+                                                {/* Corner handles - only show when actively adjusting THIS box */}
+                                                {isAdjusting && (
+                                                    <>
+                                                        <div
+                                                            onMouseDown={(e) => handleCornerMouseDown(e, 'tl')}
+                                                            className="absolute w-4 h-4 bg-orange-500 border-2 border-white rounded-full cursor-nwse-resize hover:scale-125 transition-transform"
+                                                            style={{
+                                                                left: corners.tl.x * scaleX - 8 + 'px',
+                                                                top: corners.tl.y * scaleY - 8 + 'px',
+                                                                zIndex: 102
+                                                            }}
+                                                        />
+                                                        <div
+                                                            onMouseDown={(e) => handleCornerMouseDown(e, 'tr')}
+                                                            className="absolute w-4 h-4 bg-orange-500 border-2 border-white rounded-full cursor-nesw-resize hover:scale-125 transition-transform"
+                                                            style={{
+                                                                left: corners.tr.x * scaleX - 8 + 'px',
+                                                                top: corners.tr.y * scaleY - 8 + 'px',
+                                                                zIndex: 102
+                                                            }}
+                                                        />
+                                                        <div
+                                                            onMouseDown={(e) => handleCornerMouseDown(e, 'bl')}
+                                                            className="absolute w-4 h-4 bg-orange-500 border-2 border-white rounded-full cursor-nesw-resize hover:scale-125 transition-transform"
+                                                            style={{
+                                                                left: corners.bl.x * scaleX - 8 + 'px',
+                                                                top: corners.bl.y * scaleY - 8 + 'px',
+                                                                zIndex: 102
+                                                            }}
+                                                        />
+                                                        <div
+                                                            onMouseDown={(e) => handleCornerMouseDown(e, 'br')}
+                                                            className="absolute w-4 h-4 bg-orange-500 border-2 border-white rounded-full cursor-nwse-resize hover:scale-125 transition-transform"
+                                                            style={{
+                                                                left: corners.br.x * scaleX - 8 + 'px',
+                                                                top: corners.br.y * scaleY - 8 + 'px',
+                                                                zIndex: 102
+                                                            }}
+                                                        />
+                                                    </>
+                                                )}
                                             </React.Fragment>
                                         );
                                     }
