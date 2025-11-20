@@ -141,6 +141,7 @@
             const [transcriptionPosition, setTranscriptionPosition] = useState({ x: 0, y: 0 }); // Position of draggable transcription box
             const [isDraggingTranscription, setIsDraggingTranscription] = useState(false);
             const [transcriptionDragStart, setTranscriptionDragStart] = useState({ x: 0, y: 0 });
+            const [showTranscription, setShowTranscription] = useState(true); // Show/hide transcription box
 
             const MASTER_PASTE_URL = ''; // Will update after first upload
             const MASTER_PASTE_RAW_URL = ''; // Will update after first upload
@@ -2973,6 +2974,15 @@
                                     >
                                         {showArabicLabels ? '🔤 Arabic' : 'ABC English'}
                                     </button>
+                                    {viewMode === 'reading' && !showTranscription && (
+                                        <button 
+                                            onClick={() => setShowTranscription(true)}
+                                            className="px-4 py-2 rounded font-medium bg-blue-500 text-white hover:bg-blue-600"
+                                            title="Show transcription box"
+                                        >
+                                            📝 Show Transcription
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                             
@@ -4238,7 +4248,7 @@
                     )}
 
 
-                    {viewMode === 'reading' && recognitionResults.length > 0 && (
+                    {viewMode === 'reading' && recognitionResults.length > 0 && showTranscription && (
                         <div
                             ref={transcriptionRef} 
                             className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200"
@@ -4284,6 +4294,13 @@
                                         title="Download transcription as text file"
                                     >
                                         💾 Export TXT
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowTranscription(false)}
+                                        className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 font-bold"
+                                        title="Close transcription box"
+                                    >
+                                        ✕
                                     </button>
                                 </div>
                             </div>
