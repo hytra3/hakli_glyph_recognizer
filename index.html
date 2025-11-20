@@ -2287,9 +2287,6 @@
                 ) + 1;
             };
 
-            const applyReadingDirection = (direction) => {
-                setReadingDirection(direction);
-                
             // Transcription box drag handlers
             const handleTranscriptionMouseDown = (e) => {
                 // Only drag from the header area
@@ -2327,31 +2324,34 @@
                     };
                 }
             }, [isDraggingTranscription, transcriptionDragStart]);
+
+            const applyReadingDirection = (direction) => {
+                setReadingDirection(direction);
                 
-            // Auto-generate reading order based on direction
-            const sorted = recognitionResults.map((result, idx) => ({ result, idx }));
+                // Auto-generate reading order based on direction
+                const sorted = recognitionResults.map((result, idx) => ({ result, idx }));
                 
-            if (direction === 'ltr') {
-                sorted.sort((a, b) => 
-                    a.result.position.y - b.result.position.y || 
-                    a.result.position.x - b.result.position.x
-                );
-            } else if (direction === 'rtl') {
-                sorted.sort((a, b) => 
-                    a.result.position.y - b.result.position.y || 
-                    b.result.position.x - a.result.position.x
-                );
-            } else if (direction === 'ttb') {
-                sorted.sort((a, b) => 
-                    a.result.position.x - b.result.position.x || 
-                    a.result.position.y - b.result.position.y
-                );
-            } else {
-                // Detection order - just use original indices
-                setReadingOrder(recognitionResults.map((_, idx) => idx));
-                return;
-            }
-            
+                if (direction === 'ltr') {
+                    sorted.sort((a, b) => 
+                        a.result.position.y - b.result.position.y || 
+                        a.result.position.x - b.result.position.x
+                    );
+                } else if (direction === 'rtl') {
+                    sorted.sort((a, b) => 
+                        a.result.position.y - b.result.position.y || 
+                        b.result.position.x - a.result.position.x
+                    );
+                } else if (direction === 'ttb') {
+                    sorted.sort((a, b) => 
+                        a.result.position.x - b.result.position.x || 
+                        a.result.position.y - b.result.position.y
+                    );
+                } else {
+                    // Detection order - just use original indices
+                    setReadingOrder(recognitionResults.map((_, idx) => idx));
+                    return;
+                }
+                
                 setReadingOrder(sorted.map(item => item.idx));
             };
 
