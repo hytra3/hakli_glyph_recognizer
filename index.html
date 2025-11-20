@@ -3402,7 +3402,7 @@
                                                         height: '100%',
                                                         pointerEvents: (templateTrainingMode && selectedForTemplate !== null && selectedForTemplate !== index) ? 'none' : (templateTrainingMode ? 'auto' : 'none'),  // Disable when popup is open on another box
                                                         zIndex: isAdjusting ? 100 : 10,  // Higher when actively adjusting
-                                                        opacity: isNotAdjusting ? 0.2 : 1  // Fade when other box is adjusting
+                                                        opacity: (isNotAdjusting || (templateTrainingMode && selectedForTemplate !== null && selectedForTemplate !== index)) ? 0.2 : 1  // Fade when popup is open or when adjusting
                                                     }}
                                                 >
                                                     <polygon
@@ -3564,7 +3564,7 @@
                                                 width: detection.position.width * scaleX + 'px',
                                                 height: detection.position.height * scaleY + 'px',
                                                 borderColor: isAdjusting ? '#fb923c' : boxColor,
-                                                opacity: isNotAdjusting ? 0.2 : 1,  // Fade non-adjusting boxes
+                                                opacity: (isNotAdjusting || (templateTrainingMode && selectedForTemplate !== null && selectedForTemplate !== index)) ? 0.2 : 1,  // Fade when popup is open or when adjusting
                                                 pointerEvents: (isNotAdjusting && !templateTrainingMode) || (templateTrainingMode && selectedForTemplate !== null && selectedForTemplate !== index) ? 'none' : 'auto',  // Disable when popup is open on another box
                                                 zIndex: isAdjusting ? 100 : 10  // Higher z-index for adjusting box
                                             }}
