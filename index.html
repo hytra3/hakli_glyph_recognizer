@@ -638,11 +638,12 @@
                 console.log('Starting recognition with', equivalenceChart.glyphs.length, 'Glyphs and', Object.keys(loadedGlyphImages).length, 'loaded images');
                 
                     const tempImg = new Image();
-                    tempImg.onload = () => {
+                    tempImg.onload = async () => {
                         try {
                         // Rotate the image if needed
                         let processImg = tempImg;
                         if (imageRotation !== 0) {
+                            console.log(`🔄 Baking ${imageRotation}° rotation into image...`);
                             const canvas = document.createElement('canvas');
                             const ctx = canvas.getContext('2d');
                             
@@ -658,11 +659,13 @@
                             ctx.rotate(angleRad);
                             ctx.drawImage(tempImg, -tempImg.width / 2, -tempImg.height / 2);
                             
-                            // Create new image from rotated canvas
-                            const rotatedImg = new Image();
-                            rotatedImg.src = canvas.toDataURL();
-                            processImg = rotatedImg;
-                            console.log(`🔄 Applied ${imageRotation}° rotation before recognition`);
+                            // Create new image from rotated canvas and WAIT for it to load
+                            processImg = await new Promise((resolve) => {
+                                const rotatedImg = new Image();
+                                rotatedImg.onload = () => resolve(rotatedImg);
+                                rotatedImg.src = canvas.toDataURL();
+                            });
+                            console.log(`✓ Rotation baked: new dimensions ${processImg.width}x${processImg.height}`);
                         }
                         
                         const isolated = isolateGlyphs(processImg);
@@ -716,7 +719,7 @@
                                     for (let i = 0; i < glyph.images.variants.length; i++) {
                                         const variantKey = `${glyph.id}_variant_${i}`;
                                         if (loadedGlyphImages[variantKey]) {
-                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedGlyphImages[variantKey], region, `${glyph.id}_v${i}`);
+                                            const matches = performTemplateMatchingOnRegion(processImg, loadedGlyphImages[variantKey], region, `${glyph.id}_v${i}`);
                                             for (const match of matches) {
                                                 const weightedConfidence = match.confidence * 0.95; // Less penalty
                                                 if (match.confidence > bestRawConfidence) { // Compare UNWEIGHTED
@@ -739,7 +742,7 @@
                                     for (let i = 0; i < glyph.images.examples.length; i++) {
                                         const exampleKey = `${glyph.id}_example_${i}`;
                                         if (loadedGlyphImages[exampleKey]) {
-                                            const matches = performTemplateMatchingOnRegion(tempImg, loadedGlyphImages[exampleKey], region, `${glyph.id}_ex${i}`);
+                                            const matches = performTemplateMatchingOnRegion(processImg, loadedGlyphImages[exampleKey], region, `${glyph.id}_ex${i}`);
                                             for (const match of matches) {
                                                 const weightedConfidence = match.confidence * 0.90; // Less penalty
                                                 if (match.confidence > bestRawConfidence) { // Compare UNWEIGHTED
