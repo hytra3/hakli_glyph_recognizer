@@ -132,6 +132,9 @@
             const [adjustMode, setAdjustMode] = useState(null); // Index of detection being adjusted, or null
             const [draggingCorner, setDraggingCorner] = useState(null); // Which corner is being dragged: 'tl', 'tr', 'bl', 'br'
             const [dragStartPos, setDragStartPos] = useState(null); // Starting position of drag
+            const [transcriptionPosition, setTranscriptionPosition] = useState({ x: 0, y: 0 }); // Position of draggable transcription box
+            const [isDraggingTranscription, setIsDraggingTranscription] = useState(false);
+            const [transcriptionDragStart, setTranscriptionDragStart] = useState({ x: 0, y: 0 });
 
             const MASTER_PASTE_URL = ''; // Will update after first upload
             const MASTER_PASTE_RAW_URL = ''; // Will update after first upload
@@ -2287,6 +2290,44 @@
             const applyReadingDirection = (direction) => {
                 setReadingDirection(direction);
                 
+            // Transcription box drag handlers
+            const handleTranscriptionMouseDown = (e) => {
+                // Only drag from the header area
+                if (e.target.closest('.transcription-drag-handle')) {
+                    setIsDraggingTranscription(true);
+                    setTranscriptionDragStart({
+                        x: e.clientX - transcriptionPosition.x,
+                        y: e.clientY - transcriptionPosition.y
+                    });
+                    e.preventDefault();
+                }
+            };
+
+            const handleTranscriptionMouseMove = (e) => {
+                if (isDraggingTranscription) {
+                    setTranscriptionPosition({
+                        x: e.clientX - transcriptionDragStart.x,
+                        y: e.clientY - transcriptionDragStart.y
+                    });
+                }
+            };
+
+            const handleTranscriptionMouseUp = () => {
+                setIsDraggingTranscription(false);
+            };
+
+            // Add global listeners for transcription dragging
+            React.useEffect(() => {
+                if (isDraggingTranscription) {
+                    window.addEventListener('mousemove', handleTranscriptionMouseMove);
+                    window.addEventListener('mouseup', handleTranscriptionMouseUp);
+                    return () => {
+                        window.removeEventListener('mousemove', handleTranscriptionMouseMove);
+                        window.removeEventListener('mouseup', handleTranscriptionMouseUp);
+                    };
+                }
+            }, [isDraggingTranscription, transcriptionDragStart]);
+                
             // Auto-generate reading order based on direction
             const sorted = recognitionResults.map((result, idx) => ({ result, idx }));
                 
@@ -2700,7 +2741,7 @@
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
                         <p className="text-sm text-gray-500">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
-                        <p className="text-sm text-gray-500">beta v251119 ©marty heaton</p>
+                        <p className="text-sm text-gray-500">beta v251120 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -2777,14 +2818,25 @@
                                 </button>
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3">
-                                        <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Rotation Angle:</label>
+                                        <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Fine Tune:</label>
                                         <input
                                             type="range"
-                                            min="0"
-                                            max="359"
-                                            value={imageRotation}
+                                            min="-45"
+                                            max="45"
+                                            value={(() => {
+                                                // Get the offset from nearest 90° increment
+                                                const base = Math.round(imageRotation / 90) * 90;
+                                                let offset = imageRotation - base;
+                                                // Normalize to -45 to +45 range
+                                                if (offset > 45) offset -= 90;
+                                                if (offset < -45) offset += 90;
+                                                return offset;
+                                            })()}
                                             onChange={(e) => {
-                                                setImageRotation(parseInt(e.target.value));
+                                                const offset = parseInt(e.target.value);
+                                                const base = Math.round(imageRotation / 90) * 90;
+                                                const newRotation = (base + offset + 360) % 360;
+                                                setImageRotation(newRotation);
                                                 setRecognitionResults([]); // Clear detection boxes
                                                 setRotatedImageDimensions(null); // Clear rotated dimensions
                                                 setDisplayImage(null); // Clear rotated display image
@@ -3139,7 +3191,7 @@
                             )}
                             {recognitionResults.length > 0 && (
                                 <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-                                    💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) Merge (⚡) and Exclude (🔥) buttons will appear.
+                                    💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) Merge (⚡) and Exclude (🔥) buttons will appear. Click wrench (🔧) to adjust box corners by dragging.
                                 </div>
                             )}
                         </div>
@@ -4078,10 +4130,37 @@
 
 
                     {viewMode === 'reading' && recognitionResults.length > 0 && (
-                        <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="font-semibold text-gray-900">Transcription</h3>
+                        <div 
+                            className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200"
+                            style={{
+                                position: transcriptionPosition.x !== 0 || transcriptionPosition.y !== 0 ? 'fixed' : 'relative',
+                                left: transcriptionPosition.x !== 0 ? `${transcriptionPosition.x}px` : 'auto',
+                                top: transcriptionPosition.y !== 0 ? `${transcriptionPosition.y}px` : 'auto',
+                                zIndex: isDraggingTranscription ? 1000 : transcriptionPosition.x !== 0 || transcriptionPosition.y !== 0 ? 100 : 'auto',
+                                cursor: isDraggingTranscription ? 'grabbing' : 'auto',
+                                maxWidth: transcriptionPosition.x !== 0 || transcriptionPosition.y !== 0 ? '600px' : 'none',
+                                boxShadow: transcriptionPosition.x !== 0 || transcriptionPosition.y !== 0 ? '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' : 'none'
+                            }}
+                        >
+                            <div 
+                                className="flex items-center justify-between mb-3 transcription-drag-handle"
+                                onMouseDown={handleTranscriptionMouseDown}
+                                style={{ cursor: 'grab' }}
+                                title="Drag to reposition transcription box"
+                            >
+                                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                    <span style={{ cursor: 'grab' }}>⋮⋮</span> Transcription
+                                </h3>
                                 <div className="flex gap-2">
+                                    {(transcriptionPosition.x !== 0 || transcriptionPosition.y !== 0) && (
+                                        <button 
+                                            onClick={() => setTranscriptionPosition({ x: 0, y: 0 })}
+                                            className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600"
+                                            title="Reset position"
+                                        >
+                                            ↺ Reset
+                                        </button>
+                                    )}
                                     <button 
                                         onClick={copyTranscriptionToClipboard}
                                         className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 flex items-center gap-1"
