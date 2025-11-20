@@ -2685,8 +2685,8 @@
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
-                        <p className="text-sm text-gray-500 mt-1">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
-                        <p className="text-gray-600">beta v251119 ©marty heaton</p>
+                        <p className="text-sm text-gray-500">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
+                        <p className="text-sm text-gray-500">beta v251119 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -2763,10 +2763,11 @@
                                             type="range"
                                             min="-45"
                                             max="45"
-                                            value={imageRotation % 90 > 45 ? (imageRotation % 90) - 90 : imageRotation % 90}
+                                            value={(imageRotation % 90 + 90) % 90 - 45}
                                             onChange={(e) => {
                                                 const base = Math.floor(imageRotation / 90) * 90;
-                                                setImageRotation(base + parseInt(e.target.value));
+                                                const fine = parseInt(e.target.value);
+                                                setImageRotation(base + fine);
                                             }}
                                             className="flex-1"
                                         />
