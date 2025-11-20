@@ -119,6 +119,7 @@
             const [useConfidenceFilter, setUseConfidenceFilter] = useState(false);
             const [showConfidenceFilter, setShowConfidenceFilter] = useState(false);
             const [imageRotation, setImageRotation] = useState(0);
+            const [rotatedImageDimensions, setRotatedImageDimensions] = useState(null); // { width, height } of rotated image used in recognition
             const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
             const [customGistUrl, setCustomGistUrl] = useState('');
             const [trimMode, setTrimMode] = useState(null); // Index of detection being trimmed, or null
@@ -666,6 +667,10 @@
                                 rotatedImg.src = canvas.toDataURL();
                             });
                             console.log(`✓ Rotation baked: new dimensions ${processImg.width}x${processImg.height}`);
+                            setRotatedImageDimensions({ width: processImg.width, height: processImg.height });
+                        } else {
+                            // No rotation - use original dimensions
+                            setRotatedImageDimensions({ width: tempImg.width, height: tempImg.height });
                         }
                         
                         const isolated = isolateGlyphs(processImg);
@@ -2756,6 +2761,7 @@
                                     onClick={() => {
                                         setImageRotation((imageRotation - 90 + 360) % 360);
                                         setRecognitionResults([]); // Clear detection boxes
+                                        setRotatedImageDimensions(null); // Clear rotated dimensions
                                     }}
                                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold"
                                     title="Rotate 90° counter-clockwise"
@@ -2773,6 +2779,7 @@
                                             onChange={(e) => {
                                                 setImageRotation(parseInt(e.target.value));
                                                 setRecognitionResults([]); // Clear detection boxes
+                                                setRotatedImageDimensions(null); // Clear rotated dimensions
                                             }}
                                             className="flex-1"
                                         />
@@ -2783,6 +2790,7 @@
                                     onClick={() => {
                                         setImageRotation((imageRotation + 90) % 360);
                                         setRecognitionResults([]); // Clear detection boxes
+                                        setRotatedImageDimensions(null); // Clear rotated dimensions
                                     }}
                                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold"
                                     title="Rotate 90° clockwise"
@@ -2793,6 +2801,7 @@
                                     onClick={() => {
                                         setImageRotation(0);
                                         setRecognitionResults([]); // Clear detection boxes
+                                        setRotatedImageDimensions(null); // Clear rotated dimensions
                                     }}
                                     className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 font-semibold"
                                     title="Reset rotation"
@@ -3154,8 +3163,10 @@
                                 {trimMode !== null && recognitionResults[trimMode] && (() => {
                                     const det = recognitionResults[trimMode];
                                     const imageRect = imageRef.current.getBoundingClientRect();
-                                    const scaleX = imageRect.width / imageRef.current.naturalWidth;
-                                    const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                                    const refWidth = rotatedImageDimensions ? rotatedImageDimensions.width : imageRef.current.naturalWidth;
+                                    const refHeight = rotatedImageDimensions ? rotatedImageDimensions.height : imageRef.current.naturalHeight;
+                                    const scaleX = imageRect.width / refWidth;
+                                    const scaleY = imageRect.height / refHeight;
                                     return (
                                         <div
                                             className="absolute border-4 border-dashed border-blue-500 bg-blue-100 bg-opacity-20 pointer-events-none"
@@ -3178,8 +3189,10 @@
                                 {excludeMode !== null && recognitionResults[excludeMode] && (() => {
                                     const det = recognitionResults[excludeMode];
                                     const imageRect = imageRef.current.getBoundingClientRect();
-                                    const scaleX = imageRect.width / imageRef.current.naturalWidth;
-                                    const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                                    const refWidth = rotatedImageDimensions ? rotatedImageDimensions.width : imageRef.current.naturalWidth;
+                                    const refHeight = rotatedImageDimensions ? rotatedImageDimensions.height : imageRef.current.naturalHeight;
+                                    const scaleX = imageRect.width / refWidth;
+                                    const scaleY = imageRect.height / refHeight;
                                     return (
                                         <>
                                             {/* Highlight the detection being edited - more visible purple border */}
@@ -3217,8 +3230,10 @@
                                 {showRegionBoundaries && isolatedGlyphs.map((region, index) => {
                                     if (!imageRef.current) return null;
                                     const imageRect = imageRef.current.getBoundingClientRect();
-                                    const scaleX = imageRect.width / imageRef.current.naturalWidth;
-                                    const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                                    const refWidth = rotatedImageDimensions ? rotatedImageDimensions.width : imageRef.current.naturalWidth;
+                                    const refHeight = rotatedImageDimensions ? rotatedImageDimensions.height : imageRef.current.naturalHeight;
+                                    const scaleX = imageRect.width / refWidth;
+                                    const scaleY = imageRect.height / refHeight;
                                     const isSelected = selectedIsolatedRegion === index;
                                     return (
                                         <div
@@ -3239,8 +3254,11 @@
                                 {getFilteredResults().map((detection, filteredIndex) => {
                                     if (!imageRef.current) return null;
                                     const imageRect = imageRef.current.getBoundingClientRect();
-                                    const scaleX = imageRect.width / imageRef.current.naturalWidth;
-                                    const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                                    // Use rotated dimensions if available, otherwise fall back to natural dimensions
+                                    const refWidth = rotatedImageDimensions ? rotatedImageDimensions.width : imageRef.current.naturalWidth;
+                                    const refHeight = rotatedImageDimensions ? rotatedImageDimensions.height : imageRef.current.naturalHeight;
+                                    const scaleX = imageRect.width / refWidth;
+                                    const scaleY = imageRect.height / refHeight;
 
                                     // Get the original index from recognitionResults
                                     const index = recognitionResults.indexOf(detection);
