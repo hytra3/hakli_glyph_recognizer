@@ -2753,7 +2753,10 @@
                             <h3 className="font-semibold text-gray-900 mb-3">🔄 Image Rotation</h3>
                             <div className="flex items-center gap-4">
                                 <button
-                                    onClick={() => setImageRotation((imageRotation - 90 + 360) % 360)}
+                                    onClick={() => {
+                                        setImageRotation((imageRotation - 90 + 360) % 360);
+                                        setRecognitionResults([]); // Clear detection boxes
+                                    }}
                                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold"
                                     title="Rotate 90° counter-clockwise"
                                 >
@@ -2761,16 +2764,15 @@
                                 </button>
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3">
-                                        <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Fine Adjust:</label>
+                                        <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Rotation Angle:</label>
                                         <input
                                             type="range"
-                                            min="-45"
-                                            max="45"
-                                            value={(imageRotation % 90 + 90) % 90 - 45}
+                                            min="0"
+                                            max="359"
+                                            value={imageRotation}
                                             onChange={(e) => {
-                                                const base = Math.floor(imageRotation / 90) * 90;
-                                                const fine = parseInt(e.target.value);
-                                                setImageRotation(base + fine);
+                                                setImageRotation(parseInt(e.target.value));
+                                                setRecognitionResults([]); // Clear detection boxes
                                             }}
                                             className="flex-1"
                                         />
@@ -2778,14 +2780,20 @@
                                     </div>
                                 </div>
                                 <button
-                                    onClick={() => setImageRotation((imageRotation + 90) % 360)}
+                                    onClick={() => {
+                                        setImageRotation((imageRotation + 90) % 360);
+                                        setRecognitionResults([]); // Clear detection boxes
+                                    }}
                                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold"
                                     title="Rotate 90° clockwise"
                                 >
                                     ↻ 90° Right
                                 </button>
                                 <button
-                                    onClick={() => setImageRotation(0)}
+                                    onClick={() => {
+                                        setImageRotation(0);
+                                        setRecognitionResults([]); // Clear detection boxes
+                                    }}
                                     className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 font-semibold"
                                     title="Reset rotation"
                                 >
@@ -2793,7 +2801,7 @@
                                 </button>
                             </div>
                             <div className="mt-2 text-xs text-gray-600">
-                                Rotate the entire image to correct orientation before recognition. Use 90° buttons for major corrections, slider for fine adjustments.
+                                Rotate the entire image to correct orientation before recognition. Rotation clears previous detections - click Recognize again after adjusting.
                             </div>
                         </div>
                     )}
