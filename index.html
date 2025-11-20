@@ -2765,7 +2765,7 @@
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
                         <p className="text-sm text-gray-500">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
-                        <p className="text-sm text-gray-500">beta v251119 ©marty heaton</p>
+                        <p className="text-sm text-gray-500">beta v251120 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -3410,11 +3410,26 @@
                                                         fill={isAdjusting ? "rgba(251, 146, 60, 0.15)" : `${boxColor}40`}
                                                         stroke={templateTrainingMode && selectedForTemplate === index ? "#a855f7" : (isAdjusting ? "#fb923c" : boxColor)}
                                                         strokeWidth={templateTrainingMode && selectedForTemplate === index ? "4" : (isAdjusting ? "3" : "2")}
-                                                        className={templateTrainingMode ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}
+                                                        className={templateTrainingMode ? 'cursor-pointer' : ''}
+                                                        style={{
+                                                            transition: 'stroke 0.2s, stroke-width 0.2s'
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            if (templateTrainingMode && selectedForTemplate !== index) {
+                                                                e.target.style.stroke = '#a855f7';
+                                                                e.target.style.strokeWidth = '3';
+                                                            }
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            if (templateTrainingMode && selectedForTemplate !== index) {
+                                                                e.target.style.stroke = boxColor;
+                                                                e.target.style.strokeWidth = '2';
+                                                            }
+                                                        }}
                                                         onClick={(e) => {
                                                             if (templateTrainingMode) {
                                                                 e.stopPropagation();
-                                                                setSelectedForTemplate(index);
+                                                                setSelectedForTemplate(selectedForTemplate === index ? null : index);  // Toggle like rectangles
                                                             }
                                                         }}
                                                     />
@@ -3430,7 +3445,7 @@
                                                         top: (corners.tl.y * scaleY - 24) + 'px',
                                                         backgroundColor: (isAdjusting ? '#fb923c' : boxColor) + 'e6',
                                                         zIndex: isAdjusting ? 101 : 11,
-                                                        pointerEvents: (isNotAdjusting && !templateTrainingMode) ? 'none' : 'auto'
+                                                        pointerEvents: templateTrainingMode ? 'none' : ((isNotAdjusting && !templateTrainingMode) ? 'none' : 'auto')  // Pass through clicks in template mode
                                                     }}
                                                 >
                                                     {showArabicLabels ? (detection.glyph.arabic || detection.glyph.name) : detection.glyph.name}
