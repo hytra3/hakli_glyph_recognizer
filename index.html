@@ -83,6 +83,7 @@
 
         function HakliGlyphRecognizer() {
             const [image, setImage] = useState(null);
+            const [displayImage, setDisplayImage] = useState(null); // The image to display (may be rotated)
             const [recognitionResults, setRecognitionResults] = useState([]);
             const [isProcessing, setIsProcessing] = useState(false);
             const [equivalenceChart, setEquivalenceChart] = useState(null);
@@ -668,9 +669,11 @@
                             });
                             console.log(`✓ Rotation baked: new dimensions ${processImg.width}x${processImg.height}`);
                             setRotatedImageDimensions({ width: processImg.width, height: processImg.height });
+                            setDisplayImage(canvas.toDataURL()); // Show the rotated image
                         } else {
-                            // No rotation - use original dimensions
+                            // No rotation - use original dimensions and original image
                             setRotatedImageDimensions({ width: tempImg.width, height: tempImg.height });
+                            setDisplayImage(image); // Show original image
                         }
                         
                         const isolated = isolateGlyphs(processImg);
@@ -2467,6 +2470,9 @@
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         setImage(e.target.result);
+                        setDisplayImage(null); // Clear any rotated display
+                        setImageRotation(0); // Reset rotation
+                        setRotatedImageDimensions(null); // Clear rotated dimensions
                         setRecognitionResults([]);
                         setValidations({});
                         setActionHistory([]);
@@ -2762,6 +2768,7 @@
                                         setImageRotation((imageRotation - 90 + 360) % 360);
                                         setRecognitionResults([]); // Clear detection boxes
                                         setRotatedImageDimensions(null); // Clear rotated dimensions
+                                        setDisplayImage(null); // Clear rotated display image
                                     }}
                                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold"
                                     title="Rotate 90° counter-clockwise"
@@ -2780,6 +2787,7 @@
                                                 setImageRotation(parseInt(e.target.value));
                                                 setRecognitionResults([]); // Clear detection boxes
                                                 setRotatedImageDimensions(null); // Clear rotated dimensions
+                                                setDisplayImage(null); // Clear rotated display image
                                             }}
                                             className="flex-1"
                                         />
@@ -2791,6 +2799,7 @@
                                         setImageRotation((imageRotation + 90) % 360);
                                         setRecognitionResults([]); // Clear detection boxes
                                         setRotatedImageDimensions(null); // Clear rotated dimensions
+                                        setDisplayImage(null); // Clear rotated display image
                                     }}
                                     className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold"
                                     title="Rotate 90° clockwise"
@@ -2802,6 +2811,7 @@
                                         setImageRotation(0);
                                         setRecognitionResults([]); // Clear detection boxes
                                         setRotatedImageDimensions(null); // Clear rotated dimensions
+                                        setDisplayImage(null); // Clear rotated display image
                                     }}
                                     className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 font-semibold"
                                     title="Reset rotation"
@@ -3144,7 +3154,7 @@
                             >
                                 <img
                                     ref={imageRef}
-                                    src={image}
+                                    src={displayImage || image}
                                     alt="Uploaded inscription"
                                     className="max-w-full h-auto border border-gray-300 rounded"
                                     onMouseDown={handleImageMouseDown}
@@ -3152,7 +3162,7 @@
                                         cursor: manualDetectionMode ? 'crosshair' : 'default',
                                         userSelect: 'none',
                                         pointerEvents: 'auto',
-                                        transform: `rotate(${imageRotation}deg)`,
+                                        transform: displayImage ? 'none' : `rotate(${imageRotation}deg)`, // Only rotate preview
                                         transformOrigin: 'center center',
                                         transition: 'transform 0.3s ease'
                                     }}
