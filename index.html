@@ -3027,6 +3027,7 @@
                             </button>
                             
                             {!isControlsCollapsed && (
+                                <>
                                 <div className="flex flex-wrap gap-3 items-center mb-4">
                                 <button onClick={recognizeGlyphs} disabled={isProcessing || !equivalenceChart} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50">
                                     {isProcessing ? 'Processing...' : 'Recognize Glyphs'}
@@ -3258,8 +3259,10 @@
                                     💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) Merge (⚡) and Exclude (🔥) buttons will appear. Click wrench (🔧) to adjust box corners by dragging.
                                 </div>
                             )}
+                            </>
                             )}
                         </div>
+                    )}
 
                     {image && (
                         <div className="mb-6">
