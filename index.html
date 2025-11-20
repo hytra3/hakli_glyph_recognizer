@@ -2312,19 +2312,29 @@
                     const newX = e.clientX - transcriptionDragStart.x;
                     const newY = e.clientY - transcriptionDragStart.y;
                     
-                    // Clamp to viewport bounds to prevent going offscreen
-                    const maxX = window.innerWidth - 300; // Keep at least 300px visible
-                    const maxY = window.innerHeight - 100; // Keep at least 100px visible
-                    
+                    // Allow dragging anywhere - no clamping during drag
                     setTranscriptionPosition({
-                        x: Math.max(0, Math.min(newX, maxX)),
-                        y: Math.max(0, Math.min(newY, maxY))
+                        x: newX,
+                        y: newY
                     });
                 }
             };
 
             const handleTranscriptionMouseUp = () => {
                 setIsDraggingTranscription(false);
+                
+                // Check if final position is out of bounds and bounce back if needed
+                const maxX = window.innerWidth - 300; // Keep at least 300px visible
+                const maxY = window.innerHeight - 100; // Keep at least 100px visible
+                
+                if (transcriptionPosition.x < 0 || transcriptionPosition.x > maxX ||
+                    transcriptionPosition.y < 0 || transcriptionPosition.y > maxY) {
+                    // Out of bounds - bounce back to safe position
+                    setTranscriptionPosition({
+                        x: Math.max(0, Math.min(transcriptionPosition.x, maxX)),
+                        y: Math.max(0, Math.min(transcriptionPosition.y, maxY))
+                    });
+                }
             };
 
             // Add global listeners for transcription dragging
@@ -2755,7 +2765,7 @@
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
                         <p className="text-sm text-gray-500">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
-                        <p className="text-sm text-gray-500">beta v251120 ©marty heaton</p>
+                        <p className="text-sm text-gray-500">beta v251119 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -3490,7 +3500,7 @@
                                                             minWidth: '200px',
                                                             left: corners.tl.x * scaleX + 'px',
                                                             top: (corners.br.y * scaleY + 8) + 'px',  // Position below the polygon
-                                                            zIndex: 200
+                                                            zIndex: 1000  // Very high to ensure it's on top of everything
                                                         }}
                                                         onClick={(e) => e.stopPropagation()}
                                                     >
@@ -3565,8 +3575,8 @@
 
                                             {templateTrainingMode && selectedForTemplate === index && (
                                                 <div
-                                                    className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border-2 border-purple-400 p-3 z-50"
-                                                    style={{ minWidth: '200px' }}
+                                                    className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border-2 border-purple-400 p-3"
+                                                    style={{ minWidth: '200px', zIndex: 1000 }}
                                                     onClick={(e) => e.stopPropagation()}
                                                 >
                                                     <div className="font-semibold text-sm mb-2 text-purple-900">
