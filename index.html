@@ -3400,7 +3400,7 @@
                                                         top: 0,
                                                         width: '100%',
                                                         height: '100%',
-                                                        pointerEvents: templateTrainingMode ? 'auto' : 'none',  // Enable clicks in template training mode
+                                                        pointerEvents: (templateTrainingMode && selectedForTemplate !== null && selectedForTemplate !== index) ? 'none' : (templateTrainingMode ? 'auto' : 'none'),  // Disable when popup is open on another box
                                                         zIndex: isAdjusting ? 100 : 10,  // Higher when actively adjusting
                                                         opacity: isNotAdjusting ? 0.2 : 1  // Fade when other box is adjusting
                                                     }}
@@ -3565,7 +3565,7 @@
                                                 height: detection.position.height * scaleY + 'px',
                                                 borderColor: isAdjusting ? '#fb923c' : boxColor,
                                                 opacity: isNotAdjusting ? 0.2 : 1,  // Fade non-adjusting boxes
-                                                pointerEvents: (isNotAdjusting && !templateTrainingMode) ? 'none' : 'auto',  // Allow clicks in template training mode
+                                                pointerEvents: (isNotAdjusting && !templateTrainingMode) || (templateTrainingMode && selectedForTemplate !== null && selectedForTemplate !== index) ? 'none' : 'auto',  // Disable when popup is open on another box
                                                 zIndex: isAdjusting ? 100 : 10  // Higher z-index for adjusting box
                                             }}
                                             onClick={() => {
