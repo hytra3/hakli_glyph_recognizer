@@ -2288,14 +2288,21 @@
             };
 
             // Transcription box drag handlers
+            const transcriptionRef = React.useRef(null);
+            
             const handleTranscriptionMouseDown = (e) => {
                 // Only drag from the header area
                 if (e.target.closest('.transcription-drag-handle')) {
                     setIsDraggingTranscription(true);
-                    setTranscriptionDragStart({
-                        x: e.clientX - transcriptionPosition.x,
-                        y: e.clientY - transcriptionPosition.y
-                    });
+                    
+                    // Get actual position of the box
+                    const rect = transcriptionRef.current?.getBoundingClientRect();
+                    if (rect) {
+                        setTranscriptionDragStart({
+                            x: e.clientX - rect.left,
+                            y: e.clientY - rect.top
+                        });
+                    }
                     e.preventDefault();
                 }
             };
@@ -3413,7 +3420,7 @@
                                                         top: (corners.tl.y * scaleY - 24) + 'px',
                                                         backgroundColor: (isAdjusting ? '#fb923c' : boxColor) + 'e6',
                                                         zIndex: isAdjusting ? 101 : 11,
-                                                        pointerEvents: isNotAdjusting ? 'none' : 'auto'
+                                                        pointerEvents: (isNotAdjusting && !templateTrainingMode) ? 'none' : 'auto'
                                                     }}
                                                 >
                                                     {showArabicLabels ? (detection.glyph.arabic || detection.glyph.name) : detection.glyph.name}
@@ -3533,7 +3540,7 @@
                                                 height: detection.position.height * scaleY + 'px',
                                                 borderColor: isAdjusting ? '#fb923c' : boxColor,
                                                 opacity: isNotAdjusting ? 0.2 : 1,  // Fade non-adjusting boxes
-                                                pointerEvents: isNotAdjusting ? 'none' : 'auto',  // Disable clicks on non-adjusting boxes
+                                                pointerEvents: (isNotAdjusting && !templateTrainingMode) ? 'none' : 'auto',  // Allow clicks in template training mode
                                                 zIndex: isAdjusting ? 100 : 10  // Higher z-index for adjusting box
                                             }}
                                             onClick={() => {
@@ -4138,7 +4145,8 @@
 
 
                     {viewMode === 'reading' && recognitionResults.length > 0 && (
-                        <div 
+                        <div
+                            ref={transcriptionRef} 
                             className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200"
                             style={{
                                 position: transcriptionPosition.x !== 0 || transcriptionPosition.y !== 0 ? 'fixed' : 'relative',
