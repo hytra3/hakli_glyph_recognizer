@@ -2302,9 +2302,16 @@
 
             const handleTranscriptionMouseMove = (e) => {
                 if (isDraggingTranscription) {
+                    const newX = e.clientX - transcriptionDragStart.x;
+                    const newY = e.clientY - transcriptionDragStart.y;
+                    
+                    // Clamp to viewport bounds to prevent going offscreen
+                    const maxX = window.innerWidth - 300; // Keep at least 300px visible
+                    const maxY = window.innerHeight - 100; // Keep at least 100px visible
+                    
                     setTranscriptionPosition({
-                        x: e.clientX - transcriptionDragStart.x,
-                        y: e.clientY - transcriptionDragStart.y
+                        x: Math.max(0, Math.min(newX, maxX)),
+                        y: Math.max(0, Math.min(newY, maxY))
                     });
                 }
             };
@@ -3531,7 +3538,8 @@
                                             }}
                                             onClick={() => {
                                                 if (templateTrainingMode) {
-                                                    setSelectedForTemplate(index);
+                                                    // Toggle selection - if clicking same box, deselect. If different box, select it.
+                                                    setSelectedForTemplate(selectedForTemplate === index ? null : index);
                                                 } else if (!isAdjusting) {
                                                     toggleRegionSelection(index);
                                                 }
