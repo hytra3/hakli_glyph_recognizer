@@ -4570,7 +4570,10 @@
                                             // Vertical display - each line becomes a row of columns
                                             <div className="flex flex-col gap-8">
                                                 {getEnhancedTranscription().map((line, lineIndex) => (
-                                                    <div key={lineIndex} className="flex gap-8 justify-center">
+                                                    <div 
+                                                        key={lineIndex} 
+                                                        className={`flex gap-8 justify-center ${transcriptionFormat === 'vertical-rl' ? 'flex-row-reverse' : ''}`}
+                                                    >
                                                         {line.map((columnText, colIndex) => (
                                                             <div 
                                                                 key={colIndex}
