@@ -43,6 +43,24 @@
             opacity: 0.9;
         }
         
+        .reading-order-badge {
+            position: absolute;
+            top: -20px;
+            left: -20px;
+            width: 28px;
+            height: 28px;
+            background-color: #facc15;
+            border: 2px solid #ca8a04;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: black;
+            z-index: 20;
+        }
+        
         .canvas-container {
             position: relative;
             display: inline-block;
@@ -117,6 +135,8 @@
             const [viewMode, setViewMode] = useState('detection'); // 'detection' or 'reading'
             const [readingDirection, setReadingDirection] = useState('detection'); // 'detection', 'ltr', 'rtl', 'ttb'
             const [wordBoundaries, setWordBoundaries] = useState(new Set());
+            const [columnBreaks, setColumnBreaks] = useState(new Set()); // Mark end of column after this glyph
+            const [lineBreaks, setLineBreaks] = useState(new Set()); // Mark end of line after this glyph
             const [readingOrder, setReadingOrder] = useState([]); // Array of indices for manual ordering
             const [draggedItem, setDraggedItem] = useState(null);
             const [correctionMode, setCorrectionMode] = useState(null); // Index of detection being corrected, or null
@@ -1665,53 +1685,27 @@
 
             // Generate transcription text based on format and script
             const getEnhancedTranscription = () => {
-                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
+                const layoutStructure = getLayoutStructure(); // Returns array of lines, each containing array of columns
                 
-                // For vertical columns, split into 2 columns
-                if (transcriptionFormat.startsWith('vertical')) {
-                    const midpoint = Math.ceil(orderedResults.length / 2);
-                    const columns = [
-                        orderedResults.slice(0, midpoint),
-                        orderedResults.slice(midpoint)
-                    ];
-                    
-                    return columns.map(columnResults => {
+                // Build text with proper breaks marked
+                return layoutStructure.map(line => {
+                    return line.map(column => {
                         let columnText = '';
-                        columnResults.forEach((result, index) => {
+                        column.forEach((result, index) => {
                             const text = transcriptionScript === 'arabic' 
                                 ? (result.glyph.arabic || result.glyph.name)
                                 : (result.glyph.transliteration || result.glyph.name);
                             
                             columnText += text;
                             
-                            if (viewMode === 'reading' && wordBoundaries.has(index)) {
-                                columnText += ' | ';
-                            } else if (index < columnResults.length - 1) {
+                            // Add space between glyphs within the same column
+                            if (index < column.length - 1) {
                                 columnText += ' ';
                             }
                         });
                         return columnText;
                     });
-                }
-                
-                // For horizontal display (LTR or RTL)
-                let transcription = '';
-                orderedResults.forEach((result, index) => {
-                    // Choose text based on script selection
-                    const text = transcriptionScript === 'arabic' 
-                        ? (result.glyph.arabic || result.glyph.name)
-                        : (result.glyph.transliteration || result.glyph.name);
-                    
-                    transcription += text;
-                    
-                    if (viewMode === 'reading' && wordBoundaries.has(index)) {
-                        transcription += ' | ';
-                    } else if (index < orderedResults.length - 1) {
-                        transcription += ' ';
-                    }
                 });
-
-                return transcription;
             };
 
             const exportTranscription = () => {
@@ -2449,6 +2443,69 @@
                     return newSet;
                 });
                 recordAction('toggle_word_boundary', { readingOrderIndex });
+            };
+
+            const toggleColumnBreak = (readingOrderIndex) => {
+                setColumnBreaks(prev => {
+                    const newSet = new Set(prev);
+                    newSet.has(readingOrderIndex) ? newSet.delete(readingOrderIndex) : newSet.add(readingOrderIndex);
+                    return newSet;
+                });
+                recordAction('toggle_column_break', { readingOrderIndex });
+            };
+
+            const toggleLineBreak = (readingOrderIndex) => {
+                setLineBreaks(prev => {
+                    const newSet = new Set(prev);
+                    newSet.has(readingOrderIndex) ? newSet.delete(readingOrderIndex) : newSet.add(readingOrderIndex);
+                    return newSet;
+                });
+                recordAction('toggle_line_break', { readingOrderIndex });
+            };
+
+            // Build 2D layout structure based on column and line breaks
+            const getLayoutStructure = () => {
+                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
+                const lines = [];
+                let currentLine = [];
+                let currentColumn = [];
+
+                orderedResults.forEach((result, index) => {
+                    currentColumn.push(result);
+
+                    if (columnBreaks.has(index)) {
+                        // End of column
+                        currentLine.push(currentColumn);
+                        currentColumn = [];
+                    }
+
+                    if (lineBreaks.has(index)) {
+                        // End of line
+                        if (currentColumn.length > 0) {
+                            currentLine.push(currentColumn);
+                            currentColumn = [];
+                        }
+                        if (currentLine.length > 0) {
+                            lines.push(currentLine);
+                            currentLine = [];
+                        }
+                    }
+                });
+
+                // Add any remaining glyphs
+                if (currentColumn.length > 0) {
+                    currentLine.push(currentColumn);
+                }
+                if (currentLine.length > 0) {
+                    lines.push(currentLine);
+                }
+
+                // If no breaks were marked, treat as single column in single line
+                if (lines.length === 0) {
+                    lines.push([orderedResults]);
+                }
+
+                return lines;
             };
 
             const handleDragStart = (e, index) => {
@@ -4203,7 +4260,12 @@
                                                 )}
                                                 <div className="flex-1">
                                                     <div className="font-medium text-gray-900 flex items-center gap-2">
-                                                        {result.glyph.name}
+                                                        <span>{result.glyph.name}</span>
+                                                        {result.glyph.arabic && (
+                                                            <span className="text-xl" style={{ fontFamily: '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' }}>
+                                                                {result.glyph.arabic}
+                                                            </span>
+                                                        )}
                                                         {result.corrected && (
                                                             <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-300">
                                                                 ✏️ Corrected
@@ -4287,13 +4349,29 @@
                                             ✗ Incorrect
                                         </button>
                                         {viewMode === 'reading' && (
-                                            <button 
-                                                onClick={() => toggleWordBoundary(displayIndex)} 
-                                                className={`px-3 py-1 text-xs rounded ${wordBoundaries.has(displayIndex) ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-                                                title="Mark word boundary after this glyph"
-                                            >
-                                                | Word Break
-                                            </button>
+                                            <>
+                                                <button 
+                                                    onClick={() => toggleWordBoundary(displayIndex)} 
+                                                    className={`px-3 py-1 text-xs rounded ${wordBoundaries.has(displayIndex) ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                                    title="Mark word boundary after this glyph"
+                                                >
+                                                    | Word Break
+                                                </button>
+                                                <button 
+                                                    onClick={() => toggleColumnBreak(displayIndex)} 
+                                                    className={`px-3 py-1 text-xs rounded ${columnBreaks.has(displayIndex) ? 'bg-indigo-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                                    title="Mark column break after this glyph"
+                                                >
+                                                    || Column Break
+                                                </button>
+                                                <button 
+                                                    onClick={() => toggleLineBreak(displayIndex)} 
+                                                    className={`px-3 py-1 text-xs rounded ${lineBreaks.has(displayIndex) ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                                    title="Mark line break after this glyph"
+                                                >
+                                                    --- Line Break
+                                                </button>
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -4377,14 +4455,18 @@
                                                     : (result.glyph.transliteration || result.glyph.name)
                                                 }
                                             </span>
-                                            {wordBoundaries.has(index) && <span className="text-blue-600 font-bold mx-1">|</span>}
-                                            {!wordBoundaries.has(index) && index < getReadingOrderedResults().length - 1 && <span className="text-gray-400">·</span>}
+                                            {lineBreaks.has(index) && <span className="text-purple-600 font-bold mx-2">---</span>}
+                                            {!lineBreaks.has(index) && columnBreaks.has(index) && <span className="text-indigo-600 font-bold mx-1">||</span>}
+                                            {!lineBreaks.has(index) && !columnBreaks.has(index) && wordBoundaries.has(index) && <span className="text-blue-600 font-bold mx-1">|</span>}
+                                            {!lineBreaks.has(index) && !columnBreaks.has(index) && !wordBoundaries.has(index) && index < getReadingOrderedResults().length - 1 && <span className="text-gray-400">·</span>}
                                         </span>
                                     ))}
                                 </div>
                             </div>
 
                             <div className="mt-3 text-xs text-gray-600">
+                                <span className="text-purple-600 font-bold">---</span> = line break &middot; 
+                                <span className="text-indigo-600 font-bold">||</span> = column break &middot; 
                                 <span className="text-blue-600 font-bold">|</span> = word boundary &middot; 
                                 <span className="text-gray-400">&middot;</span> = glyph separator
                             </div>
@@ -4404,6 +4486,17 @@
                             
                             {showEnhancedTranscription && (
                                 <>
+                                    <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-200 text-sm text-gray-700">
+                                        <div className="font-semibold mb-1">💡 How to use breaks:</div>
+                                        <div className="text-xs">
+                                            Use the break buttons on each glyph card (in reading mode) to mark the layout:
+                                            <span className="ml-2 text-blue-600 font-bold">|</span> Word boundary
+                                            <span className="ml-2 text-indigo-600 font-bold">||</span> End of column
+                                            <span className="ml-2 text-purple-600 font-bold">---</span> End of line
+                                            <br/>
+                                            The <span className="inline-block w-4 h-4 rounded-full bg-yellow-400 border border-yellow-600 text-xs text-center">N</span> numbers show reading order.
+                                        </div>
+                                    </div>
                                     <div className="mb-4 p-4 bg-white rounded-lg border border-purple-200">
                                         <div className="grid grid-cols-2 gap-4">
                                             {/* Script Selection */}
@@ -4453,41 +4546,59 @@
                                     {/* Transcription Display */}
                                     <div className="p-6 bg-white rounded-lg border-2 border-purple-300 shadow-inner">
                                         {transcriptionFormat.startsWith('vertical') ? (
-                                            // Vertical columns display
-                                            <div className="flex gap-8 justify-center">
-                                                {getEnhancedTranscription().map((columnText, colIndex) => (
-                                                    <div 
-                                                        key={colIndex}
-                                                        className="font-mono leading-relaxed"
-                                                        style={{
-                                                            writingMode: transcriptionFormat === 'vertical-rl' ? 'vertical-rl' : 'vertical-lr',
-                                                            minHeight: '300px',
-                                                            maxHeight: '400px',
-                                                            overflowY: 'auto',
-                                                            fontSize: transcriptionScript === 'arabic' ? '2rem' : '1.5rem',
-                                                            fontFamily: transcriptionScript === 'arabic' 
-                                                                ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
-                                                                : '"Courier New", monospace'
-                                                        }}
-                                                    >
-                                                        {columnText}
+                                            // Vertical display - each line becomes a row of columns
+                                            <div className="flex flex-col gap-8">
+                                                {getEnhancedTranscription().map((line, lineIndex) => (
+                                                    <div key={lineIndex} className="flex gap-8 justify-center">
+                                                        {line.map((columnText, colIndex) => (
+                                                            <div 
+                                                                key={colIndex}
+                                                                className="font-mono leading-relaxed"
+                                                                style={{
+                                                                    writingMode: transcriptionFormat === 'vertical-rl' ? 'vertical-rl' : 'vertical-lr',
+                                                                    textOrientation: 'upright',
+                                                                    minHeight: '200px',
+                                                                    fontSize: transcriptionScript === 'arabic' ? '2rem' : '1.5rem',
+                                                                    fontFamily: transcriptionScript === 'arabic' 
+                                                                        ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
+                                                                        : '"Courier New", monospace'
+                                                                }}
+                                                            >
+                                                                {columnText}
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 ))}
                                             </div>
                                         ) : (
-                                            // Horizontal display (LTR or RTL)
-                                            <div 
-                                                className="font-mono leading-relaxed"
-                                                style={{
-                                                    direction: transcriptionFormat === 'arabic-rtl' ? 'rtl' : 'ltr',
-                                                    textAlign: transcriptionFormat === 'arabic-rtl' ? 'right' : 'left',
-                                                    fontSize: transcriptionScript === 'arabic' ? '2rem' : '1.5rem',
-                                                    fontFamily: transcriptionScript === 'arabic' 
-                                                        ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
-                                                        : '"Courier New", monospace'
-                                                }}
-                                            >
-                                                {getEnhancedTranscription()}
+                                            // Horizontal display (LTR or RTL) - show lines stacked vertically
+                                            <div className="flex flex-col gap-4">
+                                                {getEnhancedTranscription().map((line, lineIndex) => (
+                                                    <div 
+                                                        key={lineIndex}
+                                                        className="flex gap-6"
+                                                        style={{
+                                                            direction: transcriptionFormat === 'arabic-rtl' ? 'rtl' : 'ltr',
+                                                            justifyContent: transcriptionFormat === 'arabic-rtl' ? 'flex-end' : 'flex-start'
+                                                        }}
+                                                    >
+                                                        {line.map((columnText, colIndex) => (
+                                                            <div 
+                                                                key={colIndex}
+                                                                className="font-mono leading-relaxed"
+                                                                style={{
+                                                                    fontSize: transcriptionScript === 'arabic' ? '2rem' : '1.5rem',
+                                                                    fontFamily: transcriptionScript === 'arabic' 
+                                                                        ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
+                                                                        : '"Courier New", monospace'
+                                                                }}
+                                                            >
+                                                                {columnText}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ))}
+                                            </div>
                                             </div>
                                         )}
                                     </div>
@@ -4495,8 +4606,11 @@
                                     <div className="mt-3 flex gap-2 justify-end">
                                         <button
                                             onClick={() => {
-                                                const transcription = getEnhancedTranscription();
-                                                const text = Array.isArray(transcription) ? transcription.join('\n\n--- Column Break ---\n\n') : transcription;
+                                                const layoutStructure = getEnhancedTranscription();
+                                                // Flatten to text with proper breaks
+                                                const text = layoutStructure.map(line => 
+                                                    line.join(' || ')  // Columns separated by ||
+                                                ).join('\n---\n');  // Lines separated by ---
                                                 navigator.clipboard.writeText(text);
                                                 alert('Transcription copied to clipboard!');
                                             }}
@@ -4506,8 +4620,11 @@
                                         </button>
                                         <button
                                             onClick={() => {
-                                                const transcription = getEnhancedTranscription();
-                                                const text = Array.isArray(transcription) ? transcription.join('\n\n--- Column Break ---\n\n') : transcription;
+                                                const layoutStructure = getEnhancedTranscription();
+                                                // Flatten to text with proper breaks
+                                                const text = layoutStructure.map(line => 
+                                                    line.join(' || ')  // Columns separated by ||
+                                                ).join('\n---\n');  // Lines separated by ---
                                                 const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
                                                 const url = URL.createObjectURL(blob);
                                                 const a = document.createElement('a');
