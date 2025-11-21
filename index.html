@@ -142,6 +142,11 @@
             const [isDraggingTranscription, setIsDraggingTranscription] = useState(false);
             const [transcriptionDragStart, setTranscriptionDragStart] = useState({ x: 0, y: 0 });
             const [showTranscription, setShowTranscription] = useState(true); // Show/hide transcription box
+            
+            // Enhanced Transcription Display States
+            const [showEnhancedTranscription, setShowEnhancedTranscription] = useState(false);
+            const [transcriptionFormat, setTranscriptionFormat] = useState('english-ltr'); // english-ltr, arabic-rtl, vertical-rl, vertical-lr
+            const [transcriptionScript, setTranscriptionScript] = useState('english'); // english or arabic
 
             const MASTER_PASTE_URL = ''; // Will update after first upload
             const MASTER_PASTE_RAW_URL = ''; // Will update after first upload
@@ -1657,6 +1662,29 @@
             // ============================================
             // EXPORT FUNCTIONS
             // ============================================
+
+            // Generate transcription text based on format and script
+            const getEnhancedTranscription = () => {
+                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
+                let transcription = '';
+
+                orderedResults.forEach((result, index) => {
+                    // Choose text based on script selection
+                    const text = transcriptionScript === 'arabic' 
+                        ? (result.glyph.arabic || result.glyph.name)
+                        : (result.glyph.transliteration || result.glyph.name);
+                    
+                    transcription += text;
+                    
+                    if (viewMode === 'reading' && wordBoundaries.has(index)) {
+                        transcription += ' | ';
+                    } else if (index < orderedResults.length - 1) {
+                        transcription += ' ';
+                    }
+                });
+
+                return transcription;
+            };
 
             const exportTranscription = () => {
                 const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
@@ -4320,6 +4348,122 @@
                                 <span className="text-blue-600 font-bold">|</span> = word boundary &middot; 
                                 <span className="text-gray-400">&middot;</span> = glyph separator
                             </div>
+                        </div>
+                    )}
+
+                    {/* Enhanced Transcription Display */}
+                    {viewMode === 'reading' && recognitionResults.length > 0 && (
+                        <div className="mt-6 p-4 bg-purple-50 rounded-lg border-2 border-purple-300">
+                            <button
+                                onClick={() => setShowEnhancedTranscription(!showEnhancedTranscription)}
+                                className="flex items-center gap-2 font-semibold text-gray-900 hover:text-gray-700 mb-3"
+                            >
+                                <span>{showEnhancedTranscription ? '▼' : '▶'}</span>
+                                <h3>📜 Enhanced Transcription Display</h3>
+                            </button>
+                            
+                            {showEnhancedTranscription && (
+                                <>
+                                    <div className="mb-4 p-4 bg-white rounded-lg border border-purple-200">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {/* Script Selection */}
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">Script:</label>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => setTranscriptionScript('english')}
+                                                        className={`px-4 py-2 rounded text-sm font-medium ${
+                                                            transcriptionScript === 'english' 
+                                                                ? 'bg-purple-500 text-white' 
+                                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                        }`}
+                                                    >
+                                                        English (abc)
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setTranscriptionScript('arabic')}
+                                                        className={`px-4 py-2 rounded text-sm font-medium ${
+                                                            transcriptionScript === 'arabic' 
+                                                                ? 'bg-purple-500 text-white' 
+                                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                        }`}
+                                                    >
+                                                        Arabic (ع ب ت)
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Format Selection */}
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">Direction:</label>
+                                                <select
+                                                    value={transcriptionFormat}
+                                                    onChange={(e) => setTranscriptionFormat(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                                                >
+                                                    <option value="english-ltr">→ Left to Right</option>
+                                                    <option value="arabic-rtl">← Right to Left</option>
+                                                    <option value="vertical-rl">↓ Top to Bottom (columns →)</option>
+                                                    <option value="vertical-lr">↓ Top to Bottom (columns ←)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Transcription Display */}
+                                    <div className="p-6 bg-white rounded-lg border-2 border-purple-300 shadow-inner">
+                                        <div 
+                                            className="font-mono text-2xl leading-relaxed"
+                                            style={{
+                                                direction: transcriptionFormat === 'arabic-rtl' ? 'rtl' : 'ltr',
+                                                writingMode: transcriptionFormat.startsWith('vertical') 
+                                                    ? (transcriptionFormat === 'vertical-rl' ? 'vertical-rl' : 'vertical-lr')
+                                                    : 'horizontal-tb',
+                                                textAlign: transcriptionFormat === 'arabic-rtl' ? 'right' : 'left',
+                                                minHeight: transcriptionFormat.startsWith('vertical') ? '300px' : 'auto',
+                                                maxHeight: transcriptionFormat.startsWith('vertical') ? '400px' : 'none',
+                                                overflowX: transcriptionFormat.startsWith('vertical') ? 'auto' : 'hidden',
+                                                overflowY: transcriptionFormat.startsWith('vertical') ? 'hidden' : 'auto',
+                                                whiteSpace: transcriptionFormat.startsWith('vertical') ? 'nowrap' : 'normal',
+                                                fontFamily: transcriptionScript === 'arabic' 
+                                                    ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
+                                                    : '"Courier New", monospace'
+                                            }}
+                                        >
+                                            {getEnhancedTranscription()}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 flex gap-2 justify-end">
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(getEnhancedTranscription());
+                                                alert('Transcription copied to clipboard!');
+                                            }}
+                                            className="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+                                        >
+                                            📋 Copy Text
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const text = getEnhancedTranscription();
+                                                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                                                const url = URL.createObjectURL(blob);
+                                                const a = document.createElement('a');
+                                                a.href = url;
+                                                a.download = `hakli_transcription_${transcriptionScript}_${transcriptionFormat}_${new Date().toISOString().slice(0, 10)}.txt`;
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                document.body.removeChild(a);
+                                                URL.revokeObjectURL(url);
+                                            }}
+                                            className="px-4 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600"
+                                        >
+                                            💾 Export TXT
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
 
