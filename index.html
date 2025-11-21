@@ -1666,8 +1666,36 @@
             // Generate transcription text based on format and script
             const getEnhancedTranscription = () => {
                 const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
+                
+                // For vertical columns, split into 2 columns
+                if (transcriptionFormat.startsWith('vertical')) {
+                    const midpoint = Math.ceil(orderedResults.length / 2);
+                    const columns = [
+                        orderedResults.slice(0, midpoint),
+                        orderedResults.slice(midpoint)
+                    ];
+                    
+                    return columns.map(columnResults => {
+                        let columnText = '';
+                        columnResults.forEach((result, index) => {
+                            const text = transcriptionScript === 'arabic' 
+                                ? (result.glyph.arabic || result.glyph.name)
+                                : (result.glyph.transliteration || result.glyph.name);
+                            
+                            columnText += text;
+                            
+                            if (viewMode === 'reading' && wordBoundaries.has(index)) {
+                                columnText += ' | ';
+                            } else if (index < columnResults.length - 1) {
+                                columnText += ' ';
+                            }
+                        });
+                        return columnText;
+                    });
+                }
+                
+                // For horizontal display (LTR or RTL)
                 let transcription = '';
-
                 orderedResults.forEach((result, index) => {
                     // Choose text based on script selection
                     const text = transcriptionScript === 'arabic' 
@@ -2800,7 +2828,7 @@
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
                         <p className="text-sm text-gray-500">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
-                        <p className="text-sm text-gray-500">beta v251120 ©marty heaton</p>
+                        <p className="text-sm text-gray-500">beta v251121 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -4333,10 +4361,22 @@
                                 </div>
                             </div>
                             <div className="p-4 bg-white rounded border-2 border-blue-300 shadow-inner">
-                                <div className="font-mono text-lg leading-relaxed">
+                                <div 
+                                    className="font-mono text-lg leading-relaxed"
+                                    style={{
+                                        fontFamily: showArabicLabels 
+                                            ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
+                                            : '"Courier New", monospace'
+                                    }}
+                                >
                                     {getReadingOrderedResults().map((result, index) => (
                                         <span key={index}>
-                                            <span className="text-gray-900">{result.glyph.transliteration || result.glyph.name}</span>
+                                            <span className="text-gray-900">
+                                                {showArabicLabels 
+                                                    ? (result.glyph.arabic || result.glyph.name)
+                                                    : (result.glyph.transliteration || result.glyph.name)
+                                                }
+                                            </span>
                                             {wordBoundaries.has(index) && <span className="text-blue-600 font-bold mx-1">|</span>}
                                             {!wordBoundaries.has(index) && index < getReadingOrderedResults().length - 1 && <span className="text-gray-400">·</span>}
                                         </span>
@@ -4412,32 +4452,52 @@
 
                                     {/* Transcription Display */}
                                     <div className="p-6 bg-white rounded-lg border-2 border-purple-300 shadow-inner">
-                                        <div 
-                                            className="font-mono text-2xl leading-relaxed"
-                                            style={{
-                                                direction: transcriptionFormat === 'arabic-rtl' ? 'rtl' : 'ltr',
-                                                writingMode: transcriptionFormat.startsWith('vertical') 
-                                                    ? (transcriptionFormat === 'vertical-rl' ? 'vertical-rl' : 'vertical-lr')
-                                                    : 'horizontal-tb',
-                                                textAlign: transcriptionFormat === 'arabic-rtl' ? 'right' : 'left',
-                                                minHeight: transcriptionFormat.startsWith('vertical') ? '300px' : 'auto',
-                                                maxHeight: transcriptionFormat.startsWith('vertical') ? '400px' : 'none',
-                                                overflowX: transcriptionFormat.startsWith('vertical') ? 'auto' : 'hidden',
-                                                overflowY: transcriptionFormat.startsWith('vertical') ? 'hidden' : 'auto',
-                                                whiteSpace: transcriptionFormat.startsWith('vertical') ? 'nowrap' : 'normal',
-                                                fontFamily: transcriptionScript === 'arabic' 
-                                                    ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
-                                                    : '"Courier New", monospace'
-                                            }}
-                                        >
-                                            {getEnhancedTranscription()}
-                                        </div>
+                                        {transcriptionFormat.startsWith('vertical') ? (
+                                            // Vertical columns display
+                                            <div className="flex gap-8 justify-center">
+                                                {getEnhancedTranscription().map((columnText, colIndex) => (
+                                                    <div 
+                                                        key={colIndex}
+                                                        className="font-mono leading-relaxed"
+                                                        style={{
+                                                            writingMode: transcriptionFormat === 'vertical-rl' ? 'vertical-rl' : 'vertical-lr',
+                                                            minHeight: '300px',
+                                                            maxHeight: '400px',
+                                                            overflowY: 'auto',
+                                                            fontSize: transcriptionScript === 'arabic' ? '2rem' : '1.5rem',
+                                                            fontFamily: transcriptionScript === 'arabic' 
+                                                                ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
+                                                                : '"Courier New", monospace'
+                                                        }}
+                                                    >
+                                                        {columnText}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            // Horizontal display (LTR or RTL)
+                                            <div 
+                                                className="font-mono leading-relaxed"
+                                                style={{
+                                                    direction: transcriptionFormat === 'arabic-rtl' ? 'rtl' : 'ltr',
+                                                    textAlign: transcriptionFormat === 'arabic-rtl' ? 'right' : 'left',
+                                                    fontSize: transcriptionScript === 'arabic' ? '2rem' : '1.5rem',
+                                                    fontFamily: transcriptionScript === 'arabic' 
+                                                        ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
+                                                        : '"Courier New", monospace'
+                                                }}
+                                            >
+                                                {getEnhancedTranscription()}
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="mt-3 flex gap-2 justify-end">
                                         <button
                                             onClick={() => {
-                                                navigator.clipboard.writeText(getEnhancedTranscription());
+                                                const transcription = getEnhancedTranscription();
+                                                const text = Array.isArray(transcription) ? transcription.join('\n\n--- Column Break ---\n\n') : transcription;
+                                                navigator.clipboard.writeText(text);
                                                 alert('Transcription copied to clipboard!');
                                             }}
                                             className="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
@@ -4446,7 +4506,8 @@
                                         </button>
                                         <button
                                             onClick={() => {
-                                                const text = getEnhancedTranscription();
+                                                const transcription = getEnhancedTranscription();
+                                                const text = Array.isArray(transcription) ? transcription.join('\n\n--- Column Break ---\n\n') : transcription;
                                                 const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
                                                 const url = URL.createObjectURL(blob);
                                                 const a = document.createElement('a');
