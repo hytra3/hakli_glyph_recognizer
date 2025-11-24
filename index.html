@@ -2015,217 +2015,183 @@
                 alert('HTML report exported successfully!');
             };
 
-// Simplified bilingual export function - replace lines 2018-2350 in index.html
+            const exportBilingualHtmlReport = () => {
+                // Get bilingual transcriptions
+                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
+                
+                // Build English transcription
+                let transcriptionEn = '';
+                orderedResults.forEach((result, index) => {
+                    transcriptionEn += result.glyph.transliteration || result.glyph.name;
+                    if (viewMode === 'reading') {
+                        if (lineBreaks.has(index)) {
+                            transcriptionEn += '\n';
+                        } else if (columnBreaks.has(index)) {
+                            transcriptionEn += ' || ';
+                        } else if (wordBoundaries.has(index)) {
+                            transcriptionEn += ' | ';
+                        } else if (index < orderedResults.length - 1) {
+                            transcriptionEn += ' ';
+                        }
+                    } else {
+                        transcriptionEn += ' ';
+                    }
+                });
 
-const exportBilingualHtmlReport = () => {
-    // Get bilingual transcriptions
-    const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
-    
-    // Build English transcription
-    let transcriptionEn = '';
-    orderedResults.forEach((result, index) => {
-        transcriptionEn += result.glyph.transliteration || result.glyph.name;
-        if (viewMode === 'reading') {
-            if (lineBreaks.has(index)) {
-                transcriptionEn += '\n';
-            } else if (columnBreaks.has(index)) {
-                transcriptionEn += ' || ';
-            } else if (wordBoundaries.has(index)) {
-                transcriptionEn += ' | ';
-            } else if (index < orderedResults.length - 1) {
-                transcriptionEn += ' ';
-            }
-        } else {
-            transcriptionEn += ' ';
-        }
-    });
+                // Build Arabic transcription
+                let transcriptionAr = '';
+                orderedResults.forEach((result, index) => {
+                    transcriptionAr += result.glyph.arabic || result.glyph.transliteration || result.glyph.name;
+                    if (viewMode === 'reading') {
+                        if (lineBreaks.has(index)) {
+                            transcriptionAr += '\n';
+                        } else if (columnBreaks.has(index)) {
+                            transcriptionAr += ' || ';
+                        } else if (wordBoundaries.has(index)) {
+                            transcriptionAr += ' | ';
+                        } else if (index < orderedResults.length - 1) {
+                            transcriptionAr += ' ';
+                        }
+                    } else {
+                        transcriptionAr += ' ';
+                    }
+                });
 
-    // Build Arabic transcription
-    let transcriptionAr = '';
-    orderedResults.forEach((result, index) => {
-        transcriptionAr += result.glyph.arabic || result.glyph.transliteration || result.glyph.name;
-        if (viewMode === 'reading') {
-            if (lineBreaks.has(index)) {
-                transcriptionAr += '\n';
-            } else if (columnBreaks.has(index)) {
-                transcriptionAr += ' || ';
-            } else if (wordBoundaries.has(index)) {
-                transcriptionAr += ' | ';
-            } else if (index < orderedResults.length - 1) {
-                transcriptionAr += ' ';
-            }
-        } else {
-            transcriptionAr += ' ';
-        }
-    });
+                // Prepare glyph data for report
+                const glyphsData = orderedResults.map((result, index) => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const img = imageRef.current;
+                    const pos = result.position;
+                    
+                    canvas.width = pos.width;
+                    canvas.height = pos.height;
+                    ctx.drawImage(img, pos.x, pos.y, pos.width, pos.height, 0, 0, pos.width, pos.height);
+                    
+                    return {
+                        name: result.glyph.name,
+                        letterEn: result.glyph.transliteration || result.glyph.name,
+                        letterAr: result.glyph.arabic || result.glyph.transliteration || result.glyph.name,
+                        image: canvas.toDataURL(),
+                        order: index + 1
+                    };
+                });
 
-    // Prepare glyph data for report
-    const glyphsData = orderedResults.map((result, index) => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = imageRef.current;
-        const pos = result.position;
-        
-        canvas.width = pos.width;
-        canvas.height = pos.height;
-        ctx.drawImage(img, pos.x, pos.y, pos.width, pos.height, 0, 0, pos.width, pos.height);
-        
-        return {
-            name: result.glyph.name,
-            letterEn: result.glyph.transliteration || result.glyph.name,
-            letterAr: result.glyph.arabic || result.glyph.transliteration || result.glyph.name,
-            image: canvas.toDataURL(),
-            order: index + 1
-        };
-    });
+                // Get reading direction label
+                const getDirectionLabel = () => {
+                    switch(readingDirection) {
+                        case 'ltr': return 'Left to Right';
+                        case 'rtl': return 'Right to Left';
+                        case 'ttb': return 'Top to Bottom';
+                        case 'btt': return 'Bottom to Top';
+                        default: return 'Detection Order';
+                    }
+                };
 
-    // Get reading direction label
-    const getDirectionLabel = () => {
-        switch(readingDirection) {
-            case 'ltr': return 'Left to Right';
-            case 'rtl': return 'Right to Left';
-            case 'ttb': return 'Top to Bottom';
-            case 'btt': return 'Bottom to Top';
-            default: return 'Detection Order';
-        }
-    };
+                // Build the report data object
+                const reportData = {
+                    image: image,
+                    glyphs: glyphsData,
+                    transcriptionEn: transcriptionEn,
+                    transcriptionAr: transcriptionAr,
+                    translationEn: translationEnglish || 'No English translation provided.',
+                    translationAr: translationArabic || 'لم يتم توفير ترجمة عربية',
+                    stats: {
+                        totalGlyphs: recognitionResults.length,
+                        uniqueGlyphs: new Set(recognitionResults.map(r => r.glyph.name)).size,
+                        words: Array.from(wordBoundaries).length + 1,
+                        lines: Array.from(lineBreaks).length + 1
+                    },
+                    date: new Date().toLocaleDateString(),
+                    readingDirection: getDirectionLabel()
+                };
 
-    // Build the report data object
-    const reportData = {
-        image: image,
-        glyphs: glyphsData,
-        transcriptionEn: transcriptionEn,
-        transcriptionAr: transcriptionAr,
-        transcriptionEnText: transcriptionEn.replace(/\|/g, '').replace(/\n/g, ' ').trim(),
-        transcriptionArText: transcriptionAr.replace(/\|/g, '').replace(/\n/g, ' ').trim(),
-        translationEn: translationEnglish || 'No English translation provided.',
-        translationAr: translationArabic || 'لم يتم توفير ترجمة عربية',
-        stats: {
-            totalGlyphs: recognitionResults.length,
-            uniqueGlyphs: new Set(recognitionResults.map(r => r.glyph.name)).size,
-            words: Array.from(wordBoundaries).length + 1,
-            lines: Array.from(lineBreaks).length + 1
-        },
-        date: new Date().toLocaleDateString(),
-        readingDirection: getDirectionLabel(),
-        location: 'Dhofar Region, Oman'
-    };
+                // Escape function for HTML
+                const escapeHtml = (text) => {
+                    return String(text)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
+                };
 
-    // Use fetch to load the template (if available) or build a simple HTML
-    // For now, create a simple but functional HTML report
-    const reportHTML = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Hakli Report</title>
-<style>
-body{font-family:Arial,sans-serif;padding:20px;background:#f5f5f5}
-.container{max-width:1200px;margin:0 auto;background:white;padding:40px;border-radius:10px}
-h1{color:#667eea;text-align:center}
-.lang-toggle{text-align:center;margin:20px 0}
-.lang-btn{padding:10px 20px;margin:5px;border:none;background:#667eea;color:white;border-radius:5px;cursor:pointer}
-.lang-btn.active{background:#764ba2}
-.section{margin:30px 0;padding:20px;background:#f9f9f9;border-radius:8px}
-.section h2{color:#333;border-bottom:2px solid #667eea;padding-bottom:10px}
-.glyph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:15px;margin-top:20px}
-.glyph-card{background:white;padding:15px;text-align:center;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
-.glyph-img{width:60px;height:60px;margin:10px auto}
-.transcription{padding:20px;background:white;border-radius:8px;font-size:1.2em;line-height:1.8;white-space:pre-wrap}
-.arabic{direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;font-size:1.4em}
-.hidden{display:none}
-img{max-width:100%;height:auto}
-</style>
-</head>
-<body>
-<div class="container">
-<h1>🏺 Hakli Inscription Report</h1>
-<div class="lang-toggle">
-<button class="lang-btn active" onclick="setLang('both')">🌍 Both</button>
-<button class="lang-btn" onclick="setLang('en')">🇺🇸 English</button>
-<button class="lang-btn" onclick="setLang('ar')">🇴🇲 Arabic</button>
-</div>
-<div class="section">
-<h2>📷 Image</h2>
-<img id="img" src="${reportData.image}">
-</div>
-<div class="section">
-<h2>🔑 Glyphs (${reportData.stats.totalGlyphs} total)</h2>
-<div class="glyph-grid" id="glyphs"></div>
-</div>
-<div class="section en">
-<h2>✍️ English Transliteration</h2>
-<div class="transcription">${reportData.transcriptionEn}</div>
-</div>
-<div class="section ar">
-<h2>✍️ Arabic Transliteration</h2>
-<div class="transcription arabic">${reportData.transcriptionAr}</div>
-</div>
-<div class="section en">
-<h2>🌍 English Translation</h2>
-<div class="transcription">${reportData.translationEn}</div>
-</div>
-<div class="section ar">
-<h2>🌍 Arabic Translation</h2>
-<div class="transcription arabic">${reportData.translationAr}</div>
-</div>
-<div class="section">
-<h2>📊 Statistics</h2>
-<p><strong>Total Glyphs:</strong> ${reportData.stats.totalGlyphs}</p>
-<p><strong>Unique Glyphs:</strong> ${reportData.stats.uniqueGlyphs}</p>
-<p><strong>Words:</strong> ${reportData.stats.words}</p>
-<p><strong>Lines:</strong> ${reportData.stats.lines}</p>
-<p><strong>Date:</strong> ${reportData.date}</p>
-<p><strong>Direction:</strong> ${reportData.readingDirection}</p>
-</div>
-</div>
-<script>
-const glyphs=${JSON.stringify(reportData.glyphs)};
-const grid=document.getElementById('glyphs');
-glyphs.forEach(g=>{
-const card=document.createElement('div');
-card.className='glyph-card';
-card.innerHTML='<img class="glyph-img" src="'+g.image+'"><div>'+g.letterEn+' / '+g.letterAr+'</div><div style="font-size:0.8em;color:#666">'+g.name+'</div>';
-grid.appendChild(card);
-});
-function setLang(lang){
-document.querySelectorAll('.lang-btn').forEach(b=>b.classList.remove('active'));
-event.target.classList.add('active');
-const ens=document.querySelectorAll('.en');
-const ars=document.querySelectorAll('.ar');
-if(lang==='both'){
-ens.forEach(e=>e.classList.remove('hidden'));
-ars.forEach(a=>a.classList.remove('hidden'));
-}else if(lang==='en'){
-ens.forEach(e=>e.classList.remove('hidden'));
-ars.forEach(a=>a.classList.add('hidden'));
-}else{
-ens.forEach(e=>e.classList.add('hidden'));
-ars.forEach(a=>a.classList.remove('hidden'));
-}
-}
-</script>
-</body>
-</html>`;
+                // Build HTML using string concatenation
+                let reportHTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Hakli Report</title><style>';
+                reportHTML += 'body{font-family:Arial,sans-serif;padding:20px;background:#f5f5f5}';
+                reportHTML += '.container{max-width:1200px;margin:0 auto;background:white;padding:40px;border-radius:10px}';
+                reportHTML += 'h1{color:#667eea;text-align:center}';
+                reportHTML += '.lang-toggle{text-align:center;margin:20px 0}';
+                reportHTML += '.lang-btn{padding:10px 20px;margin:5px;border:none;background:#667eea;color:white;border-radius:5px;cursor:pointer}';
+                reportHTML += '.lang-btn.active{background:#764ba2}';
+                reportHTML += '.section{margin:30px 0;padding:20px;background:#f9f9f9;border-radius:8px}';
+                reportHTML += '.section h2{color:#333;border-bottom:2px solid #667eea;padding-bottom:10px}';
+                reportHTML += '.glyph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:15px;margin-top:20px}';
+                reportHTML += '.glyph-card{background:white;padding:15px;text-align:center;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}';
+                reportHTML += '.glyph-img{width:60px;height:60px;margin:10px auto}';
+                reportHTML += '.transcription{padding:20px;background:white;border-radius:8px;font-size:1.2em;line-height:1.8;white-space:pre-wrap}';
+                reportHTML += '.arabic{direction:rtl;font-family:"Traditional Arabic",Arial,sans-serif;font-size:1.4em}';
+                reportHTML += '.hidden{display:none}';
+                reportHTML += 'img{max-width:100%;height:auto}';
+                reportHTML += '</style></head><body><div class="container">';
+                reportHTML += '<h1>🏺 Hakli Inscription Report</h1>';
+                reportHTML += '<div class="lang-toggle">';
+                reportHTML += '<button class="lang-btn active" onclick="setLang(\'both\')">🌍 Both</button>';
+                reportHTML += '<button class="lang-btn" onclick="setLang(\'en\')">🇺🇸 English</button>';
+                reportHTML += '<button class="lang-btn" onclick="setLang(\'ar\')">🇴🇲 Arabic</button>';
+                reportHTML += '</div>';
+                reportHTML += '<div class="section"><h2>📷 Image</h2><img src="' + reportData.image + '"></div>';
+                reportHTML += '<div class="section"><h2>🔑 Glyphs (' + reportData.stats.totalGlyphs + ' total)</h2><div class="glyph-grid" id="glyphs"></div></div>';
+                reportHTML += '<div class="section en"><h2>✍️ English Transliteration</h2><div class="transcription">' + escapeHtml(reportData.transcriptionEn) + '</div></div>';
+                reportHTML += '<div class="section ar"><h2>✍️ Arabic Transliteration</h2><div class="transcription arabic">' + escapeHtml(reportData.transcriptionAr) + '</div></div>';
+                reportHTML += '<div class="section en"><h2>🌍 English Translation</h2><div class="transcription">' + escapeHtml(reportData.translationEn) + '</div></div>';
+                reportHTML += '<div class="section ar"><h2>🌍 Arabic Translation</h2><div class="transcription arabic">' + escapeHtml(reportData.translationAr) + '</div></div>';
+                reportHTML += '<div class="section"><h2>📊 Statistics</h2>';
+                reportHTML += '<p><strong>Total Glyphs:</strong> ' + reportData.stats.totalGlyphs + '</p>';
+                reportHTML += '<p><strong>Unique Glyphs:</strong> ' + reportData.stats.uniqueGlyphs + '</p>';
+                reportHTML += '<p><strong>Words:</strong> ' + reportData.stats.words + '</p>';
+                reportHTML += '<p><strong>Lines:</strong> ' + reportData.stats.lines + '</p>';
+                reportHTML += '<p><strong>Date:</strong> ' + reportData.date + '</p>';
+                reportHTML += '<p><strong>Direction:</strong> ' + reportData.readingDirection + '</p>';
+                reportHTML += '</div></div><script>';
+                reportHTML += 'const glyphs=' + JSON.stringify(reportData.glyphs) + ';';
+                reportHTML += 'const grid=document.getElementById("glyphs");';
+                reportHTML += 'glyphs.forEach(g=>{';
+                reportHTML += 'const card=document.createElement("div");';
+                reportHTML += 'card.className="glyph-card";';
+                reportHTML += 'card.innerHTML="<img class=\\"glyph-img\\" src=\\""+g.image+"\\"><div>"+g.letterEn+" / "+g.letterAr+"</div><div style=\\"font-size:0.8em;color:#666\\">"+g.name+"</div>";';
+                reportHTML += 'grid.appendChild(card);';
+                reportHTML += '});';
+                reportHTML += 'function setLang(lang){';
+                reportHTML += 'document.querySelectorAll(".lang-btn").forEach(b=>b.classList.remove("active"));';
+                reportHTML += 'event.target.classList.add("active");';
+                reportHTML += 'const ens=document.querySelectorAll(".en");';
+                reportHTML += 'const ars=document.querySelectorAll(".ar");';
+                reportHTML += 'if(lang==="both"){ens.forEach(e=>e.classList.remove("hidden"));ars.forEach(a=>a.classList.remove("hidden"));}';
+                reportHTML += 'else if(lang==="en"){ens.forEach(e=>e.classList.remove("hidden"));ars.forEach(a=>a.classList.add("hidden"));}';
+                reportHTML += 'else{ens.forEach(e=>e.classList.add("hidden"));ars.forEach(a=>a.classList.remove("hidden"));}';
+                reportHTML += '}';
+                reportHTML += '</script></body></html>';
 
-    // Download
-    const blob = new Blob([reportHTML], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'hakli_bilingual_report_' + new Date().toISOString().slice(0, 10) + '.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+                // Download
+                const blob = new Blob([reportHTML], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'hakli_bilingual_report_' + new Date().toISOString().slice(0, 10) + '.html';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
 
-    recordAction('export_bilingual_html_report', {
-        glyphCount: recognitionResults.length,
-        hasEnglishTranslation: !!translationEnglish,
-        hasArabicTranslation: !!translationArabic
-    });
+                recordAction('export_bilingual_html_report', {
+                    glyphCount: recognitionResults.length,
+                    hasEnglishTranslation: !!translationEnglish,
+                    hasArabicTranslation: !!translationArabic
+                });
 
-    alert('✅ Bilingual HTML report exported successfully!');
-};
+                alert('✅ Bilingual HTML report exported successfully!');
+            };
                 const newHistory = stateHistory.slice(0, historyIndex + 1);
                 newHistory.push(snapshot);
                 
