@@ -3354,7 +3354,12 @@
                                                     <input
                                                         type="checkbox"
                                                         checked={useConfidenceFilter}
-                                                        onChange={(e) => setUseConfidenceFilter(e.target.checked)}
+                                                        onChange={(e) => {
+                                                            setUseConfidenceFilter(e.target.checked);
+                                                            if (e.target.checked) {
+                                                                setShowConfidenceFilter(true); // Auto-expand when enabling
+                                                            }
+                                                        }}
                                                         className="w-4 h-4"
                                                     />
                                                     <span className="text-sm font-medium text-gray-700">Enable Filter</span>
