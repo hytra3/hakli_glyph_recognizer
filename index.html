@@ -2015,194 +2015,212 @@
                 alert('HTML report exported successfully!');
             };
 
-            const exportBilingualHtmlReport = () => {
-                // Get bilingual transcriptions
+            const copyTranscriptionToClipboard = () => {
                 const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
-                
-                // Build English transcription
-                let transcriptionEn = '';
+                let transcription = '';
+
                 orderedResults.forEach((result, index) => {
-                    transcriptionEn += result.glyph.transliteration || result.glyph.name;
-                    if (viewMode === 'reading') {
-                        if (lineBreaks.has(index)) {
-                            transcriptionEn += '\n';
-                        } else if (columnBreaks.has(index)) {
-                            transcriptionEn += ' || ';
-                        } else if (wordBoundaries.has(index)) {
-                            transcriptionEn += ' | ';
-                        } else if (index < orderedResults.length - 1) {
-                            transcriptionEn += ' ';
-                        }
-                    } else {
-                        transcriptionEn += ' ';
+                    transcription += result.glyph.transliteration || result.glyph.name;
+                    if (viewMode === 'reading' && wordBoundaries.has(index)) {
+                        transcription += ' | ';
+                    } else if (index < orderedResults.length - 1) {
+                        transcription += ' ';
                     }
                 });
 
-                // Build Arabic transcription
-                let transcriptionAr = '';
-                orderedResults.forEach((result, index) => {
-                    transcriptionAr += result.glyph.arabic || result.glyph.transliteration || result.glyph.name;
-                    if (viewMode === 'reading') {
-                        if (lineBreaks.has(index)) {
-                            transcriptionAr += '\n';
-                        } else if (columnBreaks.has(index)) {
-                            transcriptionAr += ' || ';
-                        } else if (wordBoundaries.has(index)) {
-                            transcriptionAr += ' | ';
-                        } else if (index < orderedResults.length - 1) {
-                            transcriptionAr += ' ';
-                        }
-                    } else {
-                        transcriptionAr += ' ';
-                    }
+                navigator.clipboard.writeText(transcription).then(() => {
+                    alert('Transcription copied to clipboard!');
+                    recordAction('copy_transcription', {});
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
                 });
-
-                // Prepare glyph data for report
-                const glyphsData = orderedResults.map((result, index) => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    const img = imageRef.current;
-                    const pos = result.position;
-                    
-                    canvas.width = pos.width;
-                    canvas.height = pos.height;
-                    ctx.drawImage(img, pos.x, pos.y, pos.width, pos.height, 0, 0, pos.width, pos.height);
-                    
-                    return {
-                        name: result.glyph.name,
-                        letterEn: result.glyph.transliteration || result.glyph.name,
-                        letterAr: result.glyph.arabic || result.glyph.transliteration || result.glyph.name,
-                        image: canvas.toDataURL(),
-                        order: index + 1
-                    };
-                });
-
-                // Get reading direction label
-                const getDirectionLabel = () => {
-                    switch(readingDirection) {
-                        case 'ltr': return 'Left to Right';
-                        case 'rtl': return 'Right to Left';
-                        case 'ttb': return 'Top to Bottom';
-                        case 'btt': return 'Bottom to Top';
-                        default: return 'Detection Order';
-                    }
-                };
-
-                // Build the report data object
-                const reportData = {
-                    image: image,
-                    glyphs: glyphsData,
-                    transcriptionEn: transcriptionEn,
-                    transcriptionAr: transcriptionAr,
-                    translationEn: translationEnglish || 'No English translation provided.',
-                    translationAr: translationArabic || 'لم يتم توفير ترجمة عربية',
-                    stats: {
-                        totalGlyphs: recognitionResults.length,
-                        uniqueGlyphs: new Set(recognitionResults.map(r => r.glyph.name)).size,
-                        words: Array.from(wordBoundaries).length + 1,
-                        lines: Array.from(lineBreaks).length + 1
-                    },
-                    date: new Date().toLocaleDateString(),
-                    readingDirection: getDirectionLabel()
-                };
-
-                // Escape function for HTML
-                const escapeHtml = (text) => {
-                    return String(text)
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&#039;');
-                };
-
-                // Build HTML using string concatenation
-                let reportHTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Hakli Report</title><style>';
-                reportHTML += 'body{font-family:Arial,sans-serif;padding:20px;background:#f5f5f5}';
-                reportHTML += '.container{max-width:1200px;margin:0 auto;background:white;padding:40px;border-radius:10px}';
-                reportHTML += 'h1{color:#667eea;text-align:center}';
-                reportHTML += '.lang-toggle{text-align:center;margin:20px 0}';
-                reportHTML += '.lang-btn{padding:10px 20px;margin:5px;border:none;background:#667eea;color:white;border-radius:5px;cursor:pointer}';
-                reportHTML += '.lang-btn.active{background:#764ba2}';
-                reportHTML += '.section{margin:30px 0;padding:20px;background:#f9f9f9;border-radius:8px}';
-                reportHTML += '.section h2{color:#333;border-bottom:2px solid #667eea;padding-bottom:10px}';
-                reportHTML += '.glyph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:15px;margin-top:20px}';
-                reportHTML += '.glyph-card{background:white;padding:15px;text-align:center;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}';
-                reportHTML += '.glyph-img{width:60px;height:60px;margin:10px auto}';
-                reportHTML += '.transcription{padding:20px;background:white;border-radius:8px;font-size:1.2em;line-height:1.8;white-space:pre-wrap}';
-                reportHTML += '.arabic{direction:rtl;font-family:"Traditional Arabic",Arial,sans-serif;font-size:1.4em}';
-                reportHTML += '.hidden{display:none}';
-                reportHTML += 'img{max-width:100%;height:auto}';
-                reportHTML += '</style></head><body><div class="container">';
-                reportHTML += '<h1>🏺 Hakli Inscription Report</h1>';
-                reportHTML += '<div class="lang-toggle">';
-                reportHTML += '<button class="lang-btn active" onclick="setLang(\'both\')">🌍 Both</button>';
-                reportHTML += '<button class="lang-btn" onclick="setLang(\'en\')">🇺🇸 English</button>';
-                reportHTML += '<button class="lang-btn" onclick="setLang(\'ar\')">🇴🇲 Arabic</button>';
-                reportHTML += '</div>';
-                reportHTML += '<div class="section"><h2>📷 Image</h2><img src="' + reportData.image + '"></div>';
-                reportHTML += '<div class="section"><h2>🔑 Glyphs (' + reportData.stats.totalGlyphs + ' total)</h2><div class="glyph-grid" id="glyphs"></div></div>';
-                reportHTML += '<div class="section en"><h2>✍️ English Transliteration</h2><div class="transcription">' + escapeHtml(reportData.transcriptionEn) + '</div></div>';
-                reportHTML += '<div class="section ar"><h2>✍️ Arabic Transliteration</h2><div class="transcription arabic">' + escapeHtml(reportData.transcriptionAr) + '</div></div>';
-                reportHTML += '<div class="section en"><h2>🌍 English Translation</h2><div class="transcription">' + escapeHtml(reportData.translationEn) + '</div></div>';
-                reportHTML += '<div class="section ar"><h2>🌍 Arabic Translation</h2><div class="transcription arabic">' + escapeHtml(reportData.translationAr) + '</div></div>';
-                reportHTML += '<div class="section"><h2>📊 Statistics</h2>';
-                reportHTML += '<p><strong>Total Glyphs:</strong> ' + reportData.stats.totalGlyphs + '</p>';
-                reportHTML += '<p><strong>Unique Glyphs:</strong> ' + reportData.stats.uniqueGlyphs + '</p>';
-                reportHTML += '<p><strong>Words:</strong> ' + reportData.stats.words + '</p>';
-                reportHTML += '<p><strong>Lines:</strong> ' + reportData.stats.lines + '</p>';
-                reportHTML += '<p><strong>Date:</strong> ' + reportData.date + '</p>';
-                reportHTML += '<p><strong>Direction:</strong> ' + reportData.readingDirection + '</p>';
-                reportHTML += '</div></div><script>';
-                reportHTML += 'const glyphs=' + JSON.stringify(reportData.glyphs) + ';';
-                reportHTML += 'const grid=document.getElementById("glyphs");';
-                reportHTML += 'glyphs.forEach(g=>{';
-                reportHTML += 'const card=document.createElement("div");';
-                reportHTML += 'card.className="glyph-card";';
-                reportHTML += 'const img=document.createElement("img");';
-                reportHTML += 'img.className="glyph-img";';
-                reportHTML += 'img.src=g.image;';
-                reportHTML += 'const div1=document.createElement("div");';
-                reportHTML += 'div1.textContent=g.letterEn+" | "+g.letterAr;';
-                reportHTML += 'const div2=document.createElement("div");';
-                reportHTML += 'div2.style.fontSize="0.8em";';
-                reportHTML += 'div2.style.color="#666";';
-                reportHTML += 'div2.textContent=g.name;';
-                reportHTML += 'card.appendChild(img);';
-                reportHTML += 'card.appendChild(div1);';
-                reportHTML += 'card.appendChild(div2);';
-                reportHTML += 'grid.appendChild(card);';
-                reportHTML += '});';
-                reportHTML += 'function setLang(lang){';
-                reportHTML += 'document.querySelectorAll(".lang-btn").forEach(b=>b.classList.remove("active"));';
-                reportHTML += 'event.target.classList.add("active");';
-                reportHTML += 'const ens=document.querySelectorAll(".en");';
-                reportHTML += 'const ars=document.querySelectorAll(".ar");';
-                reportHTML += 'if(lang==="both"){ens.forEach(e=>e.classList.remove("hidden"));ars.forEach(a=>a.classList.remove("hidden"));}';
-                reportHTML += 'else if(lang==="en"){ens.forEach(e=>e.classList.remove("hidden"));ars.forEach(a=>a.classList.add("hidden"));}';
-                reportHTML += 'else{ens.forEach(e=>e.classList.add("hidden"));ars.forEach(a=>a.classList.remove("hidden"));}';
-                reportHTML += '}';
-                reportHTML += '</script></body></html>';
-
-                // Download
-                const blob = new Blob([reportHTML], { type: 'text/html' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'hakli_bilingual_report_' + new Date().toISOString().slice(0, 10) + '.html';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-
-                recordAction('export_bilingual_html_report', {
-                    glyphCount: recognitionResults.length,
-                    hasEnglishTranslation: !!translationEnglish,
-                    hasArabicTranslation: !!translationArabic
-                });
-
-                alert('✅ Bilingual HTML report exported successfully!');
             };
+
+            // ============================================
+            // UI HELPERS
+            // ============================================
+
+            const getDetectionBoxStyle = (index) => {
+                const detection = recognitionResults[index];
+                if (!detection || !imageRef.current) return {};
+                const imageRect = imageRef.current.getBoundingClientRect();
+                const scaleX = imageRect.width / imageRef.current.naturalWidth;
+                const scaleY = imageRect.height / imageRef.current.naturalHeight;
+                return {
+                    left: detection.position.x * scaleX + 'px',
+                    top: detection.position.y * scaleY + 'px',
+                    width: detection.position.width * scaleX + 'px',
+                    height: detection.position.height * scaleY + 'px'
+                };
+            };
+
+            const getDetectionBoxClass = (index) => {
+                let classes = ['detection-box'];
+                if (validations[index]) {
+                    classes.push(validations[index].isCorrect ? 'validated-correct' : 'validated-incorrect');
+                } else {
+                    classes.push('unvalidated');
+                }
+                if (selectedRegions.has(index)) classes.push('selected');
+                return classes.join(' ');
+            };
+
+            const getReadingOrderedResults = () => {
+                if (viewMode === 'detection') return recognitionResults;
+
+                // If manual reading order exists, use it
+                if (readingOrder.length === recognitionResults.length) {
+                    return readingOrder.map(idx => recognitionResults[idx]);
+                }
+
+                // Otherwise, auto-sort by direction
+                const sorted = recognitionResults.map((result, idx) => ({ result, originalIndex: idx }));
+
+                if (readingDirection === 'ltr') {
+                    sorted.sort((a, b) =>
+                        a.result.position.y - b.result.position.y ||
+                        a.result.position.x - b.result.position.x
+                    );
+                } else if (readingDirection === 'rtl') {
+                    sorted.sort((a, b) =>
+                        a.result.position.y - b.result.position.y ||
+                        b.result.position.x - a.result.position.x
+                    );
+                } else if (readingDirection === 'ttb') {
+                    sorted.sort((a, b) =>
+                        a.result.position.x - b.result.position.x ||
+                        a.result.position.y - b.result.position.y
+                    );
+                }
+
+                return sorted.map(item => item.result);
+            };
+
+            const getFilteredResults = () => {
+                if (!useConfidenceFilter) {
+                    return recognitionResults;
+                }
+                return recognitionResults.filter(result => result.confidence >= confidenceThreshold / 100);
+            };   
+
+            const addToIsolatedGlyphs = (bounds, thumbnail) => {
+                setIsolatedGlyphs(prev => [...prev, {
+                    bounds: bounds,
+                    thumbnail: thumbnail,
+                    area: bounds.width * bounds.height,
+                    aspectRatio: bounds.width / bounds.height
+                }]);
+            };
+
+            const saveSession = () => {
+                try {
+                    const session = {
+                        version: '1.0',
+                        timestamp: new Date().toISOString(),
+                        image: image,
+                        recognitionResults: recognitionResults,
+                        validations: validations,
+                        isolatedGlyphs: isolatedGlyphs,
+                        wordBoundaries: Array.from(wordBoundaries),
+                        readingOrder: readingOrder,
+                        readingDirection: readingDirection,
+                        viewMode: viewMode
+                    };
+
+                    localStorage.setItem('hakli_session', JSON.stringify(session));
+                    alert('✅ Session saved!\n\nYour work is saved locally in this browser.\nYou can close the tab and come back later.');
+                    recordAction('save_session', { timestamp: session.timestamp });
+                } catch (error) {
+                    console.error('Save session error:', error);
+                    showError(
+                        'Save Failed',
+                        'Could not save your session.',
+                        [
+                            'Your browser may have disabled localStorage',
+                            'You may be in private/incognito mode',
+                            'Try exporting your data instead'
+                        ]
+                    );
+                }
+            };
+
+            const loadSession = () => {
+                try {
+                    const saved = localStorage.getItem('hakli_session');
+                    if (!saved) {
+                        alert('ℹ️ No saved session found.');
+                        return;
+                    }
+
+                    const session = JSON.parse(saved);
+
+                    if (confirm(`📂 Load saved session?\n\nFrom: ${new Date(session.timestamp).toLocaleString()}\nGlyphs: ${session.recognitionResults.length}\n\nThis will replace your current work!`)) {
+                        setImage(session.image);
+                        setRecognitionResults(session.recognitionResults || []);
+                        setValidations(session.validations || {});
+                        setIsolatedGlyphs(session.isolatedGlyphs || []);
+                        setWordBoundaries(new Set(session.wordBoundaries || []));
+                        setReadingOrder(session.readingOrder || []);
+                        setReadingDirection(session.readingDirection || 'detection');
+                        setViewMode(session.viewMode || 'detection');
+
+                        alert('✅ Session loaded successfully!');
+                        recordAction('load_session', { timestamp: session.timestamp });
+                    }
+                } catch (error) {
+                    console.error('Load session error:', error);
+                    showError(
+                        'Load Failed',
+                        'Could not load your saved session.',
+                        [
+                            'The saved data may be corrupted',
+                            'Try clearing your browser cache',
+                            'Check the browser console for details'
+                        ]
+                    );
+                }
+            };
+
+            const clearSession = () => {
+                if (confirm('🗑️ Delete saved session?\n\nThis will permanently delete your saved work.\nThis cannot be undone!')) {
+                    localStorage.removeItem('hakli_session');
+                    alert('✅ Saved session deleted.');
+                    recordAction('clear_session', {});
+                }
+            };
+
+            const recordAction = (actionType, actionData) => {
+                const action = {
+                    type: actionType,
+                    data: actionData,
+                    timestamp: new Date().toISOString(),
+                    id: Date.now()
+                };
+                setActionHistory(prev => [...prev, action].slice(-50));
+                // Only log important actions
+                if (['exclude_regions', 'merge_detections', 'upload_to_cloud'].includes(actionType)) {
+                    console.log(`✓ ${actionType}:`, actionData);
+                }
+                // Take snapshot after modifying actions
+                const modifyingActions = ['validation', 'delete_detection', 'merge_detections', 
+                                        'add_manual_detection', 'correct_glyph', 'reorder_reading', 
+                                        'toggle_word_boundary'];
+                if (modifyingActions.includes(actionType)) {
+                    setTimeout(takeSnapshot, 0);
+                }
+            };
+
+            const takeSnapshot = () => {
+                const snapshot = {
+                    recognitionResults: [...recognitionResults],
+                    validations: { ...validations },
+                    selectedRegions: new Set(selectedRegions),
+                    wordBoundaries: new Set(wordBoundaries),
+                    readingOrder: [...readingOrder],
+                    isolatedGlyphs: [...isolatedGlyphs]
+                };
+                
+                // Remove any "future" history if we're not at the end
                 const newHistory = stateHistory.slice(0, historyIndex + 1);
                 newHistory.push(snapshot);
                 
@@ -4885,12 +4903,6 @@
                             {!isExportOptionsCollapsed && (
                             <>
                             <div className="flex flex-wrap gap-3">
-                                <button
-                                    onClick={exportBilingualHtmlReport}
-                                    className="px-4 py-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center gap-2"
-                                >
-                                    🌍 Export Bilingual HTML Report
-                                </button>
                                 <button
                                     onClick={exportHtmlReport}
                                     className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600 flex items-center gap-2"
