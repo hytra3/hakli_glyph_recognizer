@@ -2159,7 +2159,7 @@
                 reportHTML += 'glyphs.forEach(g=>{';
                 reportHTML += 'const card=document.createElement("div");';
                 reportHTML += 'card.className="glyph-card";';
-                reportHTML += 'card.innerHTML="<img class=\\"glyph-img\\" src=\\""+g.image+"\\"><div>"+g.letterEn+" / "+g.letterAr+"</div><div style=\\"font-size:0.8em;color:#666\\">"+g.name+"</div>";';
+                reportHTML += "card.innerHTML='<img class=\"glyph-img\" src=\"'+g.image+'"><div>'+g.letterEn+' / '+g.letterAr+'</div><div style=\"font-size:0.8em;color:#666\">'+g.name+'</div>';";
                 reportHTML += 'grid.appendChild(card);';
                 reportHTML += '});';
                 reportHTML += 'function setLang(lang){';
