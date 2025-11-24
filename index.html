@@ -167,6 +167,11 @@
             const [showEnhancedTranscription, setShowEnhancedTranscription] = useState(false);
             const [transcriptionFormat, setTranscriptionFormat] = useState('english-ltr'); // english-ltr, arabic-rtl, vertical-rl, vertical-lr
             const [transcriptionScript, setTranscriptionScript] = useState('english'); // english or arabic
+            
+            // Translation States
+            const [translationEnglish, setTranslationEnglish] = useState('');
+            const [translationArabic, setTranslationArabic] = useState('');
+            const [showTranslationSection, setShowTranslationSection] = useState(false);
 
             const MASTER_PASTE_URL = ''; // Will update after first upload
             const MASTER_PASTE_RAW_URL = ''; // Will update after first upload
@@ -4702,6 +4707,116 @@
                                         >
                                             💾 Export TXT
                                         </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Translation Section */}
+                    {viewMode === 'reading' && recognitionResults.length > 0 && (
+                        <div className="mt-6 p-4 bg-green-50 rounded-lg border-2 border-green-300">
+                            <button
+                                onClick={() => setShowTranslationSection(!showTranslationSection)}
+                                className="flex items-center gap-2 font-semibold text-gray-900 hover:text-gray-700 mb-3"
+                            >
+                                <span>{showTranslationSection ? '▼' : '▶'}</span>
+                                <h3>🌍 Translation</h3>
+                            </button>
+                            
+                            {showTranslationSection && (
+                                <>
+                                    <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-200 text-sm text-gray-700">
+                                        <div className="font-semibold mb-1">💡 Add your translation:</div>
+                                        <div className="text-xs">
+                                            Enter translations in English and/or Arabic. Toggle between languages below. Both will appear in the exported HTML report.
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        {/* Language Toggle */}
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setTranscriptionScript('english')}
+                                                className={`px-4 py-2 rounded text-sm font-medium ${
+                                                    transcriptionScript === 'english' 
+                                                        ? 'bg-green-500 text-white' 
+                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                }`}
+                                            >
+                                                English Translation
+                                            </button>
+                                            <button
+                                                onClick={() => setTranscriptionScript('arabic')}
+                                                className={`px-4 py-2 rounded text-sm font-medium ${
+                                                    transcriptionScript === 'arabic' 
+                                                        ? 'bg-green-500 text-white' 
+                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                }`}
+                                            >
+                                                Arabic Translation (ترجمة)
+                                            </button>
+                                        </div>
+
+                                        {/* Translation Input */}
+                                        {transcriptionScript === 'english' ? (
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                                    English Translation:
+                                                </label>
+                                                <textarea
+                                                    value={translationEnglish}
+                                                    onChange={(e) => setTranslationEnglish(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                                                    rows="4"
+                                                    placeholder="Enter English translation here..."
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                                    Arabic Translation (الترجمة العربية):
+                                                </label>
+                                                <textarea
+                                                    value={translationArabic}
+                                                    onChange={(e) => setTranslationArabic(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded text-lg"
+                                                    style={{
+                                                        direction: 'rtl',
+                                                        fontFamily: '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif'
+                                                    }}
+                                                    rows="4"
+                                                    placeholder="أدخل الترجمة العربية هنا..."
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Preview */}
+                                        {(translationEnglish || translationArabic) && (
+                                            <div className="p-4 bg-white rounded border-2 border-green-300">
+                                                <div className="text-sm font-semibold text-gray-700 mb-2">Preview:</div>
+                                                {translationEnglish && (
+                                                    <div className="mb-2">
+                                                        <span className="text-xs text-gray-500">English:</span>
+                                                        <div className="text-base">{translationEnglish}</div>
+                                                    </div>
+                                                )}
+                                                {translationArabic && (
+                                                    <div>
+                                                        <span className="text-xs text-gray-500">Arabic:</span>
+                                                        <div 
+                                                            className="text-lg" 
+                                                            style={{
+                                                                direction: 'rtl',
+                                                                fontFamily: '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif'
+                                                            }}
+                                                        >
+                                                            {translationArabic}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </>
                             )}
