@@ -342,6 +342,54 @@
             text-align: center;
         }
 
+        .recent-files {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px 40px;
+            background: #f7fafc;
+            border-radius: 12px;
+        }
+
+        .recent-file-item {
+            background: white;
+            border: 2px solid #cbd5e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .recent-file-item:hover {
+            border-color: #667eea;
+            background: #edf2f7;
+            transform: translateX(5px);
+        }
+
+        .recent-file-info {
+            flex: 1;
+        }
+
+        .recent-file-name {
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .recent-file-date {
+            font-size: 0.85em;
+            color: #718096;
+        }
+
+        .recent-file-stats {
+            text-align: right;
+            color: #667eea;
+            font-size: 0.9em;
+        }
+
         @media print {
             body {
                 background: white;
@@ -390,6 +438,11 @@
             <input type="file" id="fileInput" accept=".json">
         </div>
 
+        <div id="recentFiles" class="recent-files" style="display: none;">
+            <h3 style="text-align: center; color: #667eea; margin-bottom: 15px;">📚 Recently Cached Files</h3>
+            <div id="recentFilesList"></div>
+        </div>
+
         <div id="languageToggle" class="lang-toggle" style="display: none;">
             <button class="lang-btn active" onclick="setLanguage('both')" id="btn-both">
                 🌍 Both Languages
@@ -421,6 +474,60 @@
         const content = document.getElementById('content');
         const errorMessage = document.getElementById('errorMessage');
         const languageToggle = document.getElementById('languageToggle');
+        const recentFiles = document.getElementById('recentFiles');
+        const recentFilesList = document.getElementById('recentFilesList');
+
+        // Load recent files on startup
+        window.addEventListener('load', () => {
+            loadRecentFiles();
+        });
+
+        function loadRecentFiles() {
+            try {
+                const cache = JSON.parse(localStorage.getItem('hakliRecentExports') || '[]');
+                if (cache.length > 0) {
+                    recentFiles.style.display = 'block';
+                    recentFilesList.innerHTML = '';
+                    
+                    cache.forEach((entry, index) => {
+                        const item = document.createElement('div');
+                        item.className = 'recent-file-item';
+                        item.onclick = () => loadFromCache(entry);
+                        
+                        const date = new Date(entry.timestamp);
+                        const glyphCount = entry.data.detections ? entry.data.detections.length : 0;
+                        
+                        item.innerHTML = `
+                            <div class="recent-file-info">
+                                <div class="recent-file-name">📄 ${entry.filename}</div>
+                                <div class="recent-file-date">🕐 ${date.toLocaleString()}</div>
+                            </div>
+                            <div class="recent-file-stats">
+                                ${glyphCount} glyphs
+                            </div>
+                        `;
+                        
+                        recentFilesList.appendChild(item);
+                    });
+                }
+            } catch (error) {
+                console.warn('Failed to load recent files:', error);
+            }
+        }
+
+        function loadFromCache(entry) {
+            try {
+                loadedData = entry.data;
+                displayData(entry.data);
+                uploadZone.style.display = 'none';
+                recentFiles.style.display = 'none';
+                languageToggle.style.display = 'flex';
+                content.classList.add('visible');
+                errorMessage.style.display = 'none';
+            } catch (error) {
+                showError('Error loading cached file: ' + error.message);
+            }
+        }
 
         uploadZone.addEventListener('click', () => fileInput.click());
         
@@ -486,11 +593,60 @@
                 const imageSection = createSection('📷', 'Inscription Image');
                 const imageContainer = document.createElement('div');
                 imageContainer.className = 'image-container';
-                const img = document.createElement('img');
-                img.className = 'inscription-image';
+                
+                // Create canvas for annotated image
+                const canvas = document.createElement('canvas');
+                canvas.className = 'inscription-image';
+                const ctx = canvas.getContext('2d');
+                
+                // Load image
+                const img = new Image();
+                img.onload = () => {
+                    // Set canvas size to match image
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // Draw original image
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Draw detection boxes if available
+                    if (data.detections && data.detections.length > 0) {
+                        data.detections.forEach((detection, index) => {
+                            if (detection.position) {
+                                const pos = detection.position;
+                                
+                                // Draw box
+                                ctx.strokeStyle = '#3b82f6';
+                                ctx.lineWidth = 3;
+                                ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
+                                
+                                // Draw order number circle
+                                const orderNum = index + 1;
+                                const circleX = pos.x - 15;
+                                const circleY = pos.y - 15;
+                                
+                                ctx.fillStyle = '#667eea';
+                                ctx.beginPath();
+                                ctx.arc(circleX, circleY, 18, 0, 2 * Math.PI);
+                                ctx.fill();
+                                
+                                ctx.strokeStyle = '#4c51bf';
+                                ctx.lineWidth = 2;
+                                ctx.stroke();
+                                
+                                // Draw number
+                                ctx.fillStyle = 'white';
+                                ctx.font = 'bold 16px Arial';
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'middle';
+                                ctx.fillText(orderNum.toString(), circleX, circleY);
+                            }
+                        });
+                    }
+                };
                 img.src = data.imageData;
-                img.alt = 'Hakli Inscription';
-                imageContainer.appendChild(img);
+                
+                imageContainer.appendChild(canvas);
                 imageSection.appendChild(imageContainer);
                 content.appendChild(imageSection);
             }
