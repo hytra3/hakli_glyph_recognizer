@@ -2033,16 +2033,6 @@
                 alert('HTML report exported successfully!');
             };
 
-                const newHistory = stateHistory.slice(0, historyIndex + 1);
-                newHistory.push(snapshot);
-                
-                // Keep only last 50 states
-                const trimmedHistory = newHistory.slice(-50);
-                
-                setStateHistory(trimmedHistory);
-                setHistoryIndex(trimmedHistory.length - 1);
-            };
-
             const handleImageMouseDown = (event) => {
                 // Manual detection mode
                 if (manualDetectionMode) {
