@@ -606,6 +606,12 @@
                     canvas.width = img.naturalWidth || img.width;
                     canvas.height = img.naturalHeight || img.height;
                     
+                    console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
+                    console.log('Image natural dimensions:', img.naturalWidth, 'x', img.naturalHeight);
+                    if (data.detections && data.detections.length > 0 && data.detections[0].position) {
+                        console.log('First detection position:', data.detections[0].position);
+                    }
+                    
                     // Draw original image
                     ctx.drawImage(img, 0, 0);
                     
