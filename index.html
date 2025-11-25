@@ -163,6 +163,14 @@
             const [transcriptionDragStart, setTranscriptionDragStart] = useState({ x: 0, y: 0 });
             const [showTranscription, setShowTranscription] = useState(true); // Show/hide transcription box
             
+            // Filter function for recognition results
+            const getFilteredResults = () => {
+                if (!useConfidenceFilter) {
+                    return recognitionResults;
+                }
+                return recognitionResults.filter(r => r.confidence >= (confidenceThreshold / 100));
+            };
+            
             // Enhanced Transcription Display States
             const [showEnhancedTranscription, setShowEnhancedTranscription] = useState(false);
             const [transcriptionFormat, setTranscriptionFormat] = useState('english-ltr'); // english-ltr, arabic-rtl, vertical-rl, vertical-lr
