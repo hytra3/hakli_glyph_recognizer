@@ -2861,9 +2861,15 @@
             const processImageWithSettings = (sourceMat, settings) => {
                 if (!sourceMat || !isOpenCvReady) return;
                 
+                // Check if Mat is still valid
+                if (sourceMat.isDeleted()) {
+                    console.warn('Source Mat already deleted, skipping preprocessing');
+                    return;
+                }
+                
                 try {
                     // Clean up previous preprocessed mat
-                    if (preprocessedMat) {
+                    if (preprocessedMat && !preprocessedMat.isDeleted()) {
                         preprocessedMat.delete();
                     }
                     
@@ -2994,14 +3000,25 @@
             // Cleanup effect for OpenCV Mats
             useEffect(() => {
                 return () => {
-                    if (originalMat) originalMat.delete();
-                    if (preprocessedMat) preprocessedMat.delete();
+                    if (originalMat && !originalMat.isDeleted()) originalMat.delete();
+                    if (preprocessedMat && !preprocessedMat.isDeleted()) preprocessedMat.delete();
                 };
             }, []);
             
+            // Update original canvas when originalMat changes
+            useEffect(() => {
+                if (originalMat && originalCanvasRef.current) {
+                    try {
+                        cv.imshow(originalCanvasRef.current, originalMat);
+                    } catch (error) {
+                        console.error('Error showing original:', error);
+                    }
+                }
+            }, [originalMat]);
+            
             // Re-process when settings change
             useEffect(() => {
-                if (originalMat) {
+                if (originalMat && !originalMat.isDeleted()) {
                     processImageWithSettings(originalMat, preprocessing);
                 }
             }, [preprocessing]);
