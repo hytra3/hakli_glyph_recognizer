@@ -181,6 +181,15 @@
             box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
         }
 
+        .glyph-thumbnail {
+            margin: 8px auto 12px;
+            border: 2px solid #667eea;
+            border-radius: 6px;
+            display: block;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
         .glyph-order {
             position: absolute;
             top: -8px;
@@ -439,7 +448,12 @@
         </div>
 
         <div id="recentFiles" class="recent-files" style="display: none;">
-            <h3 style="text-align: center; color: #667eea; margin-bottom: 15px;">📚 Recently Cached Files</h3>
+            <button 
+                onclick="document.getElementById('recentFilesList').style.display = document.getElementById('recentFilesList').style.display === 'none' ? 'block' : 'none'; this.querySelector('span').textContent = document.getElementById('recentFilesList').style.display === 'none' ? '▶' : '▼';"
+                style="background: none; border: none; cursor: pointer; width: 100%; text-align: left; padding: 0; font-size: 1.1em; color: #667eea; font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;"
+            >
+                <span>▼</span> 📚 Recently Cached Files
+            </button>
             <div id="recentFilesList"></div>
         </div>
 
@@ -661,32 +675,68 @@
             glyphGrid.className = 'glyph-grid';
             
             if (data.detections && data.detections.length > 0) {
-                data.detections.forEach((detection, index) => {
-                    const card = document.createElement('div');
-                    card.className = 'glyph-card';
-                    
-                    const order = document.createElement('div');
-                    order.className = 'glyph-order';
-                    order.textContent = index + 1;
-                    
-                    const letterEn = document.createElement('div');
-                    letterEn.className = 'glyph-letter';
-                    letterEn.textContent = detection.transliteration || detection.glyph;
-                    
-                    const letterAr = document.createElement('div');
-                    letterAr.className = 'glyph-letter arabic';
-                    letterAr.textContent = detection.arabic || detection.transliteration || detection.glyph;
-                    
-                    const name = document.createElement('div');
-                    name.className = 'glyph-name';
-                    name.textContent = detection.glyph;
-                    
-                    card.appendChild(order);
-                    card.appendChild(letterEn);
-                    card.appendChild(letterAr);
-                    card.appendChild(name);
-                    glyphGrid.appendChild(card);
-                });
+                // Load image to extract glyph thumbnails
+                const sourceImg = new Image();
+                sourceImg.onload = () => {
+                    data.detections.forEach((detection, index) => {
+                        const card = document.createElement('div');
+                        card.className = 'glyph-card';
+                        
+                        const order = document.createElement('div');
+                        order.className = 'glyph-order';
+                        order.textContent = index + 1;
+                        
+                        // Add thumbnail if position data exists
+                        if (detection.position) {
+                            const pos = detection.position;
+                            const thumbCanvas = document.createElement('canvas');
+                            const thumbSize = 60;
+                            thumbCanvas.width = thumbSize;
+                            thumbCanvas.height = thumbSize;
+                            thumbCanvas.className = 'glyph-thumbnail';
+                            const thumbCtx = thumbCanvas.getContext('2d');
+                            
+                            // Calculate scale to fit in thumbnail
+                            const scale = Math.min(thumbSize / pos.width, thumbSize / pos.height);
+                            const scaledW = pos.width * scale;
+                            const scaledH = pos.height * scale;
+                            const offsetX = (thumbSize - scaledW) / 2;
+                            const offsetY = (thumbSize - scaledH) / 2;
+                            
+                            // White background
+                            thumbCtx.fillStyle = 'white';
+                            thumbCtx.fillRect(0, 0, thumbSize, thumbSize);
+                            
+                            // Draw scaled glyph
+                            thumbCtx.drawImage(
+                                sourceImg,
+                                pos.x, pos.y, pos.width, pos.height,
+                                offsetX, offsetY, scaledW, scaledH
+                            );
+                            
+                            card.appendChild(thumbCanvas);
+                        }
+                        
+                        const letterEn = document.createElement('div');
+                        letterEn.className = 'glyph-letter';
+                        letterEn.textContent = detection.transliteration || detection.glyph;
+                        
+                        const letterAr = document.createElement('div');
+                        letterAr.className = 'glyph-letter arabic';
+                        letterAr.textContent = detection.arabic || detection.transliteration || detection.glyph;
+                        
+                        const name = document.createElement('div');
+                        name.className = 'glyph-name';
+                        name.textContent = detection.glyph;
+                        
+                        card.appendChild(order);
+                        card.appendChild(letterEn);
+                        card.appendChild(letterAr);
+                        card.appendChild(name);
+                        glyphGrid.appendChild(card);
+                    });
+                };
+                sourceImg.src = data.imageData;
             }
             
             glyphSection.appendChild(glyphGrid);
