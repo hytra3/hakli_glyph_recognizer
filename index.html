@@ -437,20 +437,10 @@
                 
                 // Try to save to Google Drive
                 try {
-                    // Check if we have the drive_search tool (indicates Drive is authorized)
-                    const metadata = {
-                        name: filename,
-                        mimeType: 'application/json',
-                        parents: [] // Will save to root, user can organize later
-                    };
+                    // Note: Full Google Drive API integration requires backend setup with OAuth
+                    // For now: we save to local cache + download JSON as backup
                     
-                    const form = new FormData();
-                    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-                    form.append('file', new Blob([jsonString], { type: 'application/json' }));
-                    
-                    // Note: This requires Google Drive API to be properly set up
-                    // For now, we'll show a message and download locally
-                    alert('💾 Google Drive integration requires additional setup.\n\n✅ Saved to local cache!\n📥 Downloading JSON file as backup...');
+                    alert('✅ Saved successfully!\n\n📦 Cached locally (last 10 files)\n📥 JSON file downloaded\n\n💡 Tip: Upload the JSON file to Google Drive manually when you have internet. Full auto-sync to Drive requires backend setup (see docs).');
                     
                     // Download as backup
                     const blob = new Blob([jsonString], { type: 'application/json' });
@@ -463,10 +453,10 @@
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
                     
-                    recordAction('save_to_drive', { filename, cached: true });
+                    recordAction('save_to_cache', { filename, cached: true });
                 } catch (error) {
-                    console.error('Drive save error:', error);
-                    alert('⚠️ Could not save to Google Drive.\n✅ Saved to local cache!\n📥 Downloaded JSON file as backup.');
+                    console.error('Save error:', error);
+                    alert('✅ Saved to local cache!\n📥 JSON file downloaded as backup.');
                 }
             };
             
@@ -2270,25 +2260,37 @@
                 header.innerHTML = '<h1>📜 Hakli Glyph Recognition Report</h1><div class="date">Generated on ' + new Date().toLocaleString() + '</div>';
                 container.appendChild(header);
 
-                // Statistics section
-                const statsSection = iframeDoc.createElement('div');
-                statsSection.className = 'section';
-                statsSection.innerHTML = '<div class="section-title">📊 Recognition Statistics</div><div class="stats-grid"><div class="stat-card"><div class="stat-value">' + totalDetections + '</div><div class="stat-label">Total Glyphs</div></div><div class="stat-card"><div class="stat-value">' + avgConfidence + '%</div><div class="stat-label">Avg Confidence</div></div><div class="stat-card"><div class="stat-value">' + validatedCorrect + '</div><div class="stat-label">Validated Correct</div></div><div class="stat-card"><div class="stat-value">' + corrected + '</div><div class="stat-label">Corrected</div></div></div>';
-                container.appendChild(statsSection);
-
-                // Transcription section
-                const transcriptionSection = iframeDoc.createElement('div');
-                transcriptionSection.className = 'section';
-                transcriptionSection.innerHTML = '<div class="section-title">📝 Transcription</div><div class="transcription-box">' + transcription + '</div>';
-                container.appendChild(transcriptionSection);
-
-                // Image section
+                // Image section (FIRST)
                 const imageSection = iframeDoc.createElement('div');
                 imageSection.className = 'section';
                 imageSection.innerHTML = '<div class="section-title">🖼️ Source Image</div><div class="image-toggle"><button class="toggle-btn" id="toggleBtn" onclick="toggleImage()">Show Annotated Version</button></div><div class="legend"><div class="legend-item"><div class="legend-box" style="background: #3b82f6;"></div><span>Unvalidated</span></div><div class="legend-item"><div class="legend-box" style="background: #10b981;"></div><span>Validated Correct</span></div><div class="legend-item"><div class="legend-box" style="background: #ef4444;"></div><span>Validated Incorrect</span></div></div><div class="image-container"><img id="mainImage" src="' + originalImageDataUrl + '" alt="Hakli inscription"></div>';
                 container.appendChild(imageSection);
 
-                // Detection details section
+                // Transcription section (SECOND)
+                const transcriptionSection = iframeDoc.createElement('div');
+                transcriptionSection.className = 'section';
+                transcriptionSection.innerHTML = '<div class="section-title">📝 Transcription</div><div class="transcription-box">' + transcription + '</div>';
+                container.appendChild(transcriptionSection);
+
+                // Translation section (THIRD - NEW!)
+                if (translationEnglish || translationArabic) {
+                    const translationSection = iframeDoc.createElement('div');
+                    translationSection.className = 'section';
+                    let translationHtml = '<div class="section-title">🌍 Translation</div>';
+                    
+                    if (translationEnglish) {
+                        translationHtml += '<div style="margin-bottom: 20px;"><div style="font-weight: 600; color: #667eea; margin-bottom: 8px;">English:</div><div class="transcription-box" style="font-family: inherit; font-size: 16px;">' + translationEnglish + '</div></div>';
+                    }
+                    
+                    if (translationArabic) {
+                        translationHtml += '<div><div style="font-weight: 600; color: #667eea; margin-bottom: 8px;">Arabic (العربية):</div><div class="transcription-box" style="font-family: \'Traditional Arabic\', \'Arabic Typesetting\', \'Scheherazade\', serif; font-size: 18px; direction: rtl;">' + translationArabic + '</div></div>';
+                    }
+                    
+                    translationSection.innerHTML = translationHtml;
+                    container.appendChild(translationSection);
+                }
+
+                // Detection details section (FOURTH)
                 const detectionSection = iframeDoc.createElement('div');
                 detectionSection.className = 'section';
                 let detectionHtml = '<div class="section-title">🔍 Detection Details</div><div class="detection-list">';
@@ -2303,6 +2305,12 @@
                 detectionHtml += '</div>';
                 detectionSection.innerHTML = detectionHtml;
                 container.appendChild(detectionSection);
+
+                // Statistics section (LAST - MOVED TO BOTTOM)
+                const statsSection = iframeDoc.createElement('div');
+                statsSection.className = 'section';
+                statsSection.innerHTML = '<div class="section-title">📊 Recognition Statistics</div><div class="stats-grid"><div class="stat-card"><div class="stat-value">' + totalDetections + '</div><div class="stat-label">Total Glyphs</div></div><div class="stat-card"><div class="stat-value">' + avgConfidence + '%</div><div class="stat-label">Avg Confidence</div></div><div class="stat-card"><div class="stat-value">' + validatedCorrect + '</div><div class="stat-label">Validated Correct</div></div><div class="stat-card"><div class="stat-value">' + corrected + '</div><div class="stat-label">Corrected</div></div></div>';
+                container.appendChild(statsSection);
 
                 // Footer
                 const footer = iframeDoc.createElement('div');
@@ -4985,9 +4993,9 @@
                                 <button 
                                     onClick={saveToGoogleDrive}
                                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2 font-semibold"
-                                    title="Save JSON to Google Drive + Local Cache"
+                                    title="Saves to local cache + downloads JSON backup"
                                 >
-                                    💾 Save to Drive + Cache
+                                    💾 Save to Cache + Download
                                 </button>
                                 <button 
                                     onClick={exportDetectionData}

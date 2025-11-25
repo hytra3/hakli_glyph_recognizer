@@ -602,12 +602,12 @@
                 // Load image
                 const img = new Image();
                 img.onload = () => {
-                    // Set canvas size to match image
-                    canvas.width = img.width;
-                    canvas.height = img.height;
+                    // Set canvas size to match image natural dimensions
+                    canvas.width = img.naturalWidth || img.width;
+                    canvas.height = img.naturalHeight || img.height;
                     
-                    // Draw original image
-                    ctx.drawImage(img, 0, 0);
+                    // Draw original image at full size
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                     
                     // Draw detection boxes if available
                     if (data.detections && data.detections.length > 0) {
@@ -617,26 +617,26 @@
                                 
                                 // Draw box
                                 ctx.strokeStyle = '#3b82f6';
-                                ctx.lineWidth = 3;
+                                ctx.lineWidth = 4;
                                 ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
                                 
                                 // Draw order number circle
                                 const orderNum = index + 1;
-                                const circleX = pos.x - 15;
-                                const circleY = pos.y - 15;
+                                const circleX = pos.x + pos.width / 2;
+                                const circleY = pos.y - 20;
                                 
                                 ctx.fillStyle = '#667eea';
                                 ctx.beginPath();
-                                ctx.arc(circleX, circleY, 18, 0, 2 * Math.PI);
+                                ctx.arc(circleX, circleY, 20, 0, 2 * Math.PI);
                                 ctx.fill();
                                 
                                 ctx.strokeStyle = '#4c51bf';
-                                ctx.lineWidth = 2;
+                                ctx.lineWidth = 3;
                                 ctx.stroke();
                                 
                                 // Draw number
                                 ctx.fillStyle = 'white';
-                                ctx.font = 'bold 16px Arial';
+                                ctx.font = 'bold 18px Arial';
                                 ctx.textAlign = 'center';
                                 ctx.textBaseline = 'middle';
                                 ctx.fillText(orderNum.toString(), circleX, circleY);
