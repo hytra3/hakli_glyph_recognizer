@@ -171,6 +171,14 @@
                 return recognitionResults.filter(r => r.confidence >= (confidenceThreshold / 100));
             };
             
+            // Get results in reading order
+            const getReadingOrderedResults = () => {
+                if (readingOrder.length === 0) {
+                    return recognitionResults;
+                }
+                return readingOrder.map(index => recognitionResults[index]).filter(r => r !== undefined);
+            };
+            
             // Enhanced Transcription Display States
             const [showEnhancedTranscription, setShowEnhancedTranscription] = useState(false);
             const [transcriptionFormat, setTranscriptionFormat] = useState('english-ltr'); // english-ltr, arabic-rtl, vertical-rl, vertical-lr
