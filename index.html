@@ -1743,12 +1743,14 @@
                 const data = {
                     timestamp: new Date().toISOString(),
                     imageFile: image ? 'uploaded_image' : null,
+                    imageData: image || null,
                     viewMode: viewMode,
                     readingDirection: readingDirection,
                     detections: recognitionResults.map((result, index) => ({
                         index: index,
                         glyph: result.glyph.name,
                         transliteration: result.glyph.transliteration,
+                        arabic: result.glyph.arabic || result.glyph.transliteration || result.glyph.name,
                         confidence: result.confidence,
                         position: result.position,
                         matchType: result.matchType,
@@ -1758,6 +1760,21 @@
                     })),
                     readingOrder: viewMode === 'reading' ? readingOrder : null,
                     wordBoundaries: Array.from(wordBoundaries),
+                    columnBreaks: Array.from(columnBreaks || []),
+                    lineBreaks: Array.from(lineBreaks || []),
+                    translations: {
+                        english: translationEnglish || '',
+                        arabic: translationArabic || ''
+                    },
+                    statistics: {
+                        totalGlyphs: recognitionResults.length,
+                        uniqueGlyphs: new Set(recognitionResults.map(r => r.glyph.name)).size,
+                        words: Array.from(wordBoundaries).length + 1,
+                        lines: Array.from(lineBreaks || []).length + 1,
+                        averageConfidence: recognitionResults.length > 0 
+                            ? (recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length * 100).toFixed(1)
+                            : 0
+                    },
                     actionHistory: actionHistory
                 };
 
@@ -1772,6 +1789,7 @@
                 URL.revokeObjectURL(url);
 
                 recordAction('export_detection_data', { detectionCount: recognitionResults.length });
+                alert('✅ Detection data exported with translations!');
             };
 
             const exportAnnotatedImage = () => {
@@ -2015,212 +2033,6 @@
                 alert('HTML report exported successfully!');
             };
 
-            const copyTranscriptionToClipboard = () => {
-                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
-                let transcription = '';
-
-                orderedResults.forEach((result, index) => {
-                    transcription += result.glyph.transliteration || result.glyph.name;
-                    if (viewMode === 'reading' && wordBoundaries.has(index)) {
-                        transcription += ' | ';
-                    } else if (index < orderedResults.length - 1) {
-                        transcription += ' ';
-                    }
-                });
-
-                navigator.clipboard.writeText(transcription).then(() => {
-                    alert('Transcription copied to clipboard!');
-                    recordAction('copy_transcription', {});
-                }).catch(err => {
-                    console.error('Failed to copy:', err);
-                });
-            };
-
-            // ============================================
-            // UI HELPERS
-            // ============================================
-
-            const getDetectionBoxStyle = (index) => {
-                const detection = recognitionResults[index];
-                if (!detection || !imageRef.current) return {};
-                const imageRect = imageRef.current.getBoundingClientRect();
-                const scaleX = imageRect.width / imageRef.current.naturalWidth;
-                const scaleY = imageRect.height / imageRef.current.naturalHeight;
-                return {
-                    left: detection.position.x * scaleX + 'px',
-                    top: detection.position.y * scaleY + 'px',
-                    width: detection.position.width * scaleX + 'px',
-                    height: detection.position.height * scaleY + 'px'
-                };
-            };
-
-            const getDetectionBoxClass = (index) => {
-                let classes = ['detection-box'];
-                if (validations[index]) {
-                    classes.push(validations[index].isCorrect ? 'validated-correct' : 'validated-incorrect');
-                } else {
-                    classes.push('unvalidated');
-                }
-                if (selectedRegions.has(index)) classes.push('selected');
-                return classes.join(' ');
-            };
-
-            const getReadingOrderedResults = () => {
-                if (viewMode === 'detection') return recognitionResults;
-
-                // If manual reading order exists, use it
-                if (readingOrder.length === recognitionResults.length) {
-                    return readingOrder.map(idx => recognitionResults[idx]);
-                }
-
-                // Otherwise, auto-sort by direction
-                const sorted = recognitionResults.map((result, idx) => ({ result, originalIndex: idx }));
-
-                if (readingDirection === 'ltr') {
-                    sorted.sort((a, b) =>
-                        a.result.position.y - b.result.position.y ||
-                        a.result.position.x - b.result.position.x
-                    );
-                } else if (readingDirection === 'rtl') {
-                    sorted.sort((a, b) =>
-                        a.result.position.y - b.result.position.y ||
-                        b.result.position.x - a.result.position.x
-                    );
-                } else if (readingDirection === 'ttb') {
-                    sorted.sort((a, b) =>
-                        a.result.position.x - b.result.position.x ||
-                        a.result.position.y - b.result.position.y
-                    );
-                }
-
-                return sorted.map(item => item.result);
-            };
-
-            const getFilteredResults = () => {
-                if (!useConfidenceFilter) {
-                    return recognitionResults;
-                }
-                return recognitionResults.filter(result => result.confidence >= confidenceThreshold / 100);
-            };   
-
-            const addToIsolatedGlyphs = (bounds, thumbnail) => {
-                setIsolatedGlyphs(prev => [...prev, {
-                    bounds: bounds,
-                    thumbnail: thumbnail,
-                    area: bounds.width * bounds.height,
-                    aspectRatio: bounds.width / bounds.height
-                }]);
-            };
-
-            const saveSession = () => {
-                try {
-                    const session = {
-                        version: '1.0',
-                        timestamp: new Date().toISOString(),
-                        image: image,
-                        recognitionResults: recognitionResults,
-                        validations: validations,
-                        isolatedGlyphs: isolatedGlyphs,
-                        wordBoundaries: Array.from(wordBoundaries),
-                        readingOrder: readingOrder,
-                        readingDirection: readingDirection,
-                        viewMode: viewMode
-                    };
-
-                    localStorage.setItem('hakli_session', JSON.stringify(session));
-                    alert('✅ Session saved!\n\nYour work is saved locally in this browser.\nYou can close the tab and come back later.');
-                    recordAction('save_session', { timestamp: session.timestamp });
-                } catch (error) {
-                    console.error('Save session error:', error);
-                    showError(
-                        'Save Failed',
-                        'Could not save your session.',
-                        [
-                            'Your browser may have disabled localStorage',
-                            'You may be in private/incognito mode',
-                            'Try exporting your data instead'
-                        ]
-                    );
-                }
-            };
-
-            const loadSession = () => {
-                try {
-                    const saved = localStorage.getItem('hakli_session');
-                    if (!saved) {
-                        alert('ℹ️ No saved session found.');
-                        return;
-                    }
-
-                    const session = JSON.parse(saved);
-
-                    if (confirm(`📂 Load saved session?\n\nFrom: ${new Date(session.timestamp).toLocaleString()}\nGlyphs: ${session.recognitionResults.length}\n\nThis will replace your current work!`)) {
-                        setImage(session.image);
-                        setRecognitionResults(session.recognitionResults || []);
-                        setValidations(session.validations || {});
-                        setIsolatedGlyphs(session.isolatedGlyphs || []);
-                        setWordBoundaries(new Set(session.wordBoundaries || []));
-                        setReadingOrder(session.readingOrder || []);
-                        setReadingDirection(session.readingDirection || 'detection');
-                        setViewMode(session.viewMode || 'detection');
-
-                        alert('✅ Session loaded successfully!');
-                        recordAction('load_session', { timestamp: session.timestamp });
-                    }
-                } catch (error) {
-                    console.error('Load session error:', error);
-                    showError(
-                        'Load Failed',
-                        'Could not load your saved session.',
-                        [
-                            'The saved data may be corrupted',
-                            'Try clearing your browser cache',
-                            'Check the browser console for details'
-                        ]
-                    );
-                }
-            };
-
-            const clearSession = () => {
-                if (confirm('🗑️ Delete saved session?\n\nThis will permanently delete your saved work.\nThis cannot be undone!')) {
-                    localStorage.removeItem('hakli_session');
-                    alert('✅ Saved session deleted.');
-                    recordAction('clear_session', {});
-                }
-            };
-
-            const recordAction = (actionType, actionData) => {
-                const action = {
-                    type: actionType,
-                    data: actionData,
-                    timestamp: new Date().toISOString(),
-                    id: Date.now()
-                };
-                setActionHistory(prev => [...prev, action].slice(-50));
-                // Only log important actions
-                if (['exclude_regions', 'merge_detections', 'upload_to_cloud'].includes(actionType)) {
-                    console.log(`✓ ${actionType}:`, actionData);
-                }
-                // Take snapshot after modifying actions
-                const modifyingActions = ['validation', 'delete_detection', 'merge_detections', 
-                                        'add_manual_detection', 'correct_glyph', 'reorder_reading', 
-                                        'toggle_word_boundary'];
-                if (modifyingActions.includes(actionType)) {
-                    setTimeout(takeSnapshot, 0);
-                }
-            };
-
-            const takeSnapshot = () => {
-                const snapshot = {
-                    recognitionResults: [...recognitionResults],
-                    validations: { ...validations },
-                    selectedRegions: new Set(selectedRegions),
-                    wordBoundaries: new Set(wordBoundaries),
-                    readingOrder: [...readingOrder],
-                    isolatedGlyphs: [...isolatedGlyphs]
-                };
-                
-                // Remove any "future" history if we're not at the end
                 const newHistory = stateHistory.slice(0, historyIndex + 1);
                 newHistory.push(snapshot);
                 

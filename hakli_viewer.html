@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hakli Inscription Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .upload-zone {
+            padding: 60px 40px;
+            text-align: center;
+            border: 3px dashed #cbd5e0;
+            margin: 40px;
+            border-radius: 12px;
+            background: #f7fafc;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-zone:hover {
+            border-color: #667eea;
+            background: #edf2f7;
+        }
+
+        .upload-zone.dragover {
+            border-color: #667eea;
+            background: #e6f2ff;
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 1.3em;
+            color: #4a5568;
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            color: #718096;
+            font-size: 0.9em;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .lang-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px 40px;
+            background: #f7fafc;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .lang-btn {
+            padding: 10px 24px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .lang-btn:hover {
+            background: #edf2f7;
+        }
+
+        .lang-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .content {
+            padding: 40px;
+            display: none;
+        }
+
+        .content.visible {
+            display: block;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 1.8em;
+            color: #2d3748;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .icon {
+            font-size: 1.2em;
+        }
+
+        .image-container {
+            text-align: center;
+            margin: 20px 0;
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .inscription-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .glyph-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .glyph-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            position: relative;
+        }
+
+        .glyph-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .glyph-order {
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            background: #667eea;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .glyph-letter {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #2d3748;
+            margin: 10px 0;
+        }
+
+        .glyph-letter.arabic {
+            font-family: 'Traditional Arabic', 'Arial', sans-serif;
+            font-size: 2em;
+        }
+
+        .glyph-name {
+            font-size: 0.85em;
+            color: #718096;
+            margin-top: 5px;
+        }
+
+        .transcription-box {
+            background: #f7fafc;
+            border: 2px solid #cbd5e0;
+            border-radius: 10px;
+            padding: 25px;
+            margin-top: 20px;
+        }
+
+        .lang-section {
+            margin-bottom: 30px;
+        }
+
+        .lang-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .lang-section.hidden {
+            display: none;
+        }
+
+        .lang-label {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .transcription-text {
+            font-size: 1.4em;
+            line-height: 2;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+        }
+
+        .transcription-text.arabic {
+            direction: rtl;
+            font-family: 'Traditional Arabic', 'Arial', sans-serif;
+            font-size: 1.6em;
+        }
+
+        .translation-text {
+            font-size: 1.2em;
+            line-height: 1.8;
+            color: #2d3748;
+            white-space: pre-wrap;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+        }
+
+        .translation-text.arabic {
+            direction: rtl;
+            font-family: 'Traditional Arabic', 'Arial', sans-serif;
+            font-size: 1.4em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .metadata {
+            background: #f7fafc;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .metadata-item {
+            display: flex;
+            padding: 12px 0;
+            border-bottom: 1px solid #cbd5e0;
+        }
+
+        .metadata-item:last-child {
+            border-bottom: none;
+        }
+
+        .metadata-label {
+            font-weight: bold;
+            color: #667eea;
+            min-width: 180px;
+        }
+
+        .metadata-value {
+            color: #4a5568;
+        }
+
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 40px;
+            text-align: center;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .container {
+                box-shadow: none;
+            }
+
+            .lang-toggle, .upload-zone {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .glyph-grid {
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏺 Hakli Inscription Viewer</h1>
+            <p class="subtitle">Bilingual Ancient South Arabian Script Analysis</p>
+        </div>
+
+        <div id="uploadZone" class="upload-zone">
+            <div class="upload-icon">📂</div>
+            <div class="upload-text">Drop JSON file here or click to browse</div>
+            <div class="upload-hint">Export your data from Hakli Glyph Recognizer as JSON</div>
+            <input type="file" id="fileInput" accept=".json">
+        </div>
+
+        <div id="languageToggle" class="lang-toggle" style="display: none;">
+            <button class="lang-btn active" onclick="setLanguage('both')" id="btn-both">
+                🌍 Both Languages
+            </button>
+            <button class="lang-btn" onclick="setLanguage('english')" id="btn-english">
+                🇺🇸 English
+            </button>
+            <button class="lang-btn" onclick="setLanguage('arabic')" id="btn-arabic">
+                🇴🇲 Arabic
+            </button>
+        </div>
+
+        <div id="content" class="content">
+            <!-- Content will be populated here -->
+        </div>
+
+        <div id="errorMessage" class="error-message" style="display: none;">
+            <!-- Error messages will appear here -->
+        </div>
+    </div>
+
+    <script>
+        let currentLanguage = 'both';
+        let loadedData = null;
+
+        // File upload handlers
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const content = document.getElementById('content');
+        const errorMessage = document.getElementById('errorMessage');
+        const languageToggle = document.getElementById('languageToggle');
+
+        uploadZone.addEventListener('click', () => fileInput.click());
+        
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                loadFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                loadFile(e.target.files[0]);
+            }
+        });
+
+        function loadFile(file) {
+            if (!file.name.endsWith('.json')) {
+                showError('Please upload a JSON file exported from Hakli Glyph Recognizer.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    loadedData = data;
+                    displayData(data);
+                    uploadZone.style.display = 'none';
+                    languageToggle.style.display = 'flex';
+                    content.classList.add('visible');
+                    errorMessage.style.display = 'none';
+                } catch (error) {
+                    showError('Error parsing JSON file: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function showError(message) {
+            errorMessage.textContent = '❌ ' + message;
+            errorMessage.style.display = 'block';
+            content.classList.remove('visible');
+            languageToggle.style.display = 'none';
+        }
+
+        function displayData(data) {
+            content.innerHTML = '';
+
+            // Image Section
+            if (data.imageData) {
+                const imageSection = createSection('📷', 'Inscription Image');
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'image-container';
+                const img = document.createElement('img');
+                img.className = 'inscription-image';
+                img.src = data.imageData;
+                img.alt = 'Hakli Inscription';
+                imageContainer.appendChild(img);
+                imageSection.appendChild(imageContainer);
+                content.appendChild(imageSection);
+            }
+
+            // Glyph Key Section
+            const glyphSection = createSection('🔑', 'Glyph Key');
+            const glyphGrid = document.createElement('div');
+            glyphGrid.className = 'glyph-grid';
+            
+            if (data.detections && data.detections.length > 0) {
+                data.detections.forEach((detection, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'glyph-card';
+                    
+                    const order = document.createElement('div');
+                    order.className = 'glyph-order';
+                    order.textContent = index + 1;
+                    
+                    const letterEn = document.createElement('div');
+                    letterEn.className = 'glyph-letter';
+                    letterEn.textContent = detection.transliteration || detection.glyph;
+                    
+                    const letterAr = document.createElement('div');
+                    letterAr.className = 'glyph-letter arabic';
+                    letterAr.textContent = detection.arabic || detection.transliteration || detection.glyph;
+                    
+                    const name = document.createElement('div');
+                    name.className = 'glyph-name';
+                    name.textContent = detection.glyph;
+                    
+                    card.appendChild(order);
+                    card.appendChild(letterEn);
+                    card.appendChild(letterAr);
+                    card.appendChild(name);
+                    glyphGrid.appendChild(card);
+                });
+            }
+            
+            glyphSection.appendChild(glyphGrid);
+            content.appendChild(glyphSection);
+
+            // Transcription Section
+            const transcriptionSection = createSection('✍️', 'Transliteration');
+            const transcriptionBox = document.createElement('div');
+            transcriptionBox.className = 'transcription-box';
+
+            // Build transcriptions from detections
+            const transcriptionEn = buildTranscription(data, 'transliteration');
+            const transcriptionAr = buildTranscription(data, 'arabic');
+
+            // English transcription
+            const enSection = document.createElement('div');
+            enSection.className = 'lang-section english';
+            const enLabel = document.createElement('div');
+            enLabel.className = 'lang-label';
+            enLabel.textContent = 'English';
+            const enText = document.createElement('div');
+            enText.className = 'transcription-text';
+            enText.textContent = transcriptionEn;
+            enSection.appendChild(enLabel);
+            enSection.appendChild(enText);
+
+            // Arabic transcription
+            const arSection = document.createElement('div');
+            arSection.className = 'lang-section arabic';
+            const arLabel = document.createElement('div');
+            arLabel.className = 'lang-label';
+            arLabel.textContent = 'Arabic';
+            const arText = document.createElement('div');
+            arText.className = 'transcription-text arabic';
+            arText.textContent = transcriptionAr;
+            arSection.appendChild(arLabel);
+            arSection.appendChild(arText);
+
+            transcriptionBox.appendChild(enSection);
+            transcriptionBox.appendChild(arSection);
+            transcriptionSection.appendChild(transcriptionBox);
+            content.appendChild(transcriptionSection);
+
+            // Translation Section
+            if (data.translations && (data.translations.english || data.translations.arabic)) {
+                const translationSection = createSection('🌍', 'Translation');
+                const translationBox = document.createElement('div');
+                translationBox.className = 'transcription-box';
+
+                // English translation
+                if (data.translations.english) {
+                    const enTransSection = document.createElement('div');
+                    enTransSection.className = 'lang-section english';
+                    const enTransLabel = document.createElement('div');
+                    enTransLabel.className = 'lang-label';
+                    enTransLabel.textContent = 'English';
+                    const enTransText = document.createElement('div');
+                    enTransText.className = 'translation-text';
+                    enTransText.textContent = data.translations.english;
+                    enTransSection.appendChild(enTransLabel);
+                    enTransSection.appendChild(enTransText);
+                    translationBox.appendChild(enTransSection);
+                }
+
+                // Arabic translation
+                if (data.translations.arabic) {
+                    const arTransSection = document.createElement('div');
+                    arTransSection.className = 'lang-section arabic';
+                    const arTransLabel = document.createElement('div');
+                    arTransLabel.className = 'lang-label';
+                    arTransLabel.textContent = 'Arabic';
+                    const arTransText = document.createElement('div');
+                    arTransText.className = 'translation-text arabic';
+                    arTransText.textContent = data.translations.arabic;
+                    arTransSection.appendChild(arTransLabel);
+                    arTransSection.appendChild(arTransText);
+                    translationBox.appendChild(arTransSection);
+                }
+
+                translationSection.appendChild(translationBox);
+                content.appendChild(translationSection);
+            }
+
+            // Statistics Section
+            if (data.statistics) {
+                const statsSection = createSection('📊', 'Statistics');
+                const statsGrid = document.createElement('div');
+                statsGrid.className = 'stats-grid';
+
+                const stats = [
+                    { label: 'Total Glyphs', value: data.statistics.totalGlyphs || data.detections.length },
+                    { label: 'Unique Glyphs', value: data.statistics.uniqueGlyphs || new Set(data.detections.map(d => d.glyph)).size },
+                    { label: 'Words', value: data.statistics.words || (data.wordBoundaries ? data.wordBoundaries.length + 1 : 'N/A') },
+                    { label: 'Lines/Columns', value: data.statistics.lines || (data.lineBreaks ? data.lineBreaks.length + 1 : 'N/A') }
+                ];
+
+                stats.forEach(stat => {
+                    const card = document.createElement('div');
+                    card.className = 'stat-card';
+                    const value = document.createElement('div');
+                    value.className = 'stat-value';
+                    value.textContent = stat.value;
+                    const label = document.createElement('div');
+                    label.className = 'stat-label';
+                    label.textContent = stat.label;
+                    card.appendChild(value);
+                    card.appendChild(label);
+                    statsGrid.appendChild(card);
+                });
+
+                statsSection.appendChild(statsGrid);
+                content.appendChild(statsSection);
+            }
+
+            // Metadata Section
+            const metadataSection = createSection('ℹ️', 'Metadata');
+            const metadata = document.createElement('div');
+            metadata.className = 'metadata';
+
+            const metadataItems = [
+                { label: 'Export Date', value: data.timestamp ? new Date(data.timestamp).toLocaleString() : 'N/A' },
+                { label: 'Reading Direction', value: data.readingDirection || 'N/A' },
+                { label: 'View Mode', value: data.viewMode || 'N/A' },
+                { label: 'Script Type', value: 'Ancient South Arabian (Hakli/Jibbali)' },
+                { label: 'Location', value: 'Dhofar Region, Oman' }
+            ];
+
+            metadataItems.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'metadata-item';
+                const label = document.createElement('div');
+                label.className = 'metadata-label';
+                label.textContent = item.label + ':';
+                const value = document.createElement('div');
+                value.className = 'metadata-value';
+                value.textContent = item.value;
+                div.appendChild(label);
+                div.appendChild(value);
+                metadata.appendChild(div);
+            });
+
+            metadataSection.appendChild(metadata);
+            content.appendChild(metadataSection);
+
+            // Apply current language filter
+            setLanguage(currentLanguage);
+        }
+
+        function buildTranscription(data, field) {
+            if (!data.detections || data.detections.length === 0) return '';
+            
+            let result = '';
+            data.detections.forEach((detection, index) => {
+                const letter = field === 'arabic' 
+                    ? (detection.arabic || detection.transliteration || detection.glyph)
+                    : (detection.transliteration || detection.glyph);
+                
+                result += letter;
+                
+                if (data.lineBreaks && data.lineBreaks.includes(index)) {
+                    result += '\n';
+                } else if (data.columnBreaks && data.columnBreaks.includes(index)) {
+                    result += ' || ';
+                } else if (data.wordBoundaries && data.wordBoundaries.includes(index)) {
+                    result += ' | ';
+                } else if (index < data.detections.length - 1) {
+                    result += ' ';
+                }
+            });
+            
+            return result;
+        }
+
+        function createSection(icon, title) {
+            const section = document.createElement('div');
+            section.className = 'section';
+            const sectionTitle = document.createElement('div');
+            sectionTitle.className = 'section-title';
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'icon';
+            iconSpan.textContent = icon;
+            sectionTitle.appendChild(iconSpan);
+            sectionTitle.appendChild(document.createTextNode(title));
+            section.appendChild(sectionTitle);
+            return section;
+        }
+
+        function setLanguage(lang) {
+            currentLanguage = lang;
+            
+            // Update button states
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('btn-' + lang).classList.add('active');
+            
+            // Show/hide language sections
+            const englishSections = document.querySelectorAll('.lang-section.english');
+            const arabicSections = document.querySelectorAll('.lang-section.arabic');
+            
+            if (lang === 'both') {
+                englishSections.forEach(s => s.classList.remove('hidden'));
+                arabicSections.forEach(s => s.classList.remove('hidden'));
+            } else if (lang === 'english') {
+                englishSections.forEach(s => s.classList.remove('hidden'));
+                arabicSections.forEach(s => s.classList.add('hidden'));
+            } else if (lang === 'arabic') {
+                englishSections.forEach(s => s.classList.add('hidden'));
+                arabicSections.forEach(s => s.classList.remove('hidden'));
+            }
+        }
+    </script>
+</body>
+</html>
