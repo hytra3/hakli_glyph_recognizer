@@ -179,6 +179,174 @@
                 return readingOrder.map(index => recognitionResults[index]).filter(r => r !== undefined);
             };
             
+            // Copy transcription to clipboard
+            const copyTranscriptionToClipboard = () => {
+                const orderedResults = viewMode === 'reading' ? getReadingOrderedResults() : recognitionResults;
+                let transcription = '';
+                
+                orderedResults.forEach((result, index) => {
+                    transcription += result.glyph.transliteration || result.glyph.name;
+                    
+                    if (viewMode === 'reading') {
+                        if (lineBreaks.has(index)) {
+                            transcription += '\n';
+                        } else if (columnBreaks.has(index)) {
+                            transcription += ' || ';
+                        } else if (wordBoundaries.has(index)) {
+                            transcription += ' | ';
+                        } else if (index < orderedResults.length - 1) {
+                            transcription += ' ';
+                        }
+                    } else if (index < orderedResults.length - 1) {
+                        transcription += ' ';
+                    }
+                });
+                
+                navigator.clipboard.writeText(transcription).then(() => {
+                    alert('✅ Transcription copied to clipboard!');
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                    alert('❌ Failed to copy to clipboard');
+                });
+            };
+            
+            // Action history tracking
+            const recordAction = (actionType, actionData) => {
+                const action = {
+                    type: actionType,
+                    data: actionData,
+                    timestamp: new Date().toISOString(),
+                    id: Date.now()
+                };
+                setActionHistory(prev => [...prev, action].slice(-50));
+                // Only log important actions
+                if (['exclude_regions', 'merge_detections', 'upload_to_cloud'].includes(actionType)) {
+                    console.log(`✓ ${actionType}:`, actionData);
+                }
+                // Take snapshot after modifying actions
+                const modifyingActions = ['validation', 'delete_detection', 'merge_detections', 
+                                        'add_manual_detection', 'correct_glyph', 'reorder_reading', 
+                                        'toggle_word_boundary'];
+                if (modifyingActions.includes(actionType)) {
+                    setTimeout(takeSnapshot, 0);
+                }
+            };
+
+            const takeSnapshot = () => {
+                const snapshot = {
+                    recognitionResults: [...recognitionResults],
+                    validations: { ...validations },
+                    selectedRegions: new Set(selectedRegions),
+                    wordBoundaries: new Set(wordBoundaries),
+                    readingOrder: [...readingOrder],
+                    isolatedGlyphs: [...isolatedGlyphs]
+                };
+                
+                // Remove any "future" history if we're not at the end
+                const newHistory = stateHistory.slice(0, historyIndex + 1);
+                newHistory.push(snapshot);
+                
+                // Keep only last 50 states
+                const trimmedHistory = newHistory.slice(-50);
+                
+                setStateHistory(trimmedHistory);
+                setHistoryIndex(trimmedHistory.length - 1);
+            };
+            
+            // Session save/load functions
+            const saveSession = () => {
+                const sessionData = {
+                    image,
+                    recognitionResults,
+                    readingOrder,
+                    wordBoundaries: Array.from(wordBoundaries),
+                    columnBreaks: Array.from(columnBreaks),
+                    lineBreaks: Array.from(lineBreaks),
+                    translationEnglish,
+                    translationArabic,
+                    readingDirection,
+                    viewMode,
+                    timestamp: new Date().toISOString()
+                };
+                
+                const blob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `hakli_session_${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                alert('✅ Session saved!');
+                recordAction('save_session');
+            };
+            
+            const loadSession = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const sessionData = JSON.parse(e.target.result);
+                        
+                        setImage(sessionData.image);
+                        setRecognitionResults(sessionData.recognitionResults || []);
+                        setReadingOrder(sessionData.readingOrder || []);
+                        setWordBoundaries(new Set(sessionData.wordBoundaries || []));
+                        setColumnBreaks(new Set(sessionData.columnBreaks || []));
+                        setLineBreaks(new Set(sessionData.lineBreaks || []));
+                        setTranslationEnglish(sessionData.translationEnglish || '');
+                        setTranslationArabic(sessionData.translationArabic || '');
+                        setReadingDirection(sessionData.readingDirection || 'detection');
+                        setViewMode(sessionData.viewMode || 'detection');
+                        
+                        alert('✅ Session loaded successfully!');
+                        recordAction('load_session');
+                    } catch (error) {
+                        alert('❌ Failed to load session: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            
+            // Undo/Redo functions
+            const undo = () => {
+                if (historyIndex <= 0) return;
+                
+                const previousState = stateHistory[historyIndex - 1];
+                setRecognitionResults(previousState.recognitionResults);
+                setValidations(previousState.validations);
+                setSelectedRegions(previousState.selectedRegions);
+                setWordBoundaries(previousState.wordBoundaries);
+                setReadingOrder(previousState.readingOrder);
+                setIsolatedGlyphs(previousState.isolatedGlyphs);
+                setHistoryIndex(historyIndex - 1);
+                
+                console.log('Undo to state', historyIndex - 1);
+            };
+
+            const redo = () => {
+                if (historyIndex >= stateHistory.length - 1) return;
+                
+                const nextState = stateHistory[historyIndex + 1];
+                setRecognitionResults(nextState.recognitionResults);
+                setValidations(nextState.validations);
+                setSelectedRegions(nextState.selectedRegions);
+                setWordBoundaries(nextState.wordBoundaries);
+                setReadingOrder(nextState.readingOrder);
+                setIsolatedGlyphs(nextState.isolatedGlyphs);
+                setHistoryIndex(historyIndex + 1);
+                
+                console.log('Redo to state', historyIndex + 1);
+            };
+            
+            // Aliases for consistency
+            const handleUndo = undo;
+            const handleRedo = redo;
+            
             // Enhanced Transcription Display States
             const [showEnhancedTranscription, setShowEnhancedTranscription] = useState(false);
             const [transcriptionFormat, setTranscriptionFormat] = useState('english-ltr'); // english-ltr, arabic-rtl, vertical-rl, vertical-lr
@@ -2442,36 +2610,6 @@
             };
 
                     
-            const undo = () => {
-                if (historyIndex <= 0) return;
-                
-                const previousState = stateHistory[historyIndex - 1];
-                setRecognitionResults(previousState.recognitionResults);
-                setValidations(previousState.validations);
-                setSelectedRegions(previousState.selectedRegions);
-                setWordBoundaries(previousState.wordBoundaries);
-                setReadingOrder(previousState.readingOrder);
-                setIsolatedGlyphs(previousState.isolatedGlyphs);
-                setHistoryIndex(historyIndex - 1);
-                
-                console.log('Undo to state', historyIndex - 1);
-            };
-
-            const redo = () => {
-                if (historyIndex >= stateHistory.length - 1) return;
-                
-                const nextState = stateHistory[historyIndex + 1];
-                setRecognitionResults(nextState.recognitionResults);
-                setValidations(nextState.validations);
-                setSelectedRegions(nextState.selectedRegions);
-                setWordBoundaries(nextState.wordBoundaries);
-                setReadingOrder(nextState.readingOrder);
-                setIsolatedGlyphs(nextState.isolatedGlyphs);
-                setHistoryIndex(historyIndex + 1);
-                
-                console.log('Redo to state', historyIndex + 1);
-            }; 
-
             const handleFileUpload = (event) => {
                 const file = event.target.files[0];
                 if (file && file.type.indexOf('image/') === 0) {
