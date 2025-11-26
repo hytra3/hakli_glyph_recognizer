@@ -3042,15 +3042,19 @@
                 setEraserMode(newMode);
                 
                 if (newMode) {
-                    // Entering eraser mode - copy current preprocessed image to eraser canvas
-                    if (preprocessedMat && !preprocessedMat.isDeleted() && eraserCanvasRef.current) {
-                        cv.imshow(eraserCanvasRef.current, preprocessedMat);
-                        
-                        // Save initial state for undo
-                        const canvas = eraserCanvasRef.current;
-                        const imageData = canvas.toDataURL();
-                        setEraserHistory([imageData]);
-                    }
+                    // Entering eraser mode - use setTimeout to ensure canvas is rendered
+                    setTimeout(() => {
+                        if (preprocessedMat && !preprocessedMat.isDeleted() && eraserCanvasRef.current) {
+                            cv.imshow(eraserCanvasRef.current, preprocessedMat);
+                            
+                            // Save initial state for undo
+                            const canvas = eraserCanvasRef.current;
+                            const imageData = canvas.toDataURL();
+                            setEraserHistory([imageData]);
+                            
+                            console.log('✓ Eraser canvas loaded with image');
+                        }
+                    }, 100); // Small delay to ensure canvas is in DOM
                 } else {
                     // Exiting eraser mode - apply erased version back to preprocessedMat
                     if (eraserCanvasRef.current) {
