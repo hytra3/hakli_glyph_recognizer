@@ -179,6 +179,10 @@
             const [preprocessedMat, setPreprocessedMat] = useState(null);
             const [adjustmentsApplied, setAdjustmentsApplied] = useState(false);
             const [isImageLoading, setIsImageLoading] = useState(false);
+            const [eraserMode, setEraserMode] = useState(false);
+            const [brushSize, setBrushSize] = useState(15);
+            const [isErasing, setIsErasing] = useState(false);
+            const eraserCanvasRef = useRef(null);
             const preprocessCanvasRef = useRef(null);
             const originalCanvasRef = useRef(null);
             
@@ -3027,6 +3031,85 @@
                 }
             };
             
+            // Eraser mode functions
+            const toggleEraserMode = () => {
+                const newMode = !eraserMode;
+                setEraserMode(newMode);
+                
+                if (newMode) {
+                    // Entering eraser mode - copy current preprocessed image to eraser canvas
+                    if (preprocessedMat && !preprocessedMat.isDeleted() && eraserCanvasRef.current) {
+                        cv.imshow(eraserCanvasRef.current, preprocessedMat);
+                    }
+                } else {
+                    // Exiting eraser mode - apply erased version back to preprocessedMat
+                    if (eraserCanvasRef.current) {
+                        try {
+                            const erasedMat = cv.imread(eraserCanvasRef.current);
+                            if (preprocessedMat && !preprocessedMat.isDeleted()) {
+                                preprocessedMat.delete();
+                            }
+                            setPreprocessedMat(erasedMat);
+                            
+                            // Update the preview canvas
+                            if (preprocessCanvasRef.current) {
+                                cv.imshow(preprocessCanvasRef.current, erasedMat);
+                            }
+                            
+                            // Mark adjustments as needing reapplication
+                            setAdjustmentsApplied(false);
+                            
+                            console.log('✓ Eraser changes applied');
+                        } catch (error) {
+                            console.error('Error applying eraser:', error);
+                        }
+                    }
+                }
+            };
+            
+            const handleEraserMouseDown = (e) => {
+                if (!eraserMode || !eraserCanvasRef.current) return;
+                setIsErasing(true);
+                drawEraser(e);
+            };
+            
+            const handleEraserMouseMove = (e) => {
+                if (!eraserMode || !isErasing || !eraserCanvasRef.current) return;
+                drawEraser(e);
+            };
+            
+            const handleEraserMouseUp = () => {
+                setIsErasing(false);
+            };
+            
+            const drawEraser = (e) => {
+                const canvas = eraserCanvasRef.current;
+                if (!canvas) return;
+                
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const x = (e.clientX - rect.left) * scaleX;
+                const y = (e.clientY - rect.top) * scaleY;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+                ctx.fill();
+            };
+            
+            const clearAllEraser = () => {
+                if (!eraserCanvasRef.current) return;
+                
+                if (window.confirm('Clear all eraser marks and start over?')) {
+                    // Restore original preprocessed image
+                    if (preprocessedMat && !preprocessedMat.isDeleted()) {
+                        cv.imshow(eraserCanvasRef.current, preprocessedMat);
+                    }
+                }
+            };
+            
             // Export preprocessing settings
             const exportPreprocessingSettings = () => {
                 const json = JSON.stringify(preprocessing, null, 2);
@@ -3552,6 +3635,78 @@
                                         </select>
                                     </div>
                                     
+                                    {/* Manual Eraser */}
+                                    <div className="mb-5 p-4 bg-white rounded-lg border border-gray-200">
+                                        <label className="block font-semibold mb-3">
+                                            🖌️ Manual Eraser
+                                            <span className="font-normal text-xs text-gray-500 ml-2">(remove noise manually)</span>
+                                        </label>
+                                        
+                                        {!eraserMode ? (
+                                            <button
+                                                onClick={toggleEraserMode}
+                                                disabled={!preprocessedMat}
+                                                className="w-full px-4 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
+                                            >
+                                                🖌️ Enable Eraser Mode
+                                            </button>
+                                        ) : (
+                                            <div>
+                                                {/* Eraser Canvas */}
+                                                <div className="mb-3 border-2 border-purple-500 rounded-lg overflow-hidden bg-gray-100" style={{cursor: 'crosshair'}}>
+                                                    <canvas
+                                                        ref={eraserCanvasRef}
+                                                        onMouseDown={handleEraserMouseDown}
+                                                        onMouseMove={handleEraserMouseMove}
+                                                        onMouseUp={handleEraserMouseUp}
+                                                        onMouseLeave={handleEraserMouseUp}
+                                                        className="max-w-full"
+                                                        style={{cursor: 'crosshair'}}
+                                                    />
+                                                </div>
+                                                
+                                                {/* Brush Size Control */}
+                                                <div className="mb-3">
+                                                    <label className="block text-sm font-semibold mb-2">
+                                                        Brush Size: {brushSize}px
+                                                    </label>
+                                                    <input
+                                                        type="range"
+                                                        min="5"
+                                                        max="50"
+                                                        value={brushSize}
+                                                        onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                                                        className="w-full"
+                                                    />
+                                                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                                        <span>Fine (5px)</span>
+                                                        <span>Large (50px)</span>
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* Eraser Controls */}
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={clearAllEraser}
+                                                        className="flex-1 px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 text-sm font-semibold"
+                                                    >
+                                                        🔄 Reset
+                                                    </button>
+                                                    <button
+                                                        onClick={toggleEraserMode}
+                                                        className="flex-1 px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm font-semibold"
+                                                    >
+                                                        ✓ Done Erasing
+                                                    </button>
+                                                </div>
+                                                
+                                                <p className="mt-2 text-xs text-gray-600">
+                                                    Click and drag to erase noise. Click "Done" when finished to apply changes.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
                                     {/* Summary */}
                                     <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                                         <strong className="block mb-2">Active Settings:</strong>
@@ -3598,97 +3753,6 @@
                                         </p>
                                     </div>
                                 </div>
-                            )}
-                        </div>
-                    )}
-
-                    {image && (
-                        <div className="mb-6 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
-                            <button
-                                onClick={() => setIsRotationCollapsed(!isRotationCollapsed)}
-                                className="flex items-center gap-2 font-semibold text-gray-900 hover:text-gray-700 mb-2"
-                            >
-                                <span>{isRotationCollapsed ? '▶' : '▼'}</span>
-                                <h3>🔄 Image Rotation</h3>
-                                {isRotationCollapsed && imageRotation !== 0 && (
-                                    <span className="text-sm text-blue-600 ml-2">({imageRotation}°)</span>
-                                )}
-                            </button>
-                            
-                            {!isRotationCollapsed && (
-                                <>
-                                    <div className="flex items-center gap-4">
-                                        <button
-                                            onClick={() => {
-                                                setImageRotation((imageRotation - 90 + 360) % 360);
-                                                setRecognitionResults([]); // Clear detection boxes
-                                                setRotatedImageDimensions(null); // Clear rotated dimensions
-                                                setDisplayImage(null); // Clear rotated display image
-                                            }}
-                                            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold"
-                                            title="Rotate 90° counter-clockwise"
-                                        >
-                                            ↺ 90° Left
-                                        </button>
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3">
-                                                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Fine Tune:</label>
-                                                <input
-                                                    type="range"
-                                                    min="-45"
-                                                    max="45"
-                                                    value={(() => {
-                                                        // Get the offset from nearest 90° increment
-                                                        const base = Math.round(imageRotation / 90) * 90;
-                                                        let offset = imageRotation - base;
-                                                        // Normalize to -45 to +45 range
-                                                        if (offset > 45) offset -= 90;
-                                                        if (offset < -45) offset += 90;
-                                                        return offset;
-                                                    })()}
-                                                    onChange={(e) => {
-                                                        const offset = parseInt(e.target.value);
-                                                        const base = Math.round(imageRotation / 90) * 90;
-                                                        const newRotation = (base + offset + 360) % 360;
-                                                        setImageRotation(newRotation);
-                                                        setRecognitionResults([]); // Clear detection boxes
-                                                        setRotatedImageDimensions(null); // Clear rotated dimensions
-                                                        setDisplayImage(null); // Clear rotated display image
-                                                    }}
-                                                    className="flex-1"
-                                                />
-                                                <span className="text-sm font-semibold text-gray-700 w-16">{imageRotation}°</span>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                setImageRotation((imageRotation + 90) % 360);
-                                                setRecognitionResults([]); // Clear detection boxes
-                                                setRotatedImageDimensions(null); // Clear rotated dimensions
-                                                setDisplayImage(null); // Clear rotated display image
-                                            }}
-                                            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold"
-                                            title="Rotate 90° clockwise"
-                                        >
-                                            ↻ 90° Right
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                setImageRotation(0);
-                                                setRecognitionResults([]); // Clear detection boxes
-                                                setRotatedImageDimensions(null); // Clear rotated dimensions
-                                                setDisplayImage(null); // Clear rotated display image
-                                            }}
-                                            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 font-semibold"
-                                            title="Reset rotation"
-                                        >
-                                            Reset
-                                        </button>
-                                    </div>
-                                    <div className="mt-2 text-xs text-gray-600">
-                                        Rotate the entire image to correct orientation before recognition. Rotation clears previous detections - click Recognize again after adjusting.
-                                    </div>
-                                </>
                             )}
                         </div>
                     )}
