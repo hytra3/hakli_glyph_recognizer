@@ -182,6 +182,7 @@
             const [eraserMode, setEraserMode] = useState(false);
             const [brushSize, setBrushSize] = useState(15);
             const [isErasing, setIsErasing] = useState(false);
+            const [eraserHistory, setEraserHistory] = useState([]); // Track canvas states for undo
             const eraserCanvasRef = useRef(null);
             const preprocessCanvasRef = useRef(null);
             const originalCanvasRef = useRef(null);
@@ -3020,11 +3021,15 @@
                     cv.imshow(canvas, preprocessedMat);
                     const dataURL = canvas.toDataURL();
                     
+                    // Force update by adding timestamp to ensure React sees it as new
+                    const timestamp = Date.now();
+                    
                     // Update the display image
                     setDisplayImage(dataURL);
+                    setImage(dataURL); // Also update the base image state
                     setAdjustmentsApplied(true);
                     
-                    console.log('✓ Adjustments applied to recognition image');
+                    console.log('✓ Adjustments applied to recognition image (timestamp:', timestamp, ')');
                 } catch (error) {
                     console.error('Error applying adjustments:', error);
                     alert('❌ Failed to apply adjustments. Please try again.');
@@ -3040,6 +3045,11 @@
                     // Entering eraser mode - copy current preprocessed image to eraser canvas
                     if (preprocessedMat && !preprocessedMat.isDeleted() && eraserCanvasRef.current) {
                         cv.imshow(eraserCanvasRef.current, preprocessedMat);
+                        
+                        // Save initial state for undo
+                        const canvas = eraserCanvasRef.current;
+                        const imageData = canvas.toDataURL();
+                        setEraserHistory([imageData]);
                     }
                 } else {
                     // Exiting eraser mode - apply erased version back to preprocessedMat
@@ -3058,6 +3068,9 @@
                             
                             // Mark adjustments as needing reapplication
                             setAdjustmentsApplied(false);
+                            
+                            // Clear history
+                            setEraserHistory([]);
                             
                             console.log('✓ Eraser changes applied');
                         } catch (error) {
@@ -3079,6 +3092,11 @@
             };
             
             const handleEraserMouseUp = () => {
+                if (isErasing && eraserCanvasRef.current) {
+                    // Save current canvas state to history
+                    const imageData = eraserCanvasRef.current.toDataURL();
+                    setEraserHistory(prev => [...prev, imageData]);
+                }
                 setIsErasing(false);
             };
             
@@ -3099,6 +3117,25 @@
                 ctx.fill();
             };
             
+            const undoLastStroke = () => {
+                if (!eraserCanvasRef.current || eraserHistory.length <= 1) return;
+                
+                // Remove last state
+                const newHistory = eraserHistory.slice(0, -1);
+                setEraserHistory(newHistory);
+                
+                // Restore previous state
+                const previousState = newHistory[newHistory.length - 1];
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = eraserCanvasRef.current;
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = previousState;
+            };
+            
             const clearAllEraser = () => {
                 if (!eraserCanvasRef.current) return;
                 
@@ -3106,6 +3143,10 @@
                     // Restore original preprocessed image
                     if (preprocessedMat && !preprocessedMat.isDeleted()) {
                         cv.imshow(eraserCanvasRef.current, preprocessedMat);
+                        
+                        // Reset history to just the initial state
+                        const imageData = eraserCanvasRef.current.toDataURL();
+                        setEraserHistory([imageData]);
                     }
                 }
             };
@@ -3685,23 +3726,34 @@
                                                 </div>
                                                 
                                                 {/* Eraser Controls */}
-                                                <div className="flex gap-2">
+                                                <div className="flex gap-2 mb-2">
+                                                    <button
+                                                        onClick={undoLastStroke}
+                                                        disabled={eraserHistory.length <= 1}
+                                                        className="flex-1 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+                                                        title="Undo last stroke"
+                                                    >
+                                                        ↶ Undo
+                                                    </button>
                                                     <button
                                                         onClick={clearAllEraser}
                                                         className="flex-1 px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 text-sm font-semibold"
+                                                        title="Clear all strokes"
                                                     >
                                                         🔄 Reset
                                                     </button>
+                                                </div>
+                                                <div className="flex gap-2">
                                                     <button
                                                         onClick={toggleEraserMode}
-                                                        className="flex-1 px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm font-semibold"
+                                                        className="w-full px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm font-semibold"
                                                     >
                                                         ✓ Done Erasing
                                                     </button>
                                                 </div>
                                                 
                                                 <p className="mt-2 text-xs text-gray-600">
-                                                    Click and drag to erase noise. Click "Done" when finished to apply changes.
+                                                    Click and drag to erase noise. Use Undo to remove last stroke. Click "Done" when finished.
                                                 </p>
                                             </div>
                                         )}
