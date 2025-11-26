@@ -177,6 +177,8 @@
             });
             const [originalMat, setOriginalMat] = useState(null);
             const [preprocessedMat, setPreprocessedMat] = useState(null);
+            const [adjustmentsApplied, setAdjustmentsApplied] = useState(false);
+            const [isImageLoading, setIsImageLoading] = useState(false);
             const preprocessCanvasRef = useRef(null);
             const originalCanvasRef = useRef(null);
             
@@ -2816,6 +2818,7 @@
             const handleFileUpload = (event) => {
                 const file = event.target.files[0];
                 if (file && file.type.indexOf('image/') === 0) {
+                    setIsImageLoading(true);
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         setImage(e.target.result);
@@ -2828,6 +2831,7 @@
                         setIsolatedGlyphs([]);
                         setSelectedRegions(new Set());
                         setMergeIndicator(null);
+                        setAdjustmentsApplied(false); // Reset adjustment state
                         
                         // Load image into OpenCV Mat for preprocessing
                         if (isOpenCvReady) {
@@ -2849,9 +2853,21 @@
                                 
                                 // Process immediately
                                 processImageWithSettings(mat, preprocessing);
+                                setIsImageLoading(false);
+                            };
+                            img.onerror = () => {
+                                setIsImageLoading(false);
+                                alert('❌ Failed to load image. Please try again.');
                             };
                             img.src = e.target.result;
+                        } else {
+                            setIsImageLoading(false);
+                            alert('⚠️ OpenCV is still loading. Please wait a moment and try again.');
                         }
+                    };
+                    reader.onerror = () => {
+                        setIsImageLoading(false);
+                        alert('❌ Failed to read file. Please try again.');
                     };
                     reader.readAsDataURL(file);
                 }
@@ -2963,6 +2979,7 @@
             const updatePreprocessingSetting = (key, value) => {
                 const newSettings = { ...preprocessing, [key]: value };
                 setPreprocessing(newSettings);
+                setAdjustmentsApplied(false); // Mark as needing reapplication
                 if (originalMat) {
                     processImageWithSettings(originalMat, newSettings);
                 }
@@ -2980,8 +2997,33 @@
                     invertColors: false
                 };
                 setPreprocessing(defaults);
+                setAdjustmentsApplied(false); // Mark as needing reapplication
                 if (originalMat) {
                     processImageWithSettings(originalMat, defaults);
+                }
+            };
+            
+            // Apply adjustments to main recognition image
+            const applyAdjustments = () => {
+                if (!preprocessedMat || preprocessedMat.isDeleted()) {
+                    alert('⚠️ No preprocessed image available. Please adjust settings first.');
+                    return;
+                }
+                
+                try {
+                    // Convert preprocessed Mat to canvas then to data URL
+                    const canvas = document.createElement('canvas');
+                    cv.imshow(canvas, preprocessedMat);
+                    const dataURL = canvas.toDataURL();
+                    
+                    // Update the display image
+                    setDisplayImage(dataURL);
+                    setAdjustmentsApplied(true);
+                    
+                    console.log('✓ Adjustments applied to recognition image');
+                } catch (error) {
+                    console.error('Error applying adjustments:', error);
+                    alert('❌ Failed to apply adjustments. Please try again.');
                 }
             };
             
@@ -3309,7 +3351,19 @@
                     </div>
 
                     <div className="mb-6">
-                        <input type="file" accept="image/*" onChange={handleFileUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                        <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handleFileUpload} 
+                            disabled={isImageLoading}
+                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50" 
+                        />
+                        {isImageLoading && (
+                            <div className="mt-2 flex items-center gap-2 text-blue-600">
+                                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                <span className="text-sm font-medium">Loading image...</span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Preprocessing Panel */}
@@ -3511,6 +3565,37 @@
                                                 <li className="italic text-gray-600">No preprocessing active</li>
                                             )}
                                         </ul>
+                                    </div>
+                                    
+                                    {/* Apply Adjustments Button */}
+                                    <div className="mt-4 p-4 bg-white border-2 rounded-lg" style={{borderColor: adjustmentsApplied ? '#10b981' : '#f59e0b'}}>
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                {adjustmentsApplied ? (
+                                                    <>
+                                                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                                        <span className="font-semibold text-green-700">✓ Adjustments Applied</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></div>
+                                                        <span className="font-semibold text-amber-700">Adjustments Ready</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={applyAdjustments}
+                                                disabled={!preprocessedMat}
+                                                className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
+                                            >
+                                                {adjustmentsApplied ? '🔄 Reapply Adjustments' : '✨ Apply Adjustments'}
+                                            </button>
+                                        </div>
+                                        <p className="mt-2 text-xs text-gray-600">
+                                            {adjustmentsApplied 
+                                                ? 'The preprocessed image is ready for recognition. Click "Recognize Glyphs" below.'
+                                                : 'Click "Apply Adjustments" to update the main image with your preprocessing settings before recognition.'}
+                                        </p>
                                     </div>
                                 </div>
                             )}
