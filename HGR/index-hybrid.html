@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hakli Glyph Recognizer</title>
+    
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- OpenCV -->
+    <script>
+        var isOpenCvReady = false;
+        function onOpenCvReady() {
+            isOpenCvReady = true;
+            console.log('✅ OpenCV.js is ready');
+        }
+    </script>
+    <script async src="https://docs.opencv.org/4.5.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+    
+    <!-- Styles -->
+    <style>
+        .detection-box {
+            position: absolute;
+            pointer-events: auto;
+            z-index: 10;
+            border: 3px solid;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .detection-box.validated-correct { border-color: #10b981; background: rgba(16, 185, 129, 0.25); }
+        .detection-box.validated-incorrect { border-color: #ef4444; background: rgba(239, 68, 68, 0.25); }
+        .detection-box.unvalidated { border-color: #3b82f6; background: rgba(59, 130, 246, 0.25); }
+        .detection-box.selected { border-color: #f59e0b; background: rgba(245, 158, 11, 0.3); border-width: 4px; }
+
+        .detection-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            border-radius: 3px;
+            white-space: nowrap;
+            opacity: 0.9;
+        }
+        
+        .reading-order-badge {
+            position: absolute;
+            top: -20px;
+            left: -20px;
+            width: 28px;
+            height: 28px;
+            background-color: #facc15;
+            border: 2px solid #ca8a04;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: black;
+            z-index: 20;
+        }
+        
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+        }
+        
+        .manual-selection-box {
+            position: absolute;
+            border: 2px dashed #f59e0b;
+            background: rgba(245, 158, 11, 0.1);
+            pointer-events: none;
+            z-index: 5;
+        }
+        
+        .region-boundary {
+            position: absolute;
+            border: 1px solid rgba(156, 163, 175, 0.5);
+            background: rgba(156, 163, 175, 0.05);
+            pointer-events: none;
+            z-index: 3;
+        }
+        
+        .merge-indicator {
+            position: absolute;
+            border: 3px solid #8b5cf6;
+            background: rgba(139, 92, 246, 0.15);
+            border-radius: 8px;
+            pointer-events: none;
+            z-index: 15;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- ========================================== -->
+    <!-- MODULAR BACKEND - Load before app code    -->
+    <!-- ========================================== -->
+    
+    <!-- Core & Utils -->
+    <script src="./src/core/config.js"></script>
+    <script src="./src/utils/helpers.js"></script>
+    
+    <!-- Storage -->
+    <script src="./src/storage/hki.js"></script>
+    <script src="./src/storage/cache.js"></script>
+    <script src="./src/storage/corrections.js"></script>
+    <script src="./src/storage/export.js"></script>
+    
+    <!-- Recognition -->
+    <script src="./src/recognition/preprocessing.js"></script>
+    <script src="./src/recognition/isolation.js"></script>
+    <script src="./src/recognition/matching.js"></script>
+    <script src="./src/recognition/nms.js"></script>
+    
+    <script>
+        // Verify modules loaded
+        console.log('🚀 Hakli Glyph Recognizer - Hybrid Version');
+        console.log('📦 Backend modules:', {
+            config: typeof CONFIG !== 'undefined',
+            utils: typeof Utils !== 'undefined',
+            hki: typeof HKIStorage !== 'undefined',
+            cache: typeof CacheStorage !== 'undefined',
+            corrections: typeof CorrectionMemory !== 'undefined',
+            export: typeof ExportUtils !== 'undefined',
+            isolation: typeof Isolation !== 'undefined',
+            matching: typeof Matching !== 'undefined',
+            preprocessing: typeof Preprocessing !== 'undefined',
+            nms: typeof NMS !== 'undefined'
+        });
+    </script>
+
+    <!-- ========================================== -->
+    <!-- ORIGINAL APP CODE GOES HERE               -->
+    <!-- (Will be inserted in next step)           -->
+    <!-- ========================================== -->
+
+</body>
+</html>

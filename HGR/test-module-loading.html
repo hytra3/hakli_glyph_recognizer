@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Module Loading Test</title>
+    
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div id="root"></div>
+    
+    <!-- Load Backend Modules -->
+    <script src="hakli-modular/src/core/config.js"></script>
+    <script src="hakli-modular/src/utils/helpers.js"></script>
+    <script src="hakli-modular/src/storage/cache.js"></script>
+    <script src="hakli-modular/src/storage/corrections.js"></script>
+    <script src="hakli-modular/src/storage/export.js"></script>
+    <script src="hakli-modular/src/storage/hki.js"></script>
+    <script src="hakli-modular/src/recognition/preprocessing.js"></script>
+    <script src="hakli-modular/src/recognition/isolation.js"></script>
+    <script src="hakli-modular/src/recognition/matching.js"></script>
+    <script src="hakli-modular/src/recognition/nms.js"></script>
+    
+    <!-- Load UI Modules -->
+    <script src="hakli-modular/src/ui/AppState.js" type="text/babel"></script>
+    
+    <!-- Load UI Components -->
+    <script src="hakli-modular/src/ui/components/Header.jsx" type="text/babel"></script>
+    <script src="hakli-modular/src/ui/components/ImageUploader.jsx" type="text/babel"></script>
+    <script src="hakli-modular/src/ui/components/PreprocessingPanel.jsx" type="text/babel"></script>
+    <script src="hakli-modular/src/ui/components/DetectionCanvas.jsx" type="text/babel"></script>
+    <script src="hakli-modular/src/ui/components/DetectionList.jsx" type="text/babel"></script>
+    <script src="hakli-modular/src/ui/components/ValidationPanel.jsx" type="text/babel"></script>
+    <script src="hakli-modular/src/ui/components/ReadingModePanel.jsx" type="text/babel"></script>
+    <script src="hakli-modular/src/ui/components/ExportPanel.jsx" type="text/babel"></script>
+    <script src="hakli-modular/src/ui/components/TranscriptionDisplay.jsx" type="text/babel"></script>
+    <script src="hakli-modular/src/ui/components/LibraryModal.jsx" type="text/babel"></script>
+    <script src="hakli-modular/src/ui/components/ChartViewer.jsx" type="text/babel"></script>
+    
+    <!-- Test App -->
+    <script type="text/babel">
+        function TestApp() {
+            const [loaded, setLoaded] = React.useState(false);
+            
+            React.useEffect(() => {
+                // Check if all modules loaded
+                const modules = {
+                    'CONFIG': typeof CONFIG !== 'undefined',
+                    'Helpers': typeof Helpers !== 'undefined',
+                    'CacheStorage': typeof CacheStorage !== 'undefined',
+                    'CorrectionMemory': typeof CorrectionMemory !== 'undefined',
+                    'ExportManager': typeof ExportManager !== 'undefined',
+                    'HKIStorage': typeof HKIStorage !== 'undefined',
+                    'PreprocessingModule': typeof PreprocessingModule !== 'undefined',
+                    'IsolationModule': typeof IsolationModule !== 'undefined',
+                    'MatchingModule': typeof MatchingModule !== 'undefined',
+                    'NMSModule': typeof NMSModule !== 'undefined'
+                };
+                
+                const components = {
+                    'Header': typeof window.HeaderComponent !== 'undefined',
+                    'ImageUploader': typeof window.ImageUploaderComponent !== 'undefined',
+                    'PreprocessingPanel': typeof window.PreprocessingPanelComponent !== 'undefined',
+                    'DetectionCanvas': typeof window.DetectionCanvasComponent !== 'undefined',
+                    'DetectionList': typeof window.DetectionListComponent !== 'undefined',
+                    'ValidationPanel': typeof window.ValidationPanelComponent !== 'undefined',
+                    'ReadingModePanel': typeof window.ReadingModePanelComponent !== 'undefined',
+                    'ExportPanel': typeof window.ExportPanelComponent !== 'undefined',
+                    'TranscriptionDisplay': typeof window.TranscriptionDisplayComponent !== 'undefined',
+                    'LibraryModal': typeof window.LibraryModalComponent !== 'undefined',
+                    'ChartViewer': typeof window.ChartViewerComponent !== 'undefined'
+                };
+                
+                console.log('=== MODULE LOADING TEST ===');
+                console.log('Backend Modules:', modules);
+                console.log('UI Components:', components);
+                
+                const allModulesLoaded = Object.values(modules).every(v => v);
+                const allComponentsLoaded = Object.values(components).every(v => v);
+                
+                if (allModulesLoaded && allComponentsLoaded) {
+                    console.log('✅ ALL MODULES AND COMPONENTS LOADED SUCCESSFULLY!');
+                    setLoaded(true);
+                } else {
+                    console.error('❌ Some modules failed to load');
+                    console.error('Missing modules:', Object.entries(modules).filter(([k, v]) => !v).map(([k]) => k));
+                    console.error('Missing components:', Object.entries(components).filter(([k, v]) => !v).map(([k]) => k));
+                }
+            }, []);
+            
+            return (
+                <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-8">
+                    <h1 className="text-3xl font-bold text-gray-900 mb-6">
+                        🧪 Module Loading Test
+                    </h1>
+                    
+                    {loaded ? (
+                        <div className="space-y-4">
+                            <div className="p-4 bg-green-50 border-2 border-green-300 rounded-lg">
+                                <div className="text-green-800 font-bold text-xl mb-2">
+                                    ✅ Success!
+                                </div>
+                                <div className="text-green-700">
+                                    All modules and components loaded successfully!
+                                </div>
+                            </div>
+                            
+                            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="text-sm text-blue-800">
+                                    <strong>Backend Modules Loaded:</strong> 10<br/>
+                                    <strong>UI Components Loaded:</strong> 11<br/>
+                                    <strong>Total:</strong> 21 modules
+                                </div>
+                            </div>
+                            
+                            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                                <div className="text-sm text-gray-700">
+                                    Check the browser console for detailed loading information.
+                                </div>
+                            </div>
+                            
+                            <div className="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                                <div className="text-purple-800 font-semibold mb-2">
+                                    ✨ Ready for Stage 2!
+                                </div>
+                                <div className="text-sm text-purple-700">
+                                    Module loading verified. Next step: Test individual component rendering.
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <div className="text-yellow-800">
+                                Loading modules... Check console for details.
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<TestApp />);
+    </script>
+</body>
+</html>
