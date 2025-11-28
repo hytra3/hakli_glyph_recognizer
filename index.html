@@ -543,6 +543,11 @@
             const [transcriptionFormat, setTranscriptionFormat] = useState('english-ltr'); // english-ltr, arabic-rtl, vertical-rl, vertical-lr
             const [transcriptionScript, setTranscriptionScript] = useState('english'); // english or arabic
             
+            // Dismissible tips
+            const [showReadingOrderTip, setShowReadingOrderTip] = useState(true);
+            const [showDetectionCanvasTip, setShowDetectionCanvasTip] = useState(true);
+            const [showCorrectionModalTip, setShowCorrectionModalTip] = useState(true);
+            
             // Translation States
             const [translationEnglish, setTranslationEnglish] = useState('');
             const [translationArabic, setTranslationArabic] = useState('');
@@ -2121,21 +2126,34 @@
             // Generate transcription text based on format and script
             const getEnhancedTranscription = () => {
                 const layoutStructure = getLayoutStructure(); // Returns array of lines, each containing array of columns
+                const orderedResults = getReadingOrderedResults();
                 
                 // Build text with proper breaks marked
                 return layoutStructure.map(line => {
                     return line.map(column => {
+                        // For RTL, we need to reverse the column
+                        const processedColumn = transcriptionFormat === 'arabic-rtl' 
+                            ? [...column].reverse() 
+                            : column;
+                        
                         let columnText = '';
-                        column.forEach((result, index) => {
+                        processedColumn.forEach((result, colIndex) => {
                             const text = transcriptionScript === 'arabic' 
                                 ? (result.glyph.arabic || result.glyph.name)
                                 : (result.glyph.transliteration || result.glyph.name);
                             
                             columnText += text;
                             
-                            // Add space between glyphs within the same column
-                            if (index < column.length - 1) {
-                                columnText += ' ';
+                            // Find the index of this result in the ordered results
+                            const globalIndex = orderedResults.indexOf(result);
+                            
+                            // Add space or word boundary marker between glyphs
+                            if (colIndex < processedColumn.length - 1) {
+                                if (wordBoundaries.has(globalIndex)) {
+                                    columnText += ' | '; // Word boundary marker
+                                } else {
+                                    columnText += ' '; // Normal space
+                                }
                             }
                         });
                         return columnText;
@@ -2384,7 +2402,7 @@
 
                 // Add styles
                 const style = iframeDoc.createElement('style');
-                style.textContent = '* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; padding: 20px; } .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; } .header h1 { font-size: 28px; margin-bottom: 10px; } .header .date { opacity: 0.9; font-size: 14px; } .section { padding: 30px; border-bottom: 1px solid #e5e7eb; } .section:last-child { border-bottom: none; } .section-title { font-size: 20px; font-weight: 600; margin-bottom: 15px; color: #1f2937; } .image-container { text-align: center; margin: 20px 0; } .image-container img { max-width: 100%; height: auto; border: 2px solid #e5e7eb; border-radius: 4px; } .image-toggle { margin: 20px 0; text-align: center; } .toggle-btn { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; } .toggle-btn:hover { background: #2563eb; } .toggle-btn.active { background: #10b981; } .transcription-box { background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 6px; padding: 20px; font-family: "Courier New", monospace; font-size: 18px; line-height: 1.8; word-wrap: break-word; margin: 15px 0; } .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; } .stat-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; text-align: center; } .stat-value { font-size: 32px; font-weight: 700; color: #3b82f6; margin-bottom: 5px; } .stat-label { font-size: 14px; color: #6b7280; } .detection-list { margin: 15px 0; } .detection-item { background: #f9fafb; border-left: 4px solid #3b82f6; padding: 12px 15px; margin: 8px 0; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; } .detection-item.correct { border-left-color: #10b981; } .detection-item.incorrect { border-left-color: #ef4444; } .detection-glyph { font-weight: 600; font-size: 16px; } .detection-confidence { color: #6b7280; font-size: 14px; } .footer { background: #f9fafb; padding: 20px 30px; text-align: center; color: #6b7280; font-size: 14px; } .legend { display: flex; gap: 20px; justify-content: center; margin: 15px 0; flex-wrap: wrap; } .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; } .legend-box { width: 20px; height: 20px; border-radius: 3px; }';
+                style.textContent = '* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; padding: 20px; } .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; } .header h1 { font-size: 28px; margin-bottom: 10px; } .header .date { opacity: 0.9; font-size: 14px; } .section { border-bottom: 1px solid #e5e7eb; } .section:last-child { border-bottom: none; } .section-header { padding: 20px 30px; cursor: pointer; background: #f9fafb; transition: background 0.2s; display: flex; justify-content: space-between; align-items: center; } .section-header:hover { background: #f3f4f6; } .section-title { font-size: 20px; font-weight: 600; color: #1f2937; } .section-content { padding: 10px 30px 30px 30px; } .section-content.collapsed { display: none; } .toggle-icon { font-size: 18px; color: #6b7280; transition: transform 0.2s; } .toggle-icon.collapsed { transform: rotate(-90deg); } .image-container { text-align: center; margin: 20px 0; } .image-container img { max-width: 100%; height: auto; border: 2px solid #e5e7eb; border-radius: 4px; } .image-toggle { margin: 20px 0; text-align: center; } .toggle-btn { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; } .toggle-btn:hover { background: #2563eb; } .toggle-btn.active { background: #10b981; } .transcription-box { background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 6px; padding: 20px; font-family: "Courier New", monospace; font-size: 18px; line-height: 1.8; word-wrap: break-word; margin: 15px 0; } .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; } .stat-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; text-align: center; } .stat-value { font-size: 32px; font-weight: 700; color: #3b82f6; margin-bottom: 5px; } .stat-label { font-size: 14px; color: #6b7280; } .detection-list { margin: 15px 0; } .detection-item { background: #f9fafb; border-left: 4px solid #3b82f6; padding: 12px 15px; margin: 8px 0; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; } .detection-item.correct { border-left-color: #10b981; } .detection-item.incorrect { border-left-color: #ef4444; } .detection-glyph { font-weight: 600; font-size: 16px; } .detection-confidence { color: #6b7280; font-size: 14px; } .footer { background: #f9fafb; padding: 20px 30px; text-align: center; color: #6b7280; font-size: 14px; } .legend { display: flex; gap: 20px; justify-content: center; margin: 15px 0; flex-wrap: wrap; } .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; } .legend-box { width: 20px; height: 20px; border-radius: 3px; }';
                 iframeDoc.head.appendChild(style);
 
                 // Header
@@ -2396,20 +2414,20 @@
                 // Image section (FIRST)
                 const imageSection = iframeDoc.createElement('div');
                 imageSection.className = 'section';
-                imageSection.innerHTML = '<div class="section-title">🖼️ Source Image</div><div class="image-toggle"><button class="toggle-btn" id="toggleBtn" onclick="toggleImage()">Show Annotated Version</button></div><div class="legend"><div class="legend-item"><div class="legend-box" style="background: #3b82f6;"></div><span>Unvalidated</span></div><div class="legend-item"><div class="legend-box" style="background: #10b981;"></div><span>Validated Correct</span></div><div class="legend-item"><div class="legend-box" style="background: #ef4444;"></div><span>Validated Incorrect</span></div></div><div class="image-container"><img id="mainImage" src="' + originalImageDataUrl + '" alt="Hakli inscription"></div>';
+                imageSection.innerHTML = '<div class="section-header" onclick="toggleSection(this)"><div class="section-title">🖼️ Source Image</div><div class="toggle-icon">▼</div></div><div class="section-content"><div class="image-toggle"><button class="toggle-btn" id="toggleBtn" onclick="toggleImage()">Show Annotated Version</button></div><div class="legend"><div class="legend-item"><div class="legend-box" style="background: #3b82f6;"></div><span>Unvalidated</span></div><div class="legend-item"><div class="legend-box" style="background: #10b981;"></div><span>Validated Correct</span></div><div class="legend-item"><div class="legend-box" style="background: #ef4444;"></div><span>Validated Incorrect</span></div></div><div class="image-container"><img id="mainImage" src="' + originalImageDataUrl + '" alt="Hakli inscription"></div></div>';
                 container.appendChild(imageSection);
 
                 // Transcription section (SECOND)
                 const transcriptionSection = iframeDoc.createElement('div');
                 transcriptionSection.className = 'section';
-                transcriptionSection.innerHTML = '<div class="section-title">📝 Transcription</div><div class="transcription-box">' + transcription + '</div>';
+                transcriptionSection.innerHTML = '<div class="section-header" onclick="toggleSection(this)"><div class="section-title">📝 Transcription</div><div class="toggle-icon">▼</div></div><div class="section-content"><div class="transcription-box">' + transcription + '</div></div>';
                 container.appendChild(transcriptionSection);
 
                 // Translation section (THIRD - NEW!)
                 if (translationEnglish || translationArabic) {
                     const translationSection = iframeDoc.createElement('div');
                     translationSection.className = 'section';
-                    let translationHtml = '<div class="section-title">🌍 Translation</div>';
+                    let translationHtml = '<div class="section-header" onclick="toggleSection(this)"><div class="section-title">🌍 Translation</div><div class="toggle-icon">▼</div></div><div class="section-content">';
                     
                     if (translationEnglish) {
                         translationHtml += '<div style="margin-bottom: 20px;"><div style="font-weight: 600; color: #667eea; margin-bottom: 8px;">English:</div><div class="transcription-box" style="font-family: inherit; font-size: 16px;">' + translationEnglish + '</div></div>';
@@ -2419,6 +2437,7 @@
                         translationHtml += '<div><div style="font-weight: 600; color: #667eea; margin-bottom: 8px;">Arabic (العربية):</div><div class="transcription-box" style="font-family: \'Traditional Arabic\', \'Arabic Typesetting\', \'Scheherazade\', serif; font-size: 18px; direction: rtl;">' + translationArabic + '</div></div>';
                     }
                     
+                    translationHtml += '</div>';
                     translationSection.innerHTML = translationHtml;
                     container.appendChild(translationSection);
                 }
@@ -2426,7 +2445,7 @@
                 // Detection details section (FOURTH)
                 const detectionSection = iframeDoc.createElement('div');
                 detectionSection.className = 'section';
-                let detectionHtml = '<div class="section-title">🔍 Detection Details</div><div class="detection-list">';
+                let detectionHtml = '<div class="section-header" onclick="toggleSection(this)"><div class="section-title">🔍 Detection Details</div><div class="toggle-icon">▼</div></div><div class="section-content"><div class="detection-list">';
                 orderedResults.forEach((result, index) => {
                     const originalIndex = recognitionResults.indexOf(result);
                     const validation = validations[originalIndex];
@@ -2435,25 +2454,25 @@
                     const orderPrefix = viewMode === 'reading' ? (index + 1) + '. ' : '';
                     detectionHtml += '<div class="detection-item ' + validationClass + '"><div><span class="detection-glyph">' + orderPrefix + result.glyph.name + '</span><span style="color: #6b7280; margin-left: 10px;">' + (result.glyph.transliteration || '') + '</span>' + correctedBadge + '</div><div class="detection-confidence">' + Math.round(result.confidence * 100) + '%</div></div>';
                 });
-                detectionHtml += '</div>';
+                detectionHtml += '</div></div>';
                 detectionSection.innerHTML = detectionHtml;
                 container.appendChild(detectionSection);
 
                 // Statistics section (LAST - MOVED TO BOTTOM)
                 const statsSection = iframeDoc.createElement('div');
                 statsSection.className = 'section';
-                statsSection.innerHTML = '<div class="section-title">📊 Recognition Statistics</div><div class="stats-grid"><div class="stat-card"><div class="stat-value">' + totalDetections + '</div><div class="stat-label">Total Glyphs</div></div><div class="stat-card"><div class="stat-value">' + avgConfidence + '%</div><div class="stat-label">Avg Confidence</div></div><div class="stat-card"><div class="stat-value">' + validatedCorrect + '</div><div class="stat-label">Validated Correct</div></div><div class="stat-card"><div class="stat-value">' + corrected + '</div><div class="stat-label">Corrected</div></div></div>';
+                statsSection.innerHTML = '<div class="section-header" onclick="toggleSection(this)"><div class="section-title">📊 Recognition Statistics</div><div class="toggle-icon">▼</div></div><div class="section-content"><div class="stats-grid"><div class="stat-card"><div class="stat-value">' + totalDetections + '</div><div class="stat-label">Total Glyphs</div></div><div class="stat-card"><div class="stat-value">' + avgConfidence + '%</div><div class="stat-label">Avg Confidence</div></div><div class="stat-card"><div class="stat-value">' + validatedCorrect + '</div><div class="stat-label">Validated Correct</div></div><div class="stat-card"><div class="stat-value">' + corrected + '</div><div class="stat-label">Corrected</div></div></div></div>';
                 container.appendChild(statsSection);
 
                 // Footer
                 const footer = iframeDoc.createElement('div');
                 footer.className = 'footer';
-                footer.textContent = 'Generated by Hakli Glyph Recognizer (beta v251024)';
+                footer.textContent = 'Generated by Hakli Glyph Recognizer (beta v251127)';
                 container.appendChild(footer);
 
                 // Add script
                 const script = iframeDoc.createElement('script');
-                script.textContent = 'let showingAnnotated = false; const originalImage = "' + originalImageDataUrl + '"; const annotatedImage = "' + annotatedImageDataUrl + '"; function toggleImage() { const img = document.getElementById("mainImage"); const btn = document.getElementById("toggleBtn"); showingAnnotated = !showingAnnotated; if (showingAnnotated) { img.src = annotatedImage; btn.textContent = "Show Original"; btn.classList.add("active"); } else { img.src = originalImage; btn.textContent = "Show Annotated Version"; btn.classList.remove("active"); } }';
+                script.textContent = 'let showingAnnotated = false; const originalImage = "' + originalImageDataUrl + '"; const annotatedImage = "' + annotatedImageDataUrl + '"; function toggleImage() { const img = document.getElementById("mainImage"); const btn = document.getElementById("toggleBtn"); showingAnnotated = !showingAnnotated; if (showingAnnotated) { img.src = annotatedImage; btn.textContent = "Show Original"; btn.classList.add("active"); } else { img.src = originalImage; btn.textContent = "Show Annotated Version"; btn.classList.remove("active"); } } function toggleSection(header) { const content = header.nextElementSibling; const icon = header.querySelector(".toggle-icon"); if (content.classList.contains("collapsed")) { content.classList.remove("collapsed"); icon.classList.remove("collapsed"); icon.textContent = "▼"; } else { content.classList.add("collapsed"); icon.classList.add("collapsed"); icon.textContent = "▶"; } }';
                 iframeDoc.body.appendChild(script);
 
                 iframeDoc.body.appendChild(container);
@@ -2557,7 +2576,17 @@
                         aspectRatio: bounds.width / bounds.height
                     }]);
 
-                    setRecognitionResults(prev => [...prev, manualDetection]);
+                    setRecognitionResults(prev => {
+                        const newResults = [...prev, manualDetection];
+                        const newIndex = newResults.length - 1;
+                        
+                        // Add to reading order if we're using it
+                        if (readingOrder.length > 0) {
+                            setReadingOrder(ro => [...ro, newIndex]);
+                        }
+                        
+                        return newResults;
+                    });
                     recordAction('add_manual_detection', { bounds, thumbnail: !!thumbnail });
                 }
 
@@ -3238,7 +3267,18 @@
                         console.error('Error showing original:', error);
                     }
                 }
-            }, [originalMat]);
+            }, [originalMat, showPreprocessPreview]);
+            
+            // Redraw preprocessed canvas when preview is shown
+            useEffect(() => {
+                if (preprocessedMat && preprocessCanvasRef.current && showPreprocessPreview) {
+                    try {
+                        cv.imshow(preprocessCanvasRef.current, preprocessedMat);
+                    } catch (error) {
+                        console.error('Error showing preprocessed:', error);
+                    }
+                }
+            }, [preprocessedMat, showPreprocessPreview]);
             
             // Re-process when settings change
             useEffect(() => {
@@ -3463,7 +3503,7 @@
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold text-gray-900 mb-2">Hakli Glyph Recognizer</h1>
                         <p className="text-sm text-gray-500">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
-                        <p className="text-sm text-gray-500">beta v251125 ©marty heaton</p>
+                        <p className="text-sm text-gray-500">beta v251127 ©marty heaton</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -3958,9 +3998,18 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-                                        💡 Tip: In Reading Order View, you can drag detection cards below to manually reorder them.
-                                    </div>
+                                    {showReadingOrderTip && (
+                                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800 flex items-center justify-between">
+                                            <span>💡 Tip: In Reading Order View, you can drag detection cards below to manually reorder them.</span>
+                                            <button 
+                                                onClick={() => setShowReadingOrderTip(false)}
+                                                className="ml-3 text-blue-600 hover:text-blue-800 font-bold text-lg leading-none"
+                                                title="Dismiss tip"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             
@@ -4232,9 +4281,16 @@
                                     Manual Mode: Click and drag to create detections. Ctrl/Cmd+Click to select for merging.
                                 </div>
                             )}
-                            {recognitionResults.length > 0 && (
-                                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-                                    💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) Merge (⚡) and Exclude (🔥) buttons will appear. Click wrench (🔧) to adjust box corners by dragging.
+                            {recognitionResults.length > 0 && showDetectionCanvasTip && (
+                                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800 flex items-center justify-between">
+                                    <span>💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) Merge (⚡) and Exclude (🔥) buttons will appear. Click wrench (🔧) to adjust box corners by dragging.</span>
+                                    <button 
+                                        onClick={() => setShowDetectionCanvasTip(false)}
+                                        className="ml-3 text-blue-600 hover:text-blue-800 font-bold text-lg leading-none flex-shrink-0"
+                                        title="Dismiss tip"
+                                    >
+                                        ×
+                                    </button>
                                 </div>
                             )}
                             </>
@@ -4842,17 +4898,38 @@
                                     })}
                                 </div>
                                 
-                                <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between">
-                                    <div className="text-sm text-gray-500">
-                                        💡 Tip: You can also search glyphs above to find them quickly
+                                {showCorrectionModalTip && (
+                                    <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between">
+                                        <div className="text-sm text-gray-500 flex items-center">
+                                            💡 Tip: You can also search glyphs above to find them quickly
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => setShowCorrectionModalTip(false)}
+                                                className="text-gray-400 hover:text-gray-600 font-bold text-xl leading-none"
+                                                title="Dismiss tip"
+                                            >
+                                                ×
+                                            </button>
+                                            <button 
+                                                onClick={cancelCorrection}
+                                                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
                                     </div>
-                                    <button 
-                                        onClick={cancelCorrection}
-                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
+                                )}
+                                {!showCorrectionModalTip && (
+                                    <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
+                                        <button 
+                                            onClick={cancelCorrection}
+                                            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
