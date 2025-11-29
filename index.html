@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hakli Glyph Recognizer - Modular</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     
     <!-- React & Babel -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -107,27 +108,29 @@
     <!-- ========================================== -->
     
     <!-- Core -->
-    <script src="src/core/config.js"></script>
-    <script src="src/utils/helpers.js"></script>
+    <script src="hakli-modular/src/core/config.js"></script>
+    <script src="hakli-modular/src/utils/helpers.js"></script>
     
     <!-- Storage -->
-    <script src="src/storage/hki.js"></script>
-    <script src="src/storage/cache.js"></script>
-    <script src="src/storage/corrections.js"></script>
-    <script src="src/storage/export.js"></script>
-    <script src="src/storage/drive-sync.js"></script>
+    <script src="hakli-modular/src/storage/hki.js"></script>
+    <script src="hakli-modular/src/storage/cache.js"></script>
+    <script src="hakli-modular/src/storage/corrections.js"></script>
+    <script src="hakli-modular/src/storage/export.js"></script>
     
     <!-- Recognition -->
-    <script src="src/recognition/preprocessing.js"></script>
-    <script src="src/recognition/isolation.js"></script>
-    <script src="src/recognition/matching.js"></script>
-    <script src="src/recognition/nms.js"></script>
-    <script src="src/recognition/validation.js"></script>
-    <script src="src/recognition/template-learning.js"></script>
+    <script src="hakli-modular/src/recognition/preprocessing.js"></script>
+    <script src="hakli-modular/src/recognition/isolation.js"></script>
+    <script src="hakli-modular/src/recognition/matching.js"></script>
+    <script src="hakli-modular/src/recognition/nms.js"></script>
+    <script src="hakli-modular/src/recognition/validation.js"></script>
+    <script src="hakli-modular/src/recognition/template-learning.js"></script>
     
     <!-- Reading & Transcription -->
-    <script src="src/reading/reading.js"></script>
-    <script src="src/reading/transcription.js"></script>
+    <script src="hakli-modular/src/reading/reading.js"></script>
+    <script src="hakli-modular/src/reading/transcription.js"></script>
+    
+    <!-- Cloud Sync -->
+    <script src="hakli-modular/src/storage/drive-sync.js"></script>
     
     <script>
         // Verify backend
@@ -139,7 +142,6 @@
             cache: typeof CacheStorage !== 'undefined',
             corrections: typeof CorrectionMemory !== 'undefined',
             export: typeof ExportUtils !== 'undefined',
-            driveSync: typeof DriveSync !== 'undefined',
             isolation: typeof Isolation !== 'undefined',
             matching: typeof Matching !== 'undefined',
             preprocessing: typeof Preprocessing !== 'undefined',
@@ -148,12 +150,13 @@
             polygonRegion: typeof PolygonRegion !== 'undefined',
             templateLearning: typeof TemplateLearning !== 'undefined',
             readingOrder: typeof ReadingOrder !== 'undefined',
-            transcription: typeof Transcription !== 'undefined'
+            transcription: typeof Transcription !== 'undefined',
+            driveSync: typeof DriveSync !== 'undefined'
         };
         console.log('📦 Modular backend:', modulesLoaded);
         const allLoaded = Object.values(modulesLoaded).every(v => v);
         if (allLoaded) {
-            console.log('✅ All 16 backend modules loaded successfully!');
+            console.log('✅ All backend modules loaded - App starting with full modular backend');
         } else {
             const missing = Object.entries(modulesLoaded).filter(([k, v]) => !v).map(([k]) => k);
             console.warn('⚠️ Missing modules:', missing.join(', '));
@@ -245,6 +248,57 @@
             });
             const [originalMat, setOriginalMat] = useState(null);
             const [preprocessedMat, setPreprocessedMat] = useState(null);
+            
+            // Dismissable tips state
+            const [dismissedTips, setDismissedTips] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('hakli_dismissed_tips');
+                    return saved ? JSON.parse(saved) : {};
+                } catch { return {}; }
+            });
+            
+            // Dismiss a tip permanently
+            const dismissTip = (tipId) => {
+                const updated = { ...dismissedTips, [tipId]: true };
+                setDismissedTips(updated);
+                localStorage.setItem('hakli_dismissed_tips', JSON.stringify(updated));
+            };
+            
+            // Reset all tips (for settings)
+            const resetAllTips = () => {
+                setDismissedTips({});
+                localStorage.removeItem('hakli_dismissed_tips');
+            };
+            
+            // Dismissable tip component
+            const DismissableTip = ({ id, children, className = '' }) => {
+                if (dismissedTips[id]) return null;
+                return (
+                    <div className={`relative p-3 bg-yellow-50 border-2 border-yellow-200 rounded-lg ${className}`}>
+                        <button
+                            onClick={() => dismissTip(id)}
+                            className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center text-yellow-600 hover:text-yellow-800 hover:bg-yellow-100 rounded-full transition-colors"
+                            title="Dismiss this tip"
+                        >
+                            ✕
+                        </button>
+                        <div className="pr-6 text-sm text-yellow-800">{children}</div>
+                    </div>
+                );
+            };
+            
+            // Auto-detect reading direction using ReadingOrder module
+            const autoDetectReadingOrder = () => {
+                if (typeof ReadingOrder !== 'undefined' && recognitionResults.length > 0) {
+                    const detected = ReadingOrder.detectDirection(recognitionResults);
+                    setReadingDirection(detected);
+                    const order = ReadingOrder.generateOrder(recognitionResults, detected);
+                    setReadingOrder(order);
+                    console.log(`📖 Auto-detected: ${detected}, ordered ${order.length} glyphs`);
+                    return detected;
+                }
+                return null;
+            };
             const [adjustmentsApplied, setAdjustmentsApplied] = useState(false);
             const [isImageLoading, setIsImageLoading] = useState(false);
             const [eraserMode, setEraserMode] = useState(false);
@@ -3983,6 +4037,18 @@
                                         <span className="text-sm font-medium text-gray-700">Reading Direction:</span>
                                         <div className="flex gap-2">
                                             <button 
+                                                onClick={() => {
+                                                    const detected = autoDetectReadingOrder();
+                                                    if (detected) {
+                                                        alert(`🔮 Auto-detected: ${detected.toUpperCase()}\n\nReading order has been generated based on glyph positions.`);
+                                                    }
+                                                }}
+                                                className="px-3 py-1 text-sm rounded bg-purple-500 text-white hover:bg-purple-600"
+                                                title="Auto-detect reading direction based on glyph positions"
+                                            >
+                                                🔮 Auto
+                                            </button>
+                                            <button 
                                                 onClick={() => applyReadingDirection('detection')}
                                                 className={`px-3 py-1 text-sm rounded ${readingDirection === 'detection' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                                 title="Original detection order"
@@ -4012,17 +4078,10 @@
                                             </button>
                                         </div>
                                     </div>
-                                    {showReadingOrderTip && (
-                                        <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800 flex items-center justify-between">
-                                            <span>💡 Tip: In Reading Order View, you can drag detection cards below to manually reorder them.</span>
-                                            <button 
-                                                onClick={() => setShowReadingOrderTip(false)}
-                                                className="ml-3 text-blue-600 hover:text-blue-800 font-bold text-lg leading-none"
-                                                title="Dismiss tip"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
+                                    {!dismissedTips['reading-order'] && (
+                                        <DismissableTip id="reading-order" className="mt-3">
+                                            <strong>💡 Tip:</strong> In Reading Order View, drag cards to reorder. Use 🔮 Auto to detect direction from glyph positions.
+                                        </DismissableTip>
                                     )}
                                 </div>
                             )}
@@ -5421,7 +5480,7 @@
                             
                             {showEnhancedTranscription && (
                                 <>
-                                    <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-200 text-sm text-gray-700">
+                                    <DismissableTip id="breaks-howto" className="mb-4">
                                         <div className="font-semibold mb-1">💡 How to use breaks:</div>
                                         <div className="text-xs">
                                             Use the break buttons on each glyph card (in reading mode) to mark the layout:
@@ -5431,7 +5490,7 @@
                                             <br/>
                                             The <span className="inline-block w-4 h-4 rounded-full bg-yellow-400 border border-yellow-600 text-xs text-center">N</span> numbers show reading order.
                                         </div>
-                                    </div>
+                                    </DismissableTip>
                                     <div className="mb-4 p-4 bg-white rounded-lg border border-purple-200">
                                         <div className="grid grid-cols-2 gap-4">
                                             {/* Script Selection */}

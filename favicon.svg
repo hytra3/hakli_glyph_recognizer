@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d4a574"/>
+      <stop offset="100%" style="stop-color:#c4956a"/>
+    </linearGradient>
+  </defs>
+  <!-- Stone/limestone background -->
+  <rect width="32" height="32" rx="4" fill="url(#bg)"/>
+  <!-- Ancient glyph-like symbol (stylized 'h' from Hakli) -->
+  <g fill="#2d1810" opacity="0.9">
+    <!-- Vertical stroke -->
+    <rect x="8" y="6" width="4" height="20" rx="1"/>
+    <!-- Horizontal crossbar -->
+    <rect x="8" y="14" width="12" height="4" rx="1"/>
+    <!-- Right vertical stroke -->
+    <rect x="16" y="14" width="4" height="12" rx="1"/>
+    <!-- Small decorative dot (like ancient inscriptions) -->
+    <circle cx="26" cy="10" r="2"/>
+  </g>
+</svg>
