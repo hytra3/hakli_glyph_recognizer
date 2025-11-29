@@ -4,10 +4,10 @@
 // ============================================
 
 const DriveSync = {
-    // OAuth2 configuration (user must set up their own)
+    // OAuth2 configuration
     CONFIG: {
-        CLIENT_ID: null,  // Set via DriveSync.configure()
-        API_KEY: null,
+        CLIENT_ID: '894554328044-5ocv2t6g8h9ssj80sscniuqgl2t3021m.apps.googleusercontent.com',
+        API_KEY: null,  // API key is optional for OAuth flow
         SCOPES: 'https://www.googleapis.com/auth/drive.file',
         DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
         FOLDER_NAME: 'Hakli_Inscriptions'
@@ -34,8 +34,8 @@ const DriveSync = {
      * @returns {Promise<boolean>} Success status
      */
     initialize: async () => {
-        if (!DriveSync.CONFIG.CLIENT_ID || !DriveSync.CONFIG.API_KEY) {
-            console.warn('⚠️ Drive sync not configured - missing credentials');
+        if (!DriveSync.CONFIG.CLIENT_ID) {
+            console.warn('⚠️ Drive sync not configured - missing Client ID');
             return false;
         }
 
