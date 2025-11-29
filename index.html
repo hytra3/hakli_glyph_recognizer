@@ -121,10 +121,19 @@
     <script src="hakli-modular/src/recognition/isolation.js"></script>
     <script src="hakli-modular/src/recognition/matching.js"></script>
     <script src="hakli-modular/src/recognition/nms.js"></script>
+    <script src="hakli-modular/src/recognition/validation.js"></script>
+    <script src="hakli-modular/src/recognition/template-learning.js"></script>
+    
+    <!-- Reading & Transcription -->
+    <script src="hakli-modular/src/reading/reading.js"></script>
+    <script src="hakli-modular/src/reading/transcription.js"></script>
+    
+    <!-- Cloud Sync -->
+    <script src="hakli-modular/src/storage/drive-sync.js"></script>
     
     <script>
         // Verify backend
-        console.log('🚀 Hakli Glyph Recognizer - Hybrid (Backend + Original UI)');
+        console.log('🚀 Hakli Glyph Recognizer - Modular v2.0');
         const modulesLoaded = {
             config: typeof CONFIG !== 'undefined',
             utils: typeof Utils !== 'undefined',
@@ -135,14 +144,21 @@
             isolation: typeof Isolation !== 'undefined',
             matching: typeof Matching !== 'undefined',
             preprocessing: typeof Preprocessing !== 'undefined',
-            nms: typeof NMS !== 'undefined'
+            nms: typeof NMS !== 'undefined',
+            validation: typeof Validation !== 'undefined',
+            polygonRegion: typeof PolygonRegion !== 'undefined',
+            templateLearning: typeof TemplateLearning !== 'undefined',
+            readingOrder: typeof ReadingOrder !== 'undefined',
+            transcription: typeof Transcription !== 'undefined',
+            driveSync: typeof DriveSync !== 'undefined'
         };
         console.log('📦 Modular backend:', modulesLoaded);
         const allLoaded = Object.values(modulesLoaded).every(v => v);
         if (allLoaded) {
-            console.log('✅ All backend modules loaded - App starting with modular backend');
+            console.log('✅ All backend modules loaded - App starting with full modular backend');
         } else {
-            console.warn('⚠️ Some modules failed to load - App will use fallback functions');
+            const missing = Object.entries(modulesLoaded).filter(([k, v]) => !v).map(([k]) => k);
+            console.warn('⚠️ Missing modules:', missing.join(', '));
         }
     </script>
 
