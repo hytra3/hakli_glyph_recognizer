@@ -678,13 +678,30 @@
                 // Load image to extract glyph thumbnails
                 const sourceImg = new Image();
                 sourceImg.onload = () => {
-                    data.detections.forEach((detection, index) => {
+                    // Use reading order if available, otherwise use detection order
+                    let orderedDetections;
+                    if (data.readingOrder && data.readingOrder.length > 0) {
+                        // Map reading order indices to actual detections
+                        orderedDetections = data.readingOrder.map(idx => ({
+                            detection: data.detections[idx],
+                            originalIndex: idx
+                        }));
+                    } else {
+                        // Fall back to detection order
+                        orderedDetections = data.detections.map((detection, idx) => ({
+                            detection: detection,
+                            originalIndex: idx
+                        }));
+                    }
+                    
+                    orderedDetections.forEach((item, displayIndex) => {
+                        const detection = item.detection;
                         const card = document.createElement('div');
                         card.className = 'glyph-card';
                         
                         const order = document.createElement('div');
                         order.className = 'glyph-order';
-                        order.textContent = index + 1;
+                        order.textContent = displayIndex + 1;
                         
                         // Add thumbnail if position data exists
                         if (detection.position) {
@@ -707,7 +724,7 @@
                             thumbCtx.fillStyle = 'white';
                             thumbCtx.fillRect(0, 0, thumbSize, thumbSize);
                             
-                            // Draw scaled glyph
+                            // Draw scaled glyph from the actual inscription image
                             thumbCtx.drawImage(
                                 sourceImg,
                                 pos.x, pos.y, pos.width, pos.height,

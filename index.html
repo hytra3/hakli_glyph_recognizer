@@ -3604,7 +3604,7 @@
                             <h1 className="text-3xl font-bold text-gray-900">Hakli Glyph Recognizer</h1>
                         </div>
                         <p className="text-sm text-gray-500">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
-                        <p className="text-sm text-gray-500">beta v251201 ©hakli heroes</p>
+                        <p className="text-sm text-gray-500">beta v251202 ©hakli heroes</p>
                     </div>
 
                     <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -3674,18 +3674,24 @@
                     </div>
 
                     <div className="mb-6">
-                        <input 
-                            type="file" 
-                            accept="image/*" 
-                            onChange={handleFileUpload} 
-                            disabled={isImageLoading}
-                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50" 
-                        />
-                        {chartLoadStatus === 'loading' && (
-                            <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
-                                💡 Tip: You can upload your inscription image now while the chart loads in the background!
-                            </div>
-                        )}
+                        <div className={`p-4 rounded-lg border-2 ${chartLoadStatus === 'loading' ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-gray-50'}`}>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                📸 Upload Inscription Image
+                                {chartLoadStatus === 'loading' && <span className="ml-2 text-green-600">✅ Available Now!</span>}
+                            </label>
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                onChange={handleFileUpload} 
+                                disabled={isImageLoading}
+                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50" 
+                            />
+                            {chartLoadStatus === 'loading' && (
+                                <div className="mt-3 p-2 bg-white border border-green-300 rounded text-xs text-green-800">
+                                    <strong>💡 Pro tip:</strong> Don't wait for the chart! Upload your image now and you'll be ready to recognize as soon as loading completes (~{imageLoadingProgress.total > 0 ? Math.round((imageLoadingProgress.total - imageLoadingProgress.loaded) / 2) : '40'} seconds remaining).
+                                </div>
+                            )}
+                        </div>
                         {isImageLoading && (
                             <div className="mt-2 flex items-center gap-2 text-blue-600">
                                 <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
