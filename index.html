@@ -6443,9 +6443,11 @@
                                     <div className="p-4 bg-purple-50 border-2 border-purple-200 rounded-lg">
                                         <h4 className="font-semibold text-purple-900 mb-2">💾 Google Drive Sync</h4>
                                         <p className="text-sm text-gray-700 mb-3">
-                                            Save and load inscriptions from your Google Drive
+                                            Save and load HKI inscription files from your Google Drive
                                         </p>
-                                        <div className="flex gap-2 flex-wrap">
+                                        
+                                        {/* Sign In Row */}
+                                        <div className="flex gap-2 flex-wrap mb-3">
                                             <button
                                                 onClick={async () => {
                                                     if (typeof DriveSync !== 'undefined') {
@@ -6471,23 +6473,111 @@
                                             >
                                                 🔐 Sign in with Google
                                             </button>
+                                        </div>
+                                        
+                                        {/* Save/Load Row */}
+                                        <div className="flex gap-2 flex-wrap mb-3">
                                             <button
                                                 onClick={async () => {
-                                                    if (typeof DriveSync !== 'undefined' && DriveSync.isSignedIn()) {
-                                                        const files = await DriveSync.listFiles();
-                                                        console.log('Drive files:', files);
-                                                        alert('📂 Found ' + files.length + ' files in Drive. Check console for details.');
-                                                    } else {
-                                                        alert('⚠️ Please sign in first');
+                                                    if (typeof DriveSync === 'undefined' || !DriveSync.isSignedIn()) {
+                                                        alert('⚠️ Please sign in to Google Drive first');
+                                                        return;
+                                                    }
+                                                    if (!recognitionResults || recognitionResults.length === 0) {
+                                                        alert('⚠️ No recognition results to save. Run recognition first.');
+                                                        return;
+                                                    }
+                                                    
+                                                    // Generate HKI data
+                                                    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+                                                    const filename = `hakli_${timestamp}.hki.json`;
+                                                    
+                                                    const hkiData = {
+                                                        version: '1.0',
+                                                        created: new Date().toISOString(),
+                                                        source: 'Hakli Glyph Recognizer v251201',
+                                                        image: image,
+                                                        preprocessing: preprocessing,
+                                                        recognitionResults: recognitionResults,
+                                                        readingOrder: readingOrder,
+                                                        readingDirection: readingDirection,
+                                                        wordBoundaries: Array.from(wordBoundaries),
+                                                        columnBreaks: Array.from(columnBreaks),
+                                                        lineBreaks: Array.from(lineBreaks),
+                                                        validations: validations,
+                                                        translationEnglish: translationEnglish,
+                                                        translationArabic: translationArabic
+                                                    };
+                                                    
+                                                    try {
+                                                        const result = await DriveSync.saveToCloud(hkiData, filename);
+                                                        console.log('Saved to Drive:', result);
+                                                        alert(`✅ Saved to Google Drive!\n\nFilename: ${filename}\nFolder: Hakli_Inscriptions`);
+                                                    } catch (err) {
+                                                        console.error('Save error:', err);
+                                                        alert('❌ Save failed: ' + err.message);
                                                     }
                                                 }}
-                                                className="px-4 py-2 bg-purple-400 text-white rounded-lg hover:bg-purple-500"
+                                                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold"
                                             >
-                                                📂 List Files
+                                                💾 Save to Drive
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    if (typeof DriveSync === 'undefined' || !DriveSync.isSignedIn()) {
+                                                        alert('⚠️ Please sign in to Google Drive first');
+                                                        return;
+                                                    }
+                                                    
+                                                    try {
+                                                        const files = await DriveSync.listFiles();
+                                                        console.log('Drive files:', files);
+                                                        
+                                                        if (files.length === 0) {
+                                                            alert('📂 No HKI files found in your Hakli_Inscriptions folder.');
+                                                            return;
+                                                        }
+                                                        
+                                                        // Show file picker
+                                                        const fileList = files.map((f, i) => `${i + 1}. ${f.name} (${new Date(f.modifiedTime).toLocaleDateString()})`).join('\n');
+                                                        const choice = prompt(`📂 Select a file to load (enter number):\n\n${fileList}`);
+                                                        
+                                                        if (choice) {
+                                                            const idx = parseInt(choice) - 1;
+                                                            if (idx >= 0 && idx < files.length) {
+                                                                const file = files[idx];
+                                                                const hkiData = await DriveSync.loadFromCloud(file.id);
+                                                                console.log('Loaded from Drive:', hkiData);
+                                                                
+                                                                // Restore state
+                                                                if (hkiData.image) setImage(hkiData.image);
+                                                                if (hkiData.recognitionResults) setRecognitionResults(hkiData.recognitionResults);
+                                                                if (hkiData.readingOrder) setReadingOrder(hkiData.readingOrder);
+                                                                if (hkiData.readingDirection) setReadingDirection(hkiData.readingDirection);
+                                                                if (hkiData.wordBoundaries) setWordBoundaries(new Set(hkiData.wordBoundaries));
+                                                                if (hkiData.columnBreaks) setColumnBreaks(new Set(hkiData.columnBreaks));
+                                                                if (hkiData.lineBreaks) setLineBreaks(new Set(hkiData.lineBreaks));
+                                                                if (hkiData.validations) setValidations(hkiData.validations);
+                                                                if (hkiData.translationEnglish) setTranslationEnglish(hkiData.translationEnglish);
+                                                                if (hkiData.translationArabic) setTranslationArabic(hkiData.translationArabic);
+                                                                
+                                                                setShowCloudSyncModal(false);
+                                                                alert(`✅ Loaded: ${file.name}`);
+                                                            }
+                                                        }
+                                                    } catch (err) {
+                                                        console.error('Load error:', err);
+                                                        alert('❌ Load failed: ' + err.message);
+                                                    }
+                                                }}
+                                                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold"
+                                            >
+                                                📂 Load from Drive
                                             </button>
                                         </div>
-                                        <p className="text-xs text-purple-600 mt-2">
-                                            🔒 Uses OAuth - only accesses files created by this app
+                                        
+                                        <p className="text-xs text-purple-600">
+                                            🔒 Files saved to "Hakli_Inscriptions" folder in your Drive
                                         </p>
                                     </div>
 
