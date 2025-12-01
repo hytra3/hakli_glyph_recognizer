@@ -1,36 +1,35 @@
 // ============================================
-// GOOGLE DRIVE SYNC
+// GOOGLE DRIVE SYNC - Updated for GIS
 // Cloud storage for HKI inscription files
+// Uses Google Identity Services (new OAuth method)
 // ============================================
 
 const DriveSync = {
     // OAuth2 configuration
     CONFIG: {
         CLIENT_ID: '894554328044-5ocv2t6g8h9ssj80sscniuqgl2t3021m.apps.googleusercontent.com',
-        API_KEY: null,  // API key is optional for OAuth flow
         SCOPES: 'https://www.googleapis.com/auth/drive.file',
-        DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
         FOLDER_NAME: 'Hakli_Inscriptions'
     },
 
     // State
     _isInitialized: false,
     _isSignedIn: false,
+    _accessToken: null,
+    _tokenClient: null,
     _folderId: null,
 
     /**
      * Configure Google Drive API credentials
      * @param {string} clientId - OAuth2 client ID
-     * @param {string} apiKey - API key
      */
-    configure: (clientId, apiKey) => {
+    configure: (clientId) => {
         DriveSync.CONFIG.CLIENT_ID = clientId;
-        DriveSync.CONFIG.API_KEY = apiKey;
         console.log('☁️ Drive sync configured');
     },
 
     /**
-     * Initialize Google API client
+     * Initialize Google Identity Services
      * @returns {Promise<boolean>} Success status
      */
     initialize: async () => {
@@ -40,37 +39,46 @@ const DriveSync = {
         }
 
         return new Promise((resolve) => {
-            // Load Google API script
-            const script = document.createElement('script');
-            script.src = 'https://apis.google.com/js/api.js';
-            script.onload = async () => {
+            // Load Google Identity Services script
+            const gisScript = document.createElement('script');
+            gisScript.src = 'https://accounts.google.com/gsi/client';
+            gisScript.async = true;
+            gisScript.defer = true;
+            
+            gisScript.onload = () => {
                 try {
-                    await new Promise((res) => gapi.load('client:auth2', res));
-                    
-                    await gapi.client.init({
-                        apiKey: DriveSync.CONFIG.API_KEY,
-                        clientId: DriveSync.CONFIG.CLIENT_ID,
-                        discoveryDocs: [DriveSync.CONFIG.DISCOVERY_DOC],
-                        scope: DriveSync.CONFIG.SCOPES
+                    // Initialize the token client
+                    DriveSync._tokenClient = google.accounts.oauth2.initTokenClient({
+                        client_id: DriveSync.CONFIG.CLIENT_ID,
+                        scope: DriveSync.CONFIG.SCOPES,
+                        callback: (response) => {
+                            if (response.access_token) {
+                                DriveSync._accessToken = response.access_token;
+                                DriveSync._isSignedIn = true;
+                                console.log('☁️ Google Drive authenticated');
+                            }
+                        },
+                        error_callback: (error) => {
+                            console.error('OAuth error:', error);
+                            DriveSync._isSignedIn = false;
+                        }
                     });
-
+                    
                     DriveSync._isInitialized = true;
-                    DriveSync._isSignedIn = gapi.auth2.getAuthInstance().isSignedIn.get();
-                    
-                    // Listen for sign-in state changes
-                    gapi.auth2.getAuthInstance().isSignedIn.listen((isSignedIn) => {
-                        DriveSync._isSignedIn = isSignedIn;
-                    });
-
-                    console.log('☁️ Google Drive API initialized');
+                    console.log('☁️ Google Identity Services initialized');
                     resolve(true);
                 } catch (error) {
-                    console.error('Drive initialization error:', error);
+                    console.error('GIS initialization error:', error);
                     resolve(false);
                 }
             };
-            script.onerror = () => resolve(false);
-            document.head.appendChild(script);
+            
+            gisScript.onerror = () => {
+                console.error('Failed to load Google Identity Services');
+                resolve(false);
+            };
+            
+            document.head.appendChild(gisScript);
         });
     },
 
@@ -80,347 +88,236 @@ const DriveSync = {
      */
     signIn: async () => {
         if (!DriveSync._isInitialized) {
-            const init = await DriveSync.initialize();
-            if (!init) return false;
+            const initialized = await DriveSync.initialize();
+            if (!initialized) return false;
         }
 
-        try {
-            await gapi.auth2.getAuthInstance().signIn();
-            DriveSync._isSignedIn = true;
-            console.log('☁️ Signed in to Google');
-            return true;
-        } catch (error) {
-            console.error('Sign in error:', error);
-            return false;
-        }
+        return new Promise((resolve) => {
+            try {
+                // Update callback to resolve the promise
+                DriveSync._tokenClient.callback = (response) => {
+                    if (response.access_token) {
+                        DriveSync._accessToken = response.access_token;
+                        DriveSync._isSignedIn = true;
+                        console.log('☁️ Signed in to Google Drive');
+                        resolve(true);
+                    } else {
+                        resolve(false);
+                    }
+                };
+                
+                // Request access token (shows popup)
+                DriveSync._tokenClient.requestAccessToken({ prompt: 'consent' });
+            } catch (error) {
+                console.error('Sign-in error:', error);
+                resolve(false);
+            }
+        });
     },
 
     /**
      * Sign out from Google
      */
-    signOut: async () => {
-        if (DriveSync._isInitialized && DriveSync._isSignedIn) {
-            await gapi.auth2.getAuthInstance().signOut();
-            DriveSync._isSignedIn = false;
-            console.log('☁️ Signed out from Google');
+    signOut: () => {
+        if (DriveSync._accessToken) {
+            google.accounts.oauth2.revoke(DriveSync._accessToken, () => {
+                console.log('☁️ Signed out from Google Drive');
+            });
         }
+        DriveSync._accessToken = null;
+        DriveSync._isSignedIn = false;
+        DriveSync._folderId = null;
     },
 
     /**
-     * Check if signed in
-     * @returns {boolean} Sign-in status
+     * Check if user is signed in
+     * @returns {boolean}
      */
-    isSignedIn: () => DriveSync._isSignedIn,
+    isSignedIn: () => {
+        return DriveSync._isSignedIn && DriveSync._accessToken !== null;
+    },
 
     /**
-     * Get or create the Hakli folder in Drive
-     * @returns {Promise<string|null>} Folder ID or null
+     * Make authenticated API request
+     * @param {string} url - API endpoint
+     * @param {object} options - Fetch options
+     * @returns {Promise<Response>}
+     */
+    _apiRequest: async (url, options = {}) => {
+        if (!DriveSync._accessToken) {
+            throw new Error('Not authenticated');
+        }
+        
+        const headers = {
+            'Authorization': `Bearer ${DriveSync._accessToken}`,
+            ...options.headers
+        };
+        
+        return fetch(url, { ...options, headers });
+    },
+
+    /**
+     * Get or create the Hakli inscriptions folder
+     * @returns {Promise<string>} Folder ID
      */
     getOrCreateFolder: async () => {
-        if (DriveSync._folderId) return DriveSync._folderId;
-
-        if (!DriveSync._isSignedIn) {
-            console.warn('Not signed in to Drive');
-            return null;
+        if (DriveSync._folderId) {
+            return DriveSync._folderId;
         }
 
         try {
             // Search for existing folder
-            const response = await gapi.client.drive.files.list({
-                q: `name='${DriveSync.CONFIG.FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-                fields: 'files(id, name)'
-            });
-
-            if (response.result.files && response.result.files.length > 0) {
-                DriveSync._folderId = response.result.files[0].id;
+            const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${DriveSync.CONFIG.FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`;
+            
+            const searchResponse = await DriveSync._apiRequest(searchUrl);
+            const searchData = await searchResponse.json();
+            
+            if (searchData.files && searchData.files.length > 0) {
+                DriveSync._folderId = searchData.files[0].id;
                 console.log('☁️ Found existing folder:', DriveSync._folderId);
                 return DriveSync._folderId;
             }
 
             // Create new folder
-            const createResponse = await gapi.client.drive.files.create({
-                resource: {
-                    name: DriveSync.CONFIG.FOLDER_NAME,
-                    mimeType: 'application/vnd.google-apps.folder'
-                },
-                fields: 'id'
-            });
-
-            DriveSync._folderId = createResponse.result.id;
+            const createResponse = await DriveSync._apiRequest(
+                'https://www.googleapis.com/drive/v3/files',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: DriveSync.CONFIG.FOLDER_NAME,
+                        mimeType: 'application/vnd.google-apps.folder'
+                    })
+                }
+            );
+            
+            const createData = await createResponse.json();
+            DriveSync._folderId = createData.id;
             console.log('☁️ Created folder:', DriveSync._folderId);
             return DriveSync._folderId;
         } catch (error) {
-            console.error('Folder creation error:', error);
-            return null;
+            console.error('Folder error:', error);
+            throw error;
         }
     },
 
     /**
-     * Save HKI file to Google Drive
-     * @param {Object} hkiData - HKI data object
-     * @param {string} filename - Filename (e.g., "DH-2025-001.hki")
-     * @returns {Promise<Object|null>} File metadata or null
+     * Save HKI data to Google Drive
+     * @param {object} hkiData - The inscription data
+     * @param {string} filename - Filename for the file
+     * @returns {Promise<object>} File metadata
      */
     saveToCloud: async (hkiData, filename) => {
-        if (!DriveSync._isSignedIn) {
-            const signedIn = await DriveSync.signIn();
-            if (!signedIn) {
-                alert('❌ Please sign in to Google Drive first');
-                return null;
-            }
+        if (!DriveSync.isSignedIn()) {
+            throw new Error('Not signed in to Google Drive');
         }
 
         const folderId = await DriveSync.getOrCreateFolder();
-        if (!folderId) {
-            alert('❌ Could not access Drive folder');
-            return null;
-        }
+        const content = JSON.stringify(hkiData, null, 2);
+        const blob = new Blob([content], { type: 'application/json' });
+        
+        // Check if file already exists
+        const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${filename}' and '${folderId}' in parents and trashed=false&fields=files(id,name)`;
+        const searchResponse = await DriveSync._apiRequest(searchUrl);
+        const searchData = await searchResponse.json();
+        
+        const metadata = {
+            name: filename,
+            mimeType: 'application/json'
+        };
 
-        try {
-            // Check if file already exists
-            const existingFile = await DriveSync.findFile(filename);
-            
-            const content = JSON.stringify(hkiData, null, 2);
-            const blob = new Blob([content], { type: 'application/json' });
+        if (searchData.files && searchData.files.length > 0) {
+            // Update existing file
+            const fileId = searchData.files[0].id;
+            const updateResponse = await DriveSync._apiRequest(
+                `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: blob
+                }
+            );
+            console.log('☁️ Updated file in Drive:', filename);
+            return await updateResponse.json();
+        } else {
+            // Create new file with multipart upload
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify({
+                ...metadata,
+                parents: [folderId]
+            })], { type: 'application/json' }));
+            form.append('file', blob);
 
-            const metadata = {
-                name: filename,
-                mimeType: 'application/json'
-            };
-
-            if (existingFile) {
-                // Update existing file
-                const response = await DriveSync._updateFile(existingFile.id, blob, metadata);
-                console.log('☁️ Updated file in Drive:', filename);
-                return response;
-            } else {
-                // Create new file
-                metadata.parents = [folderId];
-                const response = await DriveSync._createFile(blob, metadata);
-                console.log('☁️ Created file in Drive:', filename);
-                return response;
-            }
-        } catch (error) {
-            console.error('Save to cloud error:', error);
-            alert('❌ Failed to save to Google Drive');
-            return null;
+            const createResponse = await fetch(
+                'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+                {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${DriveSync._accessToken}` },
+                    body: form
+                }
+            );
+            console.log('☁️ Created file in Drive:', filename);
+            return await createResponse.json();
         }
     },
 
     /**
-     * Load HKI file from Google Drive
-     * @param {string} fileId - Drive file ID
-     * @returns {Promise<Object|null>} HKI data or null
+     * Load HKI data from Google Drive
+     * @param {string} fileId - Google Drive file ID
+     * @returns {Promise<object>} HKI data
      */
     loadFromCloud: async (fileId) => {
-        if (!DriveSync._isSignedIn) {
-            alert('❌ Please sign in to Google Drive first');
-            return null;
+        if (!DriveSync.isSignedIn()) {
+            throw new Error('Not signed in to Google Drive');
         }
 
-        try {
-            const response = await gapi.client.drive.files.get({
-                fileId: fileId,
-                alt: 'media'
-            });
-
-            const hkiData = typeof response.body === 'string' 
-                ? JSON.parse(response.body) 
-                : response.result;
-
-            console.log('☁️ Loaded file from Drive');
-            return hkiData;
-        } catch (error) {
-            console.error('Load from cloud error:', error);
-            alert('❌ Failed to load from Google Drive');
-            return null;
-        }
+        const response = await DriveSync._apiRequest(
+            `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
+        );
+        
+        return await response.json();
     },
 
     /**
-     * List all HKI files in Drive folder
-     * @returns {Promise<Array>} Array of file metadata
+     * List HKI files in Drive folder
+     * @returns {Promise<Array>} List of files
      */
     listFiles: async () => {
-        if (!DriveSync._isSignedIn) {
-            return [];
+        if (!DriveSync.isSignedIn()) {
+            throw new Error('Not signed in to Google Drive');
         }
 
         const folderId = await DriveSync.getOrCreateFolder();
-        if (!folderId) return [];
-
-        try {
-            const response = await gapi.client.drive.files.list({
-                q: `'${folderId}' in parents and trashed=false`,
-                fields: 'files(id, name, modifiedTime, size)',
-                orderBy: 'modifiedTime desc'
-            });
-
-            return response.result.files || [];
-        } catch (error) {
-            console.error('List files error:', error);
-            return [];
-        }
+        
+        const response = await DriveSync._apiRequest(
+            `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and trashed=false&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc`
+        );
+        
+        const data = await response.json();
+        console.log('☁️ Found files:', data.files?.length || 0);
+        return data.files || [];
     },
 
     /**
-     * Find file by name
-     * @param {string} filename - Filename to find
-     * @returns {Promise<Object|null>} File metadata or null
-     */
-    findFile: async (filename) => {
-        const folderId = await DriveSync.getOrCreateFolder();
-        if (!folderId) return null;
-
-        try {
-            const response = await gapi.client.drive.files.list({
-                q: `name='${filename}' and '${folderId}' in parents and trashed=false`,
-                fields: 'files(id, name, modifiedTime)'
-            });
-
-            return response.result.files?.[0] || null;
-        } catch (error) {
-            console.error('Find file error:', error);
-            return null;
-        }
-    },
-
-    /**
-     * Delete file from Drive
+     * Delete a file from Google Drive
      * @param {string} fileId - File ID to delete
      * @returns {Promise<boolean>} Success status
      */
     deleteFile: async (fileId) => {
-        if (!DriveSync._isSignedIn) return false;
-
-        try {
-            await gapi.client.drive.files.delete({ fileId });
-            console.log('☁️ Deleted file from Drive');
-            return true;
-        } catch (error) {
-            console.error('Delete file error:', error);
-            return false;
-        }
-    },
-
-    /**
-     * Sync local library with Drive
-     * @returns {Promise<Object>} Sync results
-     */
-    syncLibrary: async () => {
-        if (!DriveSync._isSignedIn) {
-            const signedIn = await DriveSync.signIn();
-            if (!signedIn) return { success: false, message: 'Not signed in' };
+        if (!DriveSync.isSignedIn()) {
+            throw new Error('Not signed in to Google Drive');
         }
 
-        try {
-            const localLibrary = HKIStorage.getLibrary();
-            const cloudFiles = await DriveSync.listFiles();
-
-            const results = {
-                uploaded: 0,
-                downloaded: 0,
-                conflicts: [],
-                errors: []
-            };
-
-            // Upload local files not in cloud
-            for (const [id, hki] of Object.entries(localLibrary)) {
-                const cloudFile = cloudFiles.find(f => f.name === `${id}.hki`);
-                
-                if (!cloudFile) {
-                    // Not in cloud, upload it
-                    const saved = await DriveSync.saveToCloud(hki, `${id}.hki`);
-                    if (saved) results.uploaded++;
-                } else {
-                    // Check for conflicts (cloud is newer)
-                    const cloudModified = new Date(cloudFile.modifiedTime);
-                    const localModified = new Date(hki.lastModified);
-                    
-                    if (cloudModified > localModified) {
-                        results.conflicts.push({
-                            id,
-                            cloudModified,
-                            localModified,
-                            cloudFileId: cloudFile.id
-                        });
-                    }
-                }
-            }
-
-            // Download cloud files not in local
-            for (const cloudFile of cloudFiles) {
-                const id = cloudFile.name.replace('.hki', '');
-                if (!localLibrary[id]) {
-                    const hkiData = await DriveSync.loadFromCloud(cloudFile.id);
-                    if (hkiData) {
-                        // Save to local cache
-                        const cache = JSON.parse(localStorage.getItem(CONFIG.STORAGE.INSCRIPTION_KEY) || '{}');
-                        cache[id] = hkiData;
-                        localStorage.setItem(CONFIG.STORAGE.INSCRIPTION_KEY, JSON.stringify(cache));
-                        results.downloaded++;
-                    }
-                }
-            }
-
-            console.log('☁️ Sync complete:', results);
-            return { success: true, results };
-        } catch (error) {
-            console.error('Sync error:', error);
-            return { success: false, message: error.message };
-        }
-    },
-
-    /**
-     * Create file using multipart upload
-     * @private
-     */
-    _createFile: async (blob, metadata) => {
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', blob);
-
-        const token = gapi.auth2.getAuthInstance().currentUser.get().getAuthResponse().access_token;
+        const response = await DriveSync._apiRequest(
+            `https://www.googleapis.com/drive/v3/files/${fileId}`,
+            { method: 'DELETE' }
+        );
         
-        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-            body: form
-        });
-
-        return response.json();
-    },
-
-    /**
-     * Update file content
-     * @private
-     */
-    _updateFile: async (fileId, blob, metadata) => {
-        const token = gapi.auth2.getAuthInstance().currentUser.get().getAuthResponse().access_token;
-        
-        const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
-            method: 'PATCH',
-            headers: { 
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: blob
-        });
-
-        return response.json();
-    },
-
-    /**
-     * Get sync status for UI display
-     * @returns {Object} Status object
-     */
-    getStatus: () => ({
-        initialized: DriveSync._isInitialized,
-        signedIn: DriveSync._isSignedIn,
-        folderId: DriveSync._folderId,
-        configured: !!(DriveSync.CONFIG.CLIENT_ID && DriveSync.CONFIG.API_KEY)
-    })
+        return response.ok;
+    }
 };
 
-// Make globally available
-window.DriveSync = DriveSync;
+// Export for module systems
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = DriveSync;
+}
