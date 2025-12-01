@@ -802,8 +802,12 @@
 
                     // Calculate dynamic thresholds based on image size
                     const imageArea = src.rows * src.cols;
-                    const minArea = imageArea * 0.002;  // 20x larger - will filter out small noise
-                    const maxArea = imageArea * 0.05;   // 5% of image
+                    // For small images (<50k pixels), use smaller minimum area
+                    const isSmallImage = imageArea < 50000;
+                    const minArea = isSmallImage ? Math.max(10, imageArea * 0.0005) : imageArea * 0.002;
+                    const maxArea = imageArea * 0.15;   // 15% of image (increased for small images)
+                    
+                    console.log(`🔍 Isolation: image ${src.cols}x${src.rows} (${imageArea}px), minArea=${minArea.toFixed(0)}, maxArea=${maxArea.toFixed(0)}, contours=${contours.size()}`);
 
                     for (let i = 0; i < contours.size(); i++) {
                         const contour = contours.get(i);
@@ -815,10 +819,10 @@
                         const contourArea = cv.contourArea(contour);
                         const solidity = contourArea / area;
 
-                        // Filter criteria
+                        // Filter criteria - more lenient for small images
                         const sizeOk = area >= minArea && area <= maxArea;
-                        const aspectOk = aspectRatio >= 0.2 && aspectRatio <= 5.0;
-                        const solidityOk = solidity >= 0.3; // Reject very sparse/noisy regions
+                        const aspectOk = aspectRatio >= 0.1 && aspectRatio <= 10.0;  // More lenient
+                        const solidityOk = solidity >= 0.15; // More lenient for small regions
 
                         if (sizeOk && aspectOk && solidityOk) {
                             const padding = 5;
