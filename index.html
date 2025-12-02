@@ -3358,8 +3358,9 @@
             
             // Update original canvas when originalMat changes
             useEffect(() => {
-                if (originalMat && originalCanvasRef.current) {
+                if (originalMat && originalCanvasRef.current && showPreprocessPreview) {
                     try {
+                        console.log('Displaying original mat to canvas');
                         cv.imshow(originalCanvasRef.current, originalMat);
                     } catch (error) {
                         console.error('Error showing original:', error);
@@ -4015,7 +4016,9 @@
                                         ) : (
                                             <div>
                                                 {/* Eraser Canvas */}
-                                                <div className="mb-3 border-2 border-purple-500 rounded-lg overflow-hidden bg-gray-100" style={{cursor: 'crosshair'}}>
+                                                <div className="mb-3 border-2 border-purple-500 rounded-lg overflow-hidden bg-gray-100" style={{
+                                                    cursor: `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize * 2}" height="${brushSize * 2}" viewBox="0 0 ${brushSize * 2} ${brushSize * 2}"><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="white" stroke-width="2"/><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="black" stroke-width="1"/></svg>') ${brushSize} ${brushSize}, crosshair`
+                                                }}>
                                                     <canvas
                                                         ref={eraserCanvasRef}
                                                         onMouseDown={handleEraserMouseDown}
@@ -4023,7 +4026,9 @@
                                                         onMouseUp={handleEraserMouseUp}
                                                         onMouseLeave={handleEraserMouseUp}
                                                         className="max-w-full"
-                                                        style={{cursor: 'crosshair'}}
+                                                        style={{
+                                                            cursor: `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize * 2}" height="${brushSize * 2}" viewBox="0 0 ${brushSize * 2} ${brushSize * 2}"><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="white" stroke-width="2"/><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="black" stroke-width="1"/></svg>') ${brushSize} ${brushSize}, crosshair`
+                                                        }}
                                                     />
                                                 </div>
                                                 
@@ -4538,9 +4543,7 @@
                                     className="max-w-full h-auto border border-gray-300 rounded"
                                     onMouseDown={handleImageMouseDown}
                                     style={{ 
-                                        cursor: eraserMode 
-                                            ? `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize * 2}" height="${brushSize * 2}" viewBox="0 0 ${brushSize * 2} ${brushSize * 2}"><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="white" stroke-width="2"/><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="black" stroke-width="1"/></svg>') ${brushSize} ${brushSize}, crosshair`
-                                            : (manualDetectionMode ? 'crosshair' : 'default'),
+                                        cursor: manualDetectionMode ? 'crosshair' : 'default',
                                         userSelect: 'none',
                                         pointerEvents: 'auto',
                                         transform: displayImage ? 'none' : `rotate(${imageRotation}deg)`, // Only rotate preview
