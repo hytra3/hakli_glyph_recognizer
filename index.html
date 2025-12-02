@@ -1703,6 +1703,18 @@
                             updated.push(newDetection);
                             return updated;
                         });
+                        
+                        // Update reading order to account for removed and added detection
+                        setReadingOrder(prev => {
+                            if (prev.length === 0) return prev;
+                            // Remove the deleted index and adjust all indices after it
+                            const newOrder = prev
+                                .filter(idx => idx !== detectionIndex)
+                                .map(idx => idx > detectionIndex ? idx - 1 : idx);
+                            // Add the new detection at the end
+                            newOrder.push(recognitionResults.length - 1);
+                            return newOrder;
+                        });
 
                         setIsolatedGlyphs(prev => [...prev, {
                             bounds: newBounds,
@@ -3811,11 +3823,11 @@
                                             <div className="flex gap-5 justify-center flex-wrap">
                                                 <div className="flex-1 min-w-[300px] max-w-[500px]">
                                                     <div className="font-semibold text-sm text-gray-600 mb-2">Original</div>
-                                                    <canvas ref={originalCanvasRef} className="max-w-full border-2 border-gray-300 rounded bg-gray-100" />
+                                                    <canvas ref={originalCanvasRef} className="max-w-full border-2 border-gray-300 rounded bg-gray-100" style={{minHeight: '200px'}} />
                                                 </div>
                                                 <div className="flex-1 min-w-[300px] max-w-[500px]">
                                                     <div className="font-semibold text-sm text-gray-600 mb-2">Preprocessed</div>
-                                                    <canvas ref={preprocessCanvasRef} className="max-w-full border-2 border-gray-300 rounded bg-gray-100" />
+                                                    <canvas ref={preprocessCanvasRef} className="max-w-full border-2 border-gray-300 rounded bg-gray-100" style={{minHeight: '200px'}} />
                                                 </div>
                                             </div>
                                         </div>
@@ -3830,6 +3842,12 @@
                                         </button>
                                     )}
                                     
+                                    {!showPreprocessPreview && recognitionResults.length === 0 && (
+                                        <div className="mb-4 p-3 bg-gray-50 border border-gray-300 rounded text-xs text-gray-600 text-center">
+                                            💡 Tip: Scroll down to <strong>Controls & Options</strong> section to see the preprocessed image and run recognition
+                                        </div>
+                                    )}
+                                    
                                     {/* Rotation Control */}
                                     <div className="mb-3 bg-white rounded-lg border border-gray-200 overflow-hidden">
                                         <div 
@@ -3839,9 +3857,14 @@
                                             <span className="font-semibold">
                                                 {isRotationCollapsed ? '▶' : '▼'} Rotation: {preprocessing.rotation}°
                                             </span>
-                                            {preprocessing.rotation !== 0 && (
-                                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Active</span>
-                                            )}
+                                            <div className="flex gap-2">
+                                                {preprocessing.rotation !== 0 && recognitionResults.length > 0 && (
+                                                    <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️ Boxes won't move</span>
+                                                )}
+                                                {preprocessing.rotation !== 0 && (
+                                                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Active</span>
+                                                )}
+                                            </div>
                                         </div>
                                         {!isRotationCollapsed && (
                                             <div className="p-4 pt-0">
@@ -3850,13 +3873,50 @@
                                                     min="-180"
                                                     max="180"
                                                     value={preprocessing.rotation}
-                                                    onChange={(e) => updatePreprocessingSetting('rotation', parseFloat(e.target.value))}
+                                                    onChange={(e) => {
+                                                        const newRotation = parseFloat(e.target.value);
+                                                        if (recognitionResults.length > 0 && newRotation !== preprocessing.rotation) {
+                                                            if (!confirm('⚠️ Warning: Rotating after recognition will not move detection boxes.\n\nThe boxes will stay in their original positions. You\'ll need to:\n1. Clear all detections\n2. Apply rotation\n3. Run recognition again\n\nContinue with rotation?')) {
+                                                                return;
+                                                            }
+                                                        }
+                                                        updatePreprocessingSetting('rotation', newRotation);
+                                                    }}
                                                     className="w-full mb-2"
                                                 />
                                                 <div className="flex gap-2">
-                                                    <button onClick={() => updatePreprocessingSetting('rotation', preprocessing.rotation - 90)} className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100">-90°</button>
-                                                    <button onClick={() => updatePreprocessingSetting('rotation', 0)} className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100">0°</button>
-                                                    <button onClick={() => updatePreprocessingSetting('rotation', preprocessing.rotation + 90)} className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100">+90°</button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            if (recognitionResults.length > 0) {
+                                                                if (!confirm('⚠️ Warning: Rotating after recognition will not move detection boxes.\n\nThe boxes will stay in their original positions. You\'ll need to:\n1. Clear all detections\n2. Apply rotation\n3. Run recognition again\n\nContinue with rotation?')) {
+                                                                    return;
+                                                                }
+                                                            }
+                                                            updatePreprocessingSetting('rotation', preprocessing.rotation - 90);
+                                                        }} 
+                                                        className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100"
+                                                    >
+                                                        -90°
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => updatePreprocessingSetting('rotation', 0)} 
+                                                        className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100"
+                                                    >
+                                                        0°
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            if (recognitionResults.length > 0) {
+                                                                if (!confirm('⚠️ Warning: Rotating after recognition will not move detection boxes.\n\nThe boxes will stay in their original positions. You\'ll need to:\n1. Clear all detections\n2. Apply rotation\n3. Run recognition again\n\nContinue with rotation?')) {
+                                                                    return;
+                                                                }
+                                                            }
+                                                            updatePreprocessingSetting('rotation', preprocessing.rotation + 90);
+                                                        }} 
+                                                        className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100"
+                                                    >
+                                                        +90°
+                                                    </button>
                                                 </div>
                                             </div>
                                         )}
@@ -5852,12 +5912,11 @@
                             
                             {showTranslationSection && (
                                 <>
-                                    <div className="mb-4 p-3 bg-blue-50 rounded border border-blue-200 text-sm text-gray-700">
-                                        <div className="font-semibold mb-1">💡 Add your translation:</div>
-                                        <div className="text-xs">
-                                            Enter translations in English and/or Arabic. Toggle between languages below. Both will appear in the exported HTML report.
-                                        </div>
-                                    </div>
+                                    {!dismissedTips['translation-section'] && (
+                                        <DismissableTip id="translation-section" className="mb-4">
+                                            <strong>💡 Add your translation:</strong> Enter translations in English and/or Arabic. Toggle between languages below. Both will appear in the exported HTML report.
+                                        </DismissableTip>
+                                    )}
 
                                     <div className="space-y-4">
                                         {/* Inscription Title Field */}
