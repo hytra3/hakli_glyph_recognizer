@@ -3924,12 +3924,17 @@
                                     
                                     {/* Gaussian Blur */}
                                     <div className="mb-3 bg-white rounded-lg border border-gray-200 overflow-hidden">
-                                        <div 
-                                            className="p-3 flex items-center justify-between cursor-pointer hover:bg-gray-50"
-                                            onClick={() => setIsBlurCollapsed(!isBlurCollapsed)}
-                                        >
-                                            <label className="font-semibold flex items-center" onClick={(e) => e.stopPropagation()}>
-                                                <span className="mr-2">{isBlurCollapsed ? '▶' : '▼'}</span>
+                                        <div className="p-3 flex items-center justify-between">
+                                            <label className="font-semibold flex items-center cursor-pointer hover:bg-gray-50">
+                                                <span 
+                                                    className="mr-2 cursor-pointer px-1"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setIsBlurCollapsed(!isBlurCollapsed);
+                                                    }}
+                                                >
+                                                    {isBlurCollapsed ? '▶' : '▼'}
+                                                </span>
                                                 <input
                                                     type="checkbox"
                                                     checked={preprocessing.gaussianBlur > 0}
@@ -3960,12 +3965,17 @@
                                     
                                     {/* Adaptive Threshold */}
                                     <div className="mb-3 bg-white rounded-lg border border-gray-200 overflow-hidden">
-                                        <div 
-                                            className="p-3 flex items-center justify-between cursor-pointer hover:bg-gray-50"
-                                            onClick={() => setIsThresholdCollapsed(!isThresholdCollapsed)}
-                                        >
-                                            <label className="font-semibold flex items-center" onClick={(e) => e.stopPropagation()}>
-                                                <span className="mr-2">{isThresholdCollapsed ? '▶' : '▼'}</span>
+                                        <div className="p-3 flex items-center justify-between">
+                                            <label className="font-semibold flex items-center cursor-pointer hover:bg-gray-50">
+                                                <span 
+                                                    className="mr-2 cursor-pointer px-1"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setIsThresholdCollapsed(!isThresholdCollapsed);
+                                                    }}
+                                                >
+                                                    {isThresholdCollapsed ? '▶' : '▼'}
+                                                </span>
                                                 <input
                                                     type="checkbox"
                                                     checked={preprocessing.useAdaptiveThreshold}
