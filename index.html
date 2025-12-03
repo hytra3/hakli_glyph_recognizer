@@ -25,6 +25,26 @@
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Custom Tailwind configuration with earthy archaeological palette
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        // Earthy archaeological palette inspired by ancient materials
+                        'ancient-purple': '#5d4e6d',  // Tyrian purple (theme color)
+                        'stone': '#8b7d6b',           // Weathered sandstone
+                        'clay': '#a67c52',            // Terracotta/pottery
+                        'patina': '#6b8e7f',          // Aged bronze/copper patina
+                        'ochre': '#b8956a',           // Desert sand/ochre pigment
+                        'rust': '#a0674f',            // Oxidized iron/rust
+                        'stone-light': '#a69988',     // Lighter stone
+                        'stone-dark': '#6d6355',      // Darker stone
+                    }
+                }
+            }
+        }
+    </script>
     
     <!-- OpenCV -->
     <script>
@@ -450,7 +470,44 @@
                     try {
                         const sessionData = JSON.parse(e.target.result);
                         
-                        setImage(sessionData.image);
+                        // Load image and process it through OpenCV
+                        if (sessionData.image) {
+                            setIsImageLoading(true);
+                            const img = new Image();
+                            img.onload = () => {
+                                // Set the image
+                                setImage(sessionData.image);
+                                
+                                // Create OpenCV Mat from image
+                                if (isOpenCvReady) {
+                                    const canvas = document.createElement('canvas');
+                                    canvas.width = img.width;
+                                    canvas.height = img.height;
+                                    const ctx = canvas.getContext('2d');
+                                    ctx.drawImage(img, 0, 0);
+                                    
+                                    const mat = cv.imread(canvas);
+                                    setOriginalMat(mat);
+                                    
+                                    // Show original on canvas
+                                    if (originalCanvasRef.current) {
+                                        cv.imshow(originalCanvasRef.current, mat);
+                                    }
+                                    
+                                    // Process with default or saved preprocessing settings
+                                    processImageWithSettings(mat, preprocessing);
+                                }
+                                
+                                setIsImageLoading(false);
+                            };
+                            img.onerror = () => {
+                                setIsImageLoading(false);
+                                alert('❌ Failed to load image from HKI file.');
+                            };
+                            img.src = sessionData.image;
+                        }
+                        
+                        // Restore all other data
                         setRecognitionResults(sessionData.recognitionResults || []);
                         setReadingOrder(sessionData.readingOrder || []);
                         setWordBoundaries(new Set(sessionData.wordBoundaries || []));
@@ -3675,7 +3732,7 @@
                                 <h3>Equivalence Chart Status</h3>
                             </button>
                             {chartLoadStatus === 'loaded' && (
-                                <span className="text-sm text-green-600">
+                                <span className="text-sm text-patina">
                                     ✅ {equivalenceChart?.glyphs?.length || 0} glyphs
                                 </span>
                             )}
@@ -3687,7 +3744,7 @@
                                     {chartLoadStatus === 'loading' && (
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-2">
-                                                <span className="text-blue-600">
+                                                <span className="text-stone-dark">
                                                     Loading {equivalenceChart?.glyphs?.length || '...'} glyphs...
                                                     {imageLoadingProgress.total > 0 && (
                                                         <span className="ml-2">({imageLoadingProgress.loaded}/{imageLoadingProgress.total} images)</span>
@@ -3697,7 +3754,7 @@
                                             {imageLoadingProgress.total > 0 && (
                                                 <div className="w-full bg-gray-200 rounded-full h-2.5">
                                                     <div 
-                                                        className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                                                        className="bg-stone-dark h-2.5 rounded-full transition-all duration-300" 
                                                         style={{width: `${(imageLoadingProgress.loaded / imageLoadingProgress.total * 100).toFixed(1)}%`}}
                                                     ></div>
                                                 </div>
@@ -3705,7 +3762,7 @@
                                         </div>
                                     )}
                                     {chartLoadStatus === 'loaded' && (
-                                        <span className="text-green-600">
+                                        <span className="text-patina">
                                             ✅ Loaded {equivalenceChart?.glyphs?.length || 0} glyphs, {Object.keys(loadedGlyphImages).length} images
                                         </span>
                                     )}
@@ -3714,14 +3771,14 @@
                                 <div className="flex gap-2 mt-3">
                                     <button 
                                         onClick={() => setShowChartViewer(true)} 
-                                        className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600" 
+                                        className="px-4 py-2 bg-ancient-purple text-white rounded hover:bg-[#4a3e54]" 
                                         disabled={chartLoadStatus !== 'loaded'}
                                     >
                                         📊 View Chart
                                     </button>
                                     <button 
                                         onClick={() => setChartLoadStatus('not-loaded')} 
-                                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" 
+                                        className="px-4 py-2 bg-stone text-white rounded hover:bg-stone-dark" 
                                         disabled={chartLoadStatus === 'loading'}
                                     >
                                         Reload Chart
@@ -3782,30 +3839,30 @@
                                         <button
                                             onClick={() => document.getElementById('fileUploadInput').click()}
                                             disabled={isImageLoading}
-                                            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium text-sm transition-colors"
+                                            className="px-4 py-2 bg-stone text-white rounded-lg hover:bg-stone-dark disabled:bg-gray-400 disabled:cursor-not-allowed font-medium text-sm transition-colors"
                                         >
                                             {isImageLoading ? 'Loading...' : 'Browse Files'}
                                         </button>
                                     </div>
                                     
                                     {chartLoadStatus === 'loading' && (
-                                        <div className="mt-4 p-3 bg-blue-50 border border-blue-300 rounded text-xs text-blue-700">
+                                        <div className="mt-4 p-3 bg-[#f5f3f0] border border-stone rounded text-xs text-stone-dark">
                                             <strong>⏳ Chart loading...</strong> You can prepare your image file while you wait.
                                         </div>
                                     )}
                                 </div>
                             </div>
                             {isImageLoading && (
-                                <div className="mt-2 flex items-center gap-2 text-blue-600">
+                                <div className="mt-2 flex items-center gap-2 text-stone-dark">
                                     <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                                     <span className="text-sm font-medium">Loading image...</span>
                                 </div>
                             )}
                         </div>
                     ) : (
-                        <div className="mb-6 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+                        <div className="mb-6 p-3 bg-[#f0f5f3] border border-[#b5d4c8] rounded-lg flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <span className="text-green-600">✓</span>
+                                <span className="text-patina">✓</span>
                                 <span className="text-sm font-medium text-gray-700">Image loaded</span>
                             </div>
                             <button
@@ -3816,7 +3873,7 @@
                                     setRecognitionResults([]);
                                     setDisplayImage(null);
                                 }}
-                                className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                                className="px-3 py-1 text-xs bg-stone text-white rounded hover:bg-stone-dark"
                             >
                                 Upload Different Image
                             </button>
@@ -3833,7 +3890,7 @@
                                 <h3 className="font-semibold text-gray-900 text-lg">
                                     {isPreprocessingCollapsed ? '▶' : '▼'} Image Preprocessing
                                     {isPreprocessingCollapsed && preprocessing.useAdaptiveThreshold && (
-                                        <span className="text-sm text-blue-600 ml-2">(Active)</span>
+                                        <span className="text-sm text-stone-dark ml-2">(Active)</span>
                                     )}
                                 </h3>
                                 <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
@@ -3854,8 +3911,8 @@
                             
                             {/* Compact status bar when collapsed */}
                             {isPreprocessingCollapsed && (preprocessing.useAdaptiveThreshold || preprocessing.gaussianBlur > 0 || preprocessing.rotation !== 0 || preprocessing.morphologyOperation !== 'none' || preprocessing.invertColors) && (
-                                <div className="px-4 py-2 bg-blue-50 border-t border-blue-200 flex items-center justify-between">
-                                    <div className="text-sm text-blue-800">
+                                <div className="px-4 py-2 bg-[#f5f3f0] border-t border-stone-light flex items-center justify-between">
+                                    <div className="text-sm text-stone-dark">
                                         <span className="font-medium">Active: </span>
                                         {preprocessing.gaussianBlur > 0 && <span className="mr-2">Blur:{preprocessing.gaussianBlur}</span>}
                                         {preprocessing.useAdaptiveThreshold && <span className="mr-2">Threshold</span>}
@@ -3866,7 +3923,7 @@
                                     <button
                                         onClick={applyAdjustments}
                                         disabled={!preprocessedMat}
-                                        className={`px-4 py-1 text-sm rounded font-medium ${adjustmentsApplied ? 'bg-green-500 text-white' : 'bg-amber-500 text-white animate-pulse'}`}
+                                        className={`px-4 py-1 text-sm rounded font-medium ${adjustmentsApplied ? 'bg-patina text-white' : 'bg-ochre text-white animate-pulse'}`}
                                     >
                                         {adjustmentsApplied ? '✓ Applied' : '⚡ Apply'}
                                     </button>
@@ -3903,7 +3960,7 @@
                                     {!showPreprocessPreview && (
                                         <button 
                                             onClick={() => setShowPreprocessPreview(true)}
-                                            className="mb-5 px-4 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                                            className="mb-5 px-4 py-2 text-sm bg-patina text-white rounded hover:bg-[#5d7a6d]"
                                         >
                                             Show Preview
                                         </button>
@@ -3929,7 +3986,7 @@
                                                     <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">⚠️ Boxes won't move</span>
                                                 )}
                                                 {preprocessing.rotation !== 0 && (
-                                                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Active</span>
+                                                    <span className="text-xs bg-blue-100 text-stone-dark px-2 py-1 rounded">Active</span>
                                                 )}
                                             </div>
                                         </div>
@@ -4011,7 +4068,7 @@
                                                 Gaussian Blur {preprocessing.gaussianBlur > 0 ? `(${preprocessing.gaussianBlur}×${preprocessing.gaussianBlur})` : ''}
                                             </label>
                                             {preprocessing.gaussianBlur > 0 && (
-                                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Active</span>
+                                                <span className="text-xs bg-blue-100 text-stone-dark px-2 py-1 rounded">Active</span>
                                             )}
                                         </div>
                                         {!isBlurCollapsed && preprocessing.gaussianBlur > 0 && (
@@ -4052,7 +4109,7 @@
                                                 Adaptive Threshold {preprocessing.useAdaptiveThreshold ? `(${preprocessing.blockSize}/${preprocessing.constantOffset})` : ''}
                                             </label>
                                             {preprocessing.useAdaptiveThreshold && (
-                                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Active</span>
+                                                <span className="text-xs bg-blue-100 text-stone-dark px-2 py-1 rounded">Active</span>
                                             )}
                                         </div>
                                         {!isThresholdCollapsed && preprocessing.useAdaptiveThreshold && (
@@ -4101,7 +4158,7 @@
                                                 <span className="font-normal text-xs text-gray-500 ml-2">(light on dark)</span>
                                             </label>
                                             {preprocessing.invertColors && (
-                                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Active</span>
+                                                <span className="text-xs bg-blue-100 text-stone-dark px-2 py-1 rounded">Active</span>
                                             )}
                                         </div>
                                     </div>
@@ -4116,7 +4173,7 @@
                                                 {isMorphCollapsed ? '▶' : '▼'} Morphology {preprocessing.morphologyOperation !== 'none' ? `(${preprocessing.morphologyOperation})` : ''}
                                             </span>
                                             {preprocessing.morphologyOperation !== 'none' && (
-                                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Active</span>
+                                                <span className="text-xs bg-blue-100 text-stone-dark px-2 py-1 rounded">Active</span>
                                             )}
                                         </div>
                                         {!isMorphCollapsed && (
@@ -4146,7 +4203,7 @@
                                             <button
                                                 onClick={toggleEraserMode}
                                                 disabled={!preprocessedMat}
-                                                className="w-full px-4 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
+                                                className="w-full px-4 py-3 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3e54] disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
                                             >
                                                 🖌️ Enable Eraser Mode
                                             </button>
@@ -4198,14 +4255,14 @@
                                                     <button
                                                         onClick={undoLastStroke}
                                                         disabled={eraserHistory.length <= 1}
-                                                        className="flex-1 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+                                                        className="flex-1 px-3 py-2 bg-stone text-white rounded hover:bg-stone-dark disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
                                                         title="Undo last stroke"
                                                     >
                                                         ↶ Undo
                                                     </button>
                                                     <button
                                                         onClick={clearAllEraser}
-                                                        className="flex-1 px-3 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 text-sm font-semibold"
+                                                        className="flex-1 px-3 py-2 bg-ochre text-white rounded hover:bg-[#a18259] text-sm font-semibold"
                                                         title="Clear all strokes"
                                                     >
                                                         🔄 Reset
@@ -4214,7 +4271,7 @@
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={toggleEraserMode}
-                                                        className="w-full px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm font-semibold"
+                                                        className="w-full px-3 py-2 bg-patina text-white rounded hover:bg-[#5d7a6d] text-sm font-semibold"
                                                     >
                                                         ✓ Done Erasing
                                                     </button>
@@ -4228,7 +4285,7 @@
                                     </div>
                                     
                                     {/* Summary */}
-                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <div className="p-4 bg-[#f5f3f0] border border-stone-light rounded-lg">
                                         <strong className="block mb-2">Active Settings:</strong>
                                         <ul className="list-disc ml-5 text-sm">
                                             {preprocessing.rotation !== 0 && <li>Rotation: {preprocessing.rotation}°</li>}
@@ -4248,12 +4305,12 @@
                                             <div className="flex items-center gap-3">
                                                 {adjustmentsApplied ? (
                                                     <>
-                                                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                                                        <span className="font-semibold text-green-700">✓ Adjustments Applied</span>
+                                                        <div className="w-3 h-3 bg-patina rounded-full"></div>
+                                                        <span className="font-semibold text-patina">✓ Adjustments Applied</span>
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <div className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></div>
+                                                        <div className="w-3 h-3 bg-ochre rounded-full animate-pulse"></div>
                                                         <span className="font-semibold text-amber-700">Adjustments Ready</span>
                                                     </>
                                                 )}
@@ -4261,7 +4318,7 @@
                                             <button
                                                 onClick={applyAdjustments}
                                                 disabled={!preprocessedMat}
-                                                className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
+                                                className="px-6 py-2 bg-stone text-white rounded-lg hover:bg-stone-dark disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-colors"
                                             >
                                                 {adjustmentsApplied ? '🔄 Reapply Adjustments' : '✨ Apply Adjustments'}
                                             </button>
@@ -4293,7 +4350,7 @@
                                 <div className="flex gap-2">
                                     <button 
                                         onClick={() => setViewMode('detection')}
-                                        className={`px-4 py-2 rounded font-medium ${viewMode === 'detection' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                        className={`px-4 py-2 rounded font-medium ${viewMode === 'detection' ? 'bg-stone text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                     >
                                         📷 Detection View
                                     </button>
@@ -4308,13 +4365,13 @@
                                                 autoDetectReadingOrder();
                                             }
                                         }}
-                                        className={`px-4 py-2 rounded font-medium ${viewMode === 'reading' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                        className={`px-4 py-2 rounded font-medium ${viewMode === 'reading' ? 'bg-patina text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                     >
                                         📖 Reading Order View
                                     </button>
                                     <button 
                                         onClick={() => setShowArabicLabels(!showArabicLabels)}
-                                        className={`px-4 py-2 rounded font-medium ${showArabicLabels ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                        className={`px-4 py-2 rounded font-medium ${showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                         title={showArabicLabels ? 'Showing Arabic labels' : 'Showing English labels'}
                                     >
                                         {showArabicLabels ? '🔤 Arabic' : 'ABC English'}
@@ -4322,7 +4379,7 @@
                                     {viewMode === 'reading' && !showTranscription && (
                                         <button 
                                             onClick={() => setShowTranscription(true)}
-                                            className="px-4 py-2 rounded font-medium bg-blue-500 text-white hover:bg-blue-600"
+                                            className="px-4 py-2 rounded font-medium bg-stone text-white hover:bg-stone-dark"
                                             title="Show transcription box"
                                         >
                                             📝 Show Transcription
@@ -4343,35 +4400,35 @@
                                                         alert(`🔮 Auto-detected: ${detected.toUpperCase()}\n\nReading order has been generated based on glyph positions.`);
                                                     }
                                                 }}
-                                                className="px-3 py-1 text-sm rounded bg-purple-500 text-white hover:bg-purple-600"
+                                                className="px-3 py-1 text-sm rounded bg-ancient-purple text-white hover:bg-[#4a3e54]"
                                                 title="Auto-detect reading direction based on glyph positions"
                                             >
                                                 🔮 Auto
                                             </button>
                                             <button 
                                                 onClick={() => applyReadingDirection('detection')}
-                                                className={`px-3 py-1 text-sm rounded ${readingDirection === 'detection' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                                className={`px-3 py-1 text-sm rounded ${readingDirection === 'detection' ? 'bg-stone text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                                 title="Original detection order"
                                             >
                                                 🔢 Detection Order
                                             </button>
                                             <button 
                                                 onClick={() => applyReadingDirection('ltr')}
-                                                className={`px-3 py-1 text-sm rounded ${readingDirection === 'ltr' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                                className={`px-3 py-1 text-sm rounded ${readingDirection === 'ltr' ? 'bg-stone text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                                 title="Left to Right"
                                             >
                                                 → LTR
                                             </button>
                                             <button 
                                                 onClick={() => applyReadingDirection('rtl')}
-                                                className={`px-3 py-1 text-sm rounded ${readingDirection === 'rtl' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                                className={`px-3 py-1 text-sm rounded ${readingDirection === 'rtl' ? 'bg-stone text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                                 title="Right to Left"
                                             >
                                                 ← RTL
                                             </button>
                                             <button 
                                                 onClick={() => applyReadingDirection('ttb')}
-                                                className={`px-3 py-1 text-sm rounded ${readingDirection === 'ttb' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                                className={`px-3 py-1 text-sm rounded ${readingDirection === 'ttb' ? 'bg-stone text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                                 title="Top to Bottom"
                                             >
                                                 ↓ TTB
@@ -4414,7 +4471,7 @@
                                     <button 
                                         onClick={recognizeGlyphs} 
                                         disabled={isProcessing || !equivalenceChart} 
-                                        className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 font-semibold"
+                                        className="px-6 py-2 bg-patina text-white rounded hover:bg-[#5d7a6d] disabled:opacity-50 font-semibold"
                                     >
                                         {isProcessing ? 'Processing...' : '🔍 Recognize Glyphs'}
                                     </button>
@@ -4424,12 +4481,12 @@
                             {!isControlsCollapsed && (
                                 <>
                                 <div className="flex flex-wrap gap-3 items-center mb-4">
-                                <button onClick={recognizeGlyphs} disabled={isProcessing || !equivalenceChart} className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50">
+                                <button onClick={recognizeGlyphs} disabled={isProcessing || !equivalenceChart} className="px-6 py-2 bg-patina text-white rounded hover:bg-[#5d7a6d] disabled:opacity-50">
                                     {isProcessing ? 'Processing...' : 'Recognize Glyphs'}
                                 </button>
                                 {/* 👇 ADD THIS PROGRESS BAR */}
                                 {isProcessing && processingProgress.total > 0 && (
-                                    <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200">
+                                    <div className="mt-3 p-3 bg-[#f5f3f0] rounded border border-stone-light">
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-sm font-medium text-gray-700">
                                                 Processing region {processingProgress.current} of {processingProgress.total}
@@ -4440,7 +4497,7 @@
                                         </div>
                                         <div className="w-full bg-gray-200 rounded-full h-2.5">
                                             <div
-                                                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                                                className="bg-stone-dark h-2.5 rounded-full transition-all duration-300"
                                                 style={{ width: ((processingProgress.current / processingProgress.total) * 100) + '%' }}
                                             />
                                         </div>
@@ -4453,7 +4510,7 @@
                                 
                                 <button
                                     onClick={() => setTemplateTrainingMode(!templateTrainingMode)}
-                                    className={`px-4 py-2 rounded ${templateTrainingMode ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                    className={`px-4 py-2 rounded ${templateTrainingMode ? 'bg-[#4a3e54] text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                 >
                                     {templateTrainingMode ? '🎓 Exit Template Training' : '🎓 Template Training Mode'}
                                 </button>
@@ -4474,13 +4531,13 @@
                                             <div className="mt-3 flex gap-2">
                                                 <button
                                                     onClick={exportUpdatedChart}
-                                                    className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm"
+                                                    className="px-4 py-2 bg-[#4a3e54] text-white rounded hover:bg-purple-700 text-sm"
                                                 >
                                                     💾 Export Training Chart
                                                 </button>
                                                 <button
                                                     onClick={() => window.open('merge_hakli_training_glyphs.html', '_blank')}
-                                                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                                                    className="px-4 py-2 bg-stone-dark text-white rounded hover:bg-blue-700 text-sm"
                                                     title="Open the tool to merge training file with base Hakli_glyphs.JSON"
                                                 >
                                                     🔀 Merge Training File
@@ -4490,7 +4547,7 @@
                                     </div>
                                 )}
                                                             
-                                <button onClick={() => setShowRegionBoundaries(!showRegionBoundaries)} className={`px-4 py-2 rounded ${showRegionBoundaries ? 'bg-purple-500 text-white hover:bg-purple-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+                                <button onClick={() => setShowRegionBoundaries(!showRegionBoundaries)} className={`px-4 py-2 rounded ${showRegionBoundaries ? 'bg-ancient-purple text-white hover:bg-[#4a3e54]' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
                                     Region Boundaries
                                 </button>
                                 <button
@@ -4511,7 +4568,7 @@
                                             alert('✅ All detections cleared!');
                                         }
                                     }}
-                                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                                    className="px-4 py-2 bg-rust text-white rounded hover:bg-[#8d5d47]"
                                     disabled={recognitionResults.length === 0}
                                 >
                                     🗑️ Clear All
@@ -4519,7 +4576,7 @@
                                 {isolatedGlyphs.length > 0 && (
                                     <button
                                         onClick={() => setShowRegionBoundaries(!showRegionBoundaries)}
-                                        className="px-4 py-2 bg-teal-500 text-white rounded hover:bg-teal-600"
+                                        className="px-4 py-2 bg-patina text-white rounded hover:bg-teal-600"
                                     >
                                         {showRegionBoundaries ? 'Hide' : 'Show'} Isolated Regions ({isolatedGlyphs.length})
                                     </button>
@@ -4568,7 +4625,7 @@
                                         </div>
                                         <div className="text-sm">
                                             {useConfidenceFilter ? (
-                                                <span className="text-blue-600 font-semibold">
+                                                <span className="text-stone-dark font-semibold">
                                                     Showing {getFilteredResults().length} of {recognitionResults.length} detections
                                                     {recognitionResults.length - getFilteredResults().length > 0 && (
                                                         <span className="text-gray-500 ml-2">
@@ -4634,14 +4691,14 @@
                                     <span className="text-sm text-gray-600">{selectedRegions.size} selected</span>
                                     {selectedRegions.size >= 2 && (
                                         <>
-                                            <button onClick={mergeSelectedDetections} className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 font-semibold">
+                                            <button onClick={mergeSelectedDetections} className="px-4 py-2 bg-ancient-purple text-white rounded hover:bg-[#4a3e54] font-semibold">
                                                 ⚡ Merge Selected
                                             </button>
                                             <span className="text-xs text-gray-500">Combines {selectedRegions.size} detections into one</span>
                                         </>
                                     )}
                                     {selectedRegions.size === 1 && (
-                                        <span className="text-xs text-blue-600">Select 1+ more (click ⚡) to merge</span>
+                                        <span className="text-xs text-stone-dark">Select 1+ more (click ⚡) to merge</span>
                                     )}
                                     <button onClick={() => setSelectedRegions(new Set())} className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
                                         Clear Selection
@@ -4714,7 +4771,7 @@
                                                 zIndex: 20
                                             }}
                                         >
-                                            <div className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                                            <div className="absolute top-1 left-1 bg-stone text-white text-xs px-2 py-1 rounded">
                                                 ✂️ Draw smaller box to trim
                                             </div>
                                         </div>
@@ -4748,7 +4805,7 @@
                                             {excludeRegions.map((exRegion, idx) => (
                                                 <div
                                                     key={`exclude-${idx}`}
-                                                    className="absolute border-4 border-red-600 bg-red-500 pointer-events-none"
+                                                    className="absolute border-4 border-red-600 bg-rust pointer-events-none"
                                                     style={{
                                                         left: exRegion.x * scaleX + 'px',
                                                         top: exRegion.y * scaleY + 'px',
@@ -4975,19 +5032,19 @@
                                                         <div className="flex flex-col gap-2">
                                                             <button
                                                                 onClick={() => saveAsTemplate(index, 'primary')}
-                                                                className="px-3 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+                                                                className="px-3 py-2 bg-stone text-white text-sm rounded hover:bg-stone-dark"
                                                             >
                                                                 🎯 Primary Template
                                                             </button>
                                                             <button
                                                                 onClick={() => saveAsTemplate(index, 'variant')}
-                                                                className="px-3 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600"
+                                                                className="px-3 py-2 bg-patina text-white text-sm rounded hover:bg-[#5d7a6d]"
                                                             >
                                                                 ⭐ Variant
                                                             </button>
                                                             <button
                                                                 onClick={() => saveAsTemplate(index, 'example')}
-                                                                className="px-3 py-2 bg-yellow-500 text-white text-sm rounded hover:bg-yellow-600"
+                                                                className="px-3 py-2 bg-ochre text-white text-sm rounded hover:bg-[#a18259]"
                                                             >
                                                                 📚 Example
                                                             </button>
@@ -5050,19 +5107,19 @@
                                                     <div className="flex flex-col gap-2">
                                                         <button
                                                             onClick={() => saveAsTemplate(index, 'primary')}
-                                                            className="px-3 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+                                                            className="px-3 py-2 bg-stone text-white text-sm rounded hover:bg-stone-dark"
                                                         >
                                                             🎯 Primary Template
                                                         </button>
                                                         <button
                                                             onClick={() => saveAsTemplate(index, 'variant')}
-                                                            className="px-3 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600"
+                                                            className="px-3 py-2 bg-patina text-white text-sm rounded hover:bg-[#5d7a6d]"
                                                         >
                                                             ⭐ Variant
                                                         </button>
                                                         <button
                                                             onClick={() => saveAsTemplate(index, 'example')}
-                                                            className="px-3 py-2 bg-yellow-500 text-white text-sm rounded hover:bg-yellow-600"
+                                                            className="px-3 py-2 bg-ochre text-white text-sm rounded hover:bg-[#a18259]"
                                                         >
                                                             📚 Example
                                                         </button>
@@ -5150,7 +5207,7 @@
                                                         deleteIsolatedRegion(index);
                                                     }
                                                 }}
-                                                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full hover:bg-red-600 flex items-center justify-center text-sm font-bold shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                                className="absolute -top-2 -right-2 w-6 h-6 bg-rust text-white rounded-full hover:bg-[#8d5d47] flex items-center justify-center text-sm font-bold shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
                                                 title="Delete this region"
                                             >
                                                 ×
@@ -5176,7 +5233,7 @@
                                     </button>
                                 </div>
                                 
-                                <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg">
+                                <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-stone-light rounded-lg">
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="flex-1">
                                             <span className="text-sm text-gray-600">Currently detected as:</span>
@@ -5197,7 +5254,7 @@
                                                     <img
                                                         src={isolatedGlyphs[recognitionResults[correctionMode].regionIndex].thumbnail}
                                                         alt="Isolated region"
-                                                        className="w-32 h-auto border-2 border-blue-300 rounded"
+                                                        className="w-32 h-auto border-2 border-stone rounded"
                                                     />
                                                 </div>
                                             )}
@@ -5224,17 +5281,17 @@
                                     const suggestion = getCorrectionSuggestion(recognitionResults[correctionMode].glyph.id);
                                     if (suggestion) {
                                         return (
-                                            <div className="mb-4 p-3 bg-green-50 border-2 border-green-300 rounded-lg">
+                                            <div className="mb-4 p-3 bg-[#f0f5f3] border-2 border-patina rounded-lg">
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-green-700 font-semibold">💡 Suggestion:</span>
+                                                        <span className="text-patina font-semibold">💡 Suggestion:</span>
                                                         <span className="text-gray-700">
                                                             You've corrected this to <strong>{suggestion.to.name}</strong> {suggestion.count} time{suggestion.count > 1 ? 's' : ''} before
                                                         </span>
                                                     </div>
                                                     <button
                                                         onClick={() => applyCorrection(correctionMode, suggestion.to)}
-                                                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold"
+                                                        className="px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5d7a6d] font-semibold"
                                                     >
                                                         Apply Suggestion
                                                     </button>
@@ -5254,8 +5311,8 @@
                                                 onClick={() => applyCorrection(correctionMode, glyph)}
                                                 className={`p-3 border-2 rounded-lg flex flex-col items-center gap-1 transition-all hover:scale-105 ${
                                                     isCurrentGlyph 
-                                                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-300' 
-                                                        : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50'
+                                                        ? 'border-blue-500 bg-[#f5f3f0] ring-2 ring-blue-300' 
+                                                        : 'border-gray-200 hover:border-blue-400 hover:bg-[#f5f3f0]'
                                                 }`}
                                                 title={`${glyph.name} (${glyph.transliteration || glyph.name})`}
                                             >
@@ -5264,7 +5321,7 @@
                                                     {glyph.transliteration || glyph.name}
                                                 </div>
                                                 {isCurrentGlyph && (
-                                                    <div className="text-xs text-blue-600 font-semibold mt-1">Current</div>
+                                                    <div className="text-xs text-stone-dark font-semibold mt-1">Current</div>
                                                 )}
                                             </button>
                                         );
@@ -5352,13 +5409,13 @@
                                     </div>
                                 </div>
 
-                                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="mb-4 p-4 bg-[#f5f3f0] border border-stone-light rounded-lg">
                                     <h4 className="font-semibold text-blue-900 mb-2">📝 How to Exclude Regions:</h4>
                                     <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
-                                        <li><strong className="text-blue-700">DRAW BOXES on the inscription image</strong> - Click and drag to create red boxes around unwanted portions</li>
+                                        <li><strong className="text-stone-dark">DRAW BOXES on the inscription image</strong> - Click and drag to create red boxes around unwanted portions</li>
                                         <li>The <strong>purple dashed border</strong> shows which detection you're editing</li>
                                         <li><strong>Draw multiple boxes</strong> if you need to exclude several areas</li>
-                                        <li>When done drawing, click <strong className="text-green-600">"✓ Apply Exclusions"</strong> below</li>
+                                        <li>When done drawing, click <strong className="text-patina">"✓ Apply Exclusions"</strong> below</li>
                                     </ol>
                                 </div>
 
@@ -5374,7 +5431,7 @@
                                     {excludeRegions.length > 0 && (
                                         <button
                                             onClick={() => applyExclude(excludeMode)}
-                                            className="flex-1 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold text-lg"
+                                            className="flex-1 px-4 py-3 bg-patina text-white rounded-lg hover:bg-[#5d7a6d] font-semibold text-lg"
                                         >
                                             ✓ Apply Exclusions
                                         </button>
@@ -5439,13 +5496,13 @@
                                     </div>
                                 </div>
 
-                                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="mb-4 p-4 bg-[#f5f3f0] border border-stone-light rounded-lg">
                                     <h4 className="font-semibold text-blue-900 mb-2">📝 How to Adjust Corners:</h4>
                                     <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
-                                        <li><strong className="text-blue-700">DRAG the corner circles</strong> on the detection box to adjust each corner independently</li>
+                                        <li><strong className="text-stone-dark">DRAG the corner circles</strong> on the detection box to adjust each corner independently</li>
                                         <li>The <strong>teal border</strong> shows which detection you're adjusting</li>
                                         <li>Create <strong>trapezoids or parallelograms</strong> to handle perspective or angled glyphs</li>
-                                        <li>When done adjusting, click <strong className="text-green-600">"✓ Apply Adjustment"</strong> below</li>
+                                        <li>When done adjusting, click <strong className="text-patina">"✓ Apply Adjustment"</strong> below</li>
                                     </ol>
                                 </div>
 
@@ -5457,7 +5514,7 @@
                                 <div className="flex gap-3">
                                     <button
                                         onClick={() => applyAdjustment(adjustMode)}
-                                        className="flex-1 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold text-lg"
+                                        className="flex-1 px-4 py-3 bg-patina text-white rounded-lg hover:bg-[#5d7a6d] font-semibold text-lg"
                                     >
                                         ✓ Apply Adjustment
                                     </button>
@@ -5490,8 +5547,8 @@
                                     <span className="font-semibold text-gray-900">{recognitionResults.length}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-green-600">✓ Validated Correct:</span>
-                                    <span className="font-semibold text-green-700">
+                                    <span className="text-patina">✓ Validated Correct:</span>
+                                    <span className="font-semibold text-patina">
                                         {Object.values(validations).filter(v => v.isCorrect).length}
                                     </span>
                                 </div>
@@ -5523,7 +5580,7 @@
                             return (
                                 <div 
                                     key={`result-${originalIndex}`} 
-                                    className={`p-3 bg-white rounded border ${selectedRegions.has(originalIndex) ? 'ring-2 ring-amber-400' : ''} ${validations[originalIndex] ? (validations[originalIndex].isCorrect ? 'border-green-300' : 'border-red-300') : 'border-gray-200'} ${viewMode === 'reading' ? 'cursor-move' : ''}`}
+                                    className={`p-3 bg-white rounded border ${selectedRegions.has(originalIndex) ? 'ring-2 ring-amber-400' : ''} ${validations[originalIndex] ? (validations[originalIndex].isCorrect ? 'border-patina' : 'border-red-300') : 'border-gray-200'} ${viewMode === 'reading' ? 'cursor-move' : ''}`}
                                     draggable={viewMode === 'reading'}
                                     onDragStart={(e) => viewMode === 'reading' && handleDragStart(e, displayIndex)}
                                     onDragOver={(e) => viewMode === 'reading' && handleDragOver(e, displayIndex)}
@@ -5615,7 +5672,7 @@
                                             </button>
                                             <button 
                                                 onClick={() => toggleRegionSelection(originalIndex)} 
-                                                className={`text-sm ${selectedRegions.has(originalIndex) ? 'text-blue-600' : 'text-blue-400 hover:text-blue-600'}`}
+                                                className={`text-sm ${selectedRegions.has(originalIndex) ? 'text-stone-dark' : 'text-blue-400 hover:text-stone-dark'}`}
                                                 title="Select for merging (select 2+ then click Merge)"
                                             >
                                                 ⚡
@@ -5632,13 +5689,13 @@
                                     <div className="flex gap-2 flex-wrap">
                                         <button 
                                             onClick={() => validateDetection(originalIndex, true)} 
-                                            className={`px-3 py-1 text-xs rounded ${validations[originalIndex]?.isCorrect ? 'bg-green-500 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                                            className={`px-3 py-1 text-xs rounded ${validations[originalIndex]?.isCorrect ? 'bg-patina text-white' : 'bg-green-100 text-patina hover:bg-green-200'}`}
                                         >
                                             ✓ Correct
                                         </button>
                                         <button 
                                             onClick={() => validateDetection(originalIndex, false)} 
-                                            className={`px-3 py-1 text-xs rounded ${validations[originalIndex] && !validations[originalIndex].isCorrect ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                            className={`px-3 py-1 text-xs rounded ${validations[originalIndex] && !validations[originalIndex].isCorrect ? 'bg-rust text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                         >
                                             ✗ Incorrect
                                         </button>
@@ -5646,7 +5703,7 @@
                                             <>
                                                 <button 
                                                     onClick={() => toggleWordBoundary(displayIndex)} 
-                                                    className={`px-3 py-1 text-xs rounded ${wordBoundaries.has(displayIndex) ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                                    className={`px-3 py-1 text-xs rounded ${wordBoundaries.has(displayIndex) ? 'bg-stone text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                                     title="Mark word boundary after this glyph"
                                                 >
                                                     | Word Break
@@ -5660,7 +5717,7 @@
                                                 </button>
                                                 <button 
                                                     onClick={() => toggleLineBreak(displayIndex)} 
-                                                    className={`px-3 py-1 text-xs rounded ${lineBreaks.has(displayIndex) ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                                    className={`px-3 py-1 text-xs rounded ${lineBreaks.has(displayIndex) ? 'bg-ancient-purple text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                                     title="Mark line break after this glyph"
                                                 >
                                                     --- Line Break
@@ -5679,7 +5736,7 @@
                     {viewMode === 'reading' && recognitionResults.length > 0 && showTranscription && (
                         <div
                             ref={transcriptionRef} 
-                            className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200"
+                            className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-stone-light"
                             style={{
                                 position: transcriptionPosition.x !== 0 || transcriptionPosition.y !== 0 ? 'fixed' : 'relative',
                                 left: transcriptionPosition.x !== 0 ? `${transcriptionPosition.x}px` : 'auto',
@@ -5711,28 +5768,28 @@
                                     )}
                                     <button 
                                         onClick={copyTranscriptionToClipboard}
-                                        className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 flex items-center gap-1"
+                                        className="px-3 py-1 bg-stone text-white text-sm rounded hover:bg-stone-dark flex items-center gap-1"
                                         title="Copy transcription to clipboard"
                                     >
                                         📋 Copy
                                     </button>
                                     <button 
                                         onClick={exportTranscription}
-                                        className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 flex items-center gap-1"
+                                        className="px-3 py-1 bg-patina text-white text-sm rounded hover:bg-[#5d7a6d] flex items-center gap-1"
                                         title="Download transcription as text file"
                                     >
                                         💾 Export TXT
                                     </button>
                                     <button 
                                         onClick={() => setShowTranscription(false)}
-                                        className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 font-bold"
+                                        className="px-3 py-1 bg-rust text-white text-sm rounded hover:bg-[#8d5d47] font-bold"
                                         title="Close transcription box"
                                     >
                                         ✕
                                     </button>
                                 </div>
                             </div>
-                            <div className="p-4 bg-white rounded border-2 border-blue-300 shadow-inner">
+                            <div className="p-4 bg-white rounded border-2 border-stone shadow-inner">
                                 <div 
                                     className="font-mono text-lg leading-relaxed"
                                     style={{
@@ -5751,7 +5808,7 @@
                                             </span>
                                             {lineBreaks.has(index) && <span className="text-purple-600 font-bold mx-2">---</span>}
                                             {!lineBreaks.has(index) && columnBreaks.has(index) && <span className="text-indigo-600 font-bold mx-1">||</span>}
-                                            {!lineBreaks.has(index) && !columnBreaks.has(index) && wordBoundaries.has(index) && <span className="text-blue-600 font-bold mx-1">|</span>}
+                                            {!lineBreaks.has(index) && !columnBreaks.has(index) && wordBoundaries.has(index) && <span className="text-stone-dark font-bold mx-1">|</span>}
                                             {!lineBreaks.has(index) && !columnBreaks.has(index) && !wordBoundaries.has(index) && index < getReadingOrderedResults().length - 1 && <span className="text-gray-400">·</span>}
                                         </span>
                                     ))}
@@ -5761,7 +5818,7 @@
                             <div className="mt-3 text-xs text-gray-600">
                                 <span className="text-purple-600 font-bold">---</span> = line break &middot; 
                                 <span className="text-indigo-600 font-bold">||</span> = column break &middot; 
-                                <span className="text-blue-600 font-bold">|</span> = word boundary &middot; 
+                                <span className="text-stone-dark font-bold">|</span> = word boundary &middot; 
                                 <span className="text-gray-400">&middot;</span> = glyph separator
                             </div>
                         </div>
@@ -5784,7 +5841,7 @@
                                         <div className="font-semibold mb-1">💡 How to use breaks:</div>
                                         <div className="text-xs">
                                             Use the break buttons on each glyph card (in reading mode) to mark the layout:
-                                            <span className="ml-2 text-blue-600 font-bold">|</span> Word boundary
+                                            <span className="ml-2 text-stone-dark font-bold">|</span> Word boundary
                                             <span className="ml-2 text-indigo-600 font-bold">||</span> End of column
                                             <span className="ml-2 text-purple-600 font-bold">---</span> End of line
                                             <br/>
@@ -5801,7 +5858,7 @@
                                                         onClick={() => setTranscriptionScript('english')}
                                                         className={`px-4 py-2 rounded text-sm font-medium ${
                                                             transcriptionScript === 'english' 
-                                                                ? 'bg-purple-500 text-white' 
+                                                                ? 'bg-ancient-purple text-white' 
                                                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                                         }`}
                                                     >
@@ -5811,7 +5868,7 @@
                                                         onClick={() => setTranscriptionScript('arabic')}
                                                         className={`px-4 py-2 rounded text-sm font-medium ${
                                                             transcriptionScript === 'arabic' 
-                                                                ? 'bg-purple-500 text-white' 
+                                                                ? 'bg-ancient-purple text-white' 
                                                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                                         }`}
                                                     >
@@ -5930,7 +5987,7 @@
                                                 navigator.clipboard.writeText(text);
                                                 alert('Transcription copied to clipboard!');
                                             }}
-                                            className="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+                                            className="px-4 py-2 bg-stone text-white text-sm rounded hover:bg-stone-dark"
                                         >
                                             📋 Copy Text
                                         </button>
@@ -5971,7 +6028,7 @@
                                                 document.body.removeChild(a);
                                                 URL.revokeObjectURL(url);
                                             }}
-                                            className="px-4 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600"
+                                            className="px-4 py-2 bg-patina text-white text-sm rounded hover:bg-[#5d7a6d]"
                                         >
                                             💾 Export TXT
                                         </button>
@@ -5983,7 +6040,7 @@
 
                     {/* Translation Section */}
                     {viewMode === 'reading' && recognitionResults.length > 0 && (
-                        <div className="mt-6 p-4 bg-green-50 rounded-lg border-2 border-green-300">
+                        <div className="mt-6 p-4 bg-[#f0f5f3] rounded-lg border-2 border-patina">
                             <button
                                 onClick={() => setShowTranslationSection(!showTranslationSection)}
                                 className="flex items-center gap-2 font-semibold text-gray-900 hover:text-gray-700 mb-3"
@@ -6002,7 +6059,7 @@
 
                                     <div className="space-y-4">
                                         {/* Inscription Title Field */}
-                                        <div className="mb-4 pb-4 border-b border-green-200">
+                                        <div className="mb-4 pb-4 border-b border-[#b5d4c8]">
                                             <label className="block text-sm font-semibold text-gray-700 mb-2">
                                                 🏷️ Inscription Title (optional):
                                             </label>
@@ -6022,7 +6079,7 @@
                                                 onClick={() => setTranscriptionScript('english')}
                                                 className={`px-4 py-2 rounded text-sm font-medium ${
                                                     transcriptionScript === 'english' 
-                                                        ? 'bg-green-500 text-white' 
+                                                        ? 'bg-patina text-white' 
                                                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                                 }`}
                                             >
@@ -6032,7 +6089,7 @@
                                                 onClick={() => setTranscriptionScript('arabic')}
                                                 className={`px-4 py-2 rounded text-sm font-medium ${
                                                     transcriptionScript === 'arabic' 
-                                                        ? 'bg-green-500 text-white' 
+                                                        ? 'bg-patina text-white' 
                                                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                                 }`}
                                             >
@@ -6074,7 +6131,7 @@
                                         )}
 
                                         {/* Notes Field */}
-                                        <div className="mt-4 pt-4 border-t border-green-200">
+                                        <div className="mt-4 pt-4 border-t border-[#b5d4c8]">
                                             <label className="block text-sm font-semibold text-gray-700 mb-2">
                                                 📝 Inscription Notes:
                                             </label>
@@ -6089,7 +6146,7 @@
 
                                         {/* Preview */}
                                         {(translationEnglish || translationArabic) && (
-                                            <div className="p-4 bg-white rounded border-2 border-green-300">
+                                            <div className="p-4 bg-white rounded border-2 border-patina">
                                                 <div className="text-sm font-semibold text-gray-700 mb-2">Preview:</div>
                                                 {translationEnglish && (
                                                     <div className="mb-2">
@@ -6122,7 +6179,7 @@
                     <div className="mt-8 p-4 bg-gray-50 rounded-lg">
                         <div className="text-sm text-gray-600">
                             <div className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${isOpenCvReady ? 'bg-green-500' : 'bg-red-500'}`} />
+                                <span className={`w-2 h-2 rounded-full ${isOpenCvReady ? 'bg-patina' : 'bg-rust'}`} />
                                 OpenCV Status: {isOpenCvReady ? 'Ready' : 'Loading...'}
                                 {actionHistory.length > 0 && <span className="ml-4 text-xs text-gray-500">{actionHistory.length} actions recorded</span>}
                             </div>
@@ -6158,7 +6215,7 @@
                                  />
                                     <button
                                         onClick={() => setShowCloudSyncModal(true)}
-                                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                        className="px-4 py-2 bg-stone text-white rounded hover:bg-stone-dark"
                                         >
                                         ☁️ Cloud Sync
                                     </button>
@@ -6169,7 +6226,7 @@
                                                 alert('Correction memory cleared!');
                                             }
                                         }}
-                                        className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                                        className="px-4 py-2 bg-rust text-white rounded hover:bg-[#8d5d47]"
                                     >
                                         🗑️ Clear Memory
                                     </button>
@@ -6196,20 +6253,20 @@
                             <div className="flex flex-wrap gap-3">
                                 <button 
                                     onClick={saveToGoogleDrive}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2 font-semibold"
+                                    className="px-4 py-2 bg-stone-dark text-white rounded hover:bg-blue-700 flex items-center gap-2 font-semibold"
                                     title="Saves to local cache + downloads JSON backup"
                                 >
                                     💾 Save to Cache + Download
                                 </button>
                                 <button 
                                     onClick={exportDetectionData}
-                                    className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 flex items-center gap-2"
+                                    className="px-4 py-2 bg-ancient-purple text-white rounded hover:bg-[#4a3e54] flex items-center gap-2"
                                 >
                                     📊 Export JSON (Download)
                                 </button>
                                 <button
                                     onClick={openJsonViewer}
-                                    className="px-4 py-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center gap-2"
+                                    className="px-4 py-2 bg-patina text-white rounded hover:bg-teal-600 flex items-center gap-2"
                                     title="Open JSON viewer to load exported data"
                                 >
                                     👁️ Open JSON Viewer
@@ -6229,20 +6286,20 @@
                                 {viewMode === 'reading' && (
                                     <button 
                                         onClick={exportTranscription}
-                                        className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-2"
+                                        className="px-4 py-2 bg-patina text-white rounded hover:bg-[#5d7a6d] flex items-center gap-2"
                                     >
                                         📝 Export Transcription (TXT)
                                     </button>
                                 )}
                                 <button
                                     onClick={exportCorrectionMemory}
-                                    className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 flex items-center gap-2"
+                                    className="px-4 py-2 bg-ochre text-white rounded hover:bg-[#a18259] flex items-center gap-2"
                                 >
                                     🧠 Export Correction Memory
                                 </button>
                                 <button
                                     onClick={() => setShowCorrectionAnalysis(true)}
-                                    className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 flex items-center gap-2"
+                                    className="px-4 py-2 bg-ancient-purple text-white rounded hover:bg-[#4a3e54] flex items-center gap-2"
                                 >
                                     📊 Analyze Corrections
                                 </button>
@@ -6272,7 +6329,7 @@
                                 {/* Scrollable Content */}
                                 <div className="overflow-y-auto p-6 pt-4 flex-1">
 
-                                <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+                                <div className="mb-4 p-3 bg-[#f5f3f0] rounded-lg">
                                     <div className="text-sm text-gray-700">
                                         <strong>{equivalenceChart.glyphs.length}</strong> glyphs loaded with <strong>{Object.keys(loadedGlyphImages).length}</strong> total images
                                     </div>
@@ -6313,7 +6370,7 @@
                                                             <div className="flex items-center gap-2 mb-2">
                                                                 <h4 className="text-sm font-semibold text-gray-700">Primary</h4>
                                                                 {primaryLoaded ? (
-                                                                    <span className="text-xs text-green-600">✅ Loaded</span>
+                                                                    <span className="text-xs text-patina">✅ Loaded</span>
                                                                 ) : (
                                                                     <span className="text-xs text-red-600">❌ Not loaded</span>
                                                                 )}
@@ -6344,7 +6401,7 @@
                                                                         Variants ({variantsLoaded}/{variantCount})
                                                                     </h4>
                                                                     {variantsLoaded === variantCount ? (
-                                                                        <span className="text-xs text-green-600">✅ All loaded</span>
+                                                                        <span className="text-xs text-patina">✅ All loaded</span>
                                                                     ) : (
                                                                         <span className="text-xs text-orange-600">⚠️ {variantCount - variantsLoaded} missing</span>
                                                                     )}
@@ -6379,7 +6436,7 @@
                                                                         Examples ({examplesLoaded}/{exampleCount})
                                                                     </h4>
                                                                     {examplesLoaded === exampleCount ? (
-                                                                        <span className="text-xs text-green-600">✅ All loaded</span>
+                                                                        <span className="text-xs text-patina">✅ All loaded</span>
                                                                     ) : (
                                                                         <span className="text-xs text-orange-600">⚠️ {exampleCount - examplesLoaded} missing</span>
                                                                     )}
@@ -6418,7 +6475,7 @@
                                 <div className="p-6 pt-4 border-t border-gray-200 flex-shrink-0">
                                     <button
                                         onClick={() => setShowChartViewer(false)}
-                                        className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
+                                        className="w-full px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3e54] font-semibold"
                                     >
                                         Close Chart Viewer
                                     </button>
@@ -6493,12 +6550,12 @@
                                             <>
                                                 {/* Summary Stats */}
                                                 <div className="grid grid-cols-3 gap-4 mb-6">
-                                                    <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                                                        <div className="text-3xl font-bold text-blue-600">{correctionKeys.length}</div>
+                                                    <div className="bg-[#f5f3f0] border-2 border-stone-light rounded-lg p-4">
+                                                        <div className="text-3xl font-bold text-stone-dark">{correctionKeys.length}</div>
                                                         <div className="text-sm text-gray-600">Glyphs Corrected</div>
                                                     </div>
-                                                    <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                                                        <div className="text-3xl font-bold text-green-600">{totalAllCorrections}</div>
+                                                    <div className="bg-[#f0f5f3] border-2 border-[#b5d4c8] rounded-lg p-4">
+                                                        <div className="text-3xl font-bold text-patina">{totalAllCorrections}</div>
                                                         <div className="text-sm text-gray-600">Total Corrections</div>
                                                     </div>
                                                     <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
@@ -6530,7 +6587,7 @@
                                                             low: 'border-gray-300 bg-gray-50'
                                                         };
                                                         const priorityBadges = {
-                                                            high: 'bg-red-500',
+                                                            high: 'bg-rust',
                                                             medium: 'bg-orange-500',
                                                             low: 'bg-gray-500'
                                                         };
@@ -6583,7 +6640,7 @@
                                                                             </div>
                                                                             {stat.mostCommon && stat.mostCommon.to ? (
                                                                             <div className="flex items-center gap-3 p-2 bg-white rounded border border-gray-200">
-                                                                                <div className="text-2xl font-bold text-green-600">
+                                                                                <div className="text-2xl font-bold text-patina">
                                                                                     {stat.mostCommon.to.arabic || stat.mostCommon.to.name || '?'}
                                                                                 </div>
                                                                                 <div className="flex-1">
@@ -6639,7 +6696,7 @@
                                                 </div>
 
                                                 {/* Action Tips */}
-                                                <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                                                <div className="mt-6 p-4 bg-[#f5f3f0] border-2 border-stone-light rounded-lg">
                                                     <h4 className="font-semibold text-blue-900 mb-2">📝 Next Steps:</h4>
                                                     <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                                                         <li>Focus on high-priority glyphs (10+ corrections) first</li>
@@ -6658,7 +6715,7 @@
                                 <div className="p-6 pt-4 border-t border-gray-200 flex-shrink-0">
                                     <button
                                         onClick={() => setShowCorrectionAnalysis(false)}
-                                        className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
+                                        className="w-full px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3e54] font-semibold"
                                     >
                                         Close Analysis
                                     </button>
@@ -6711,7 +6768,7 @@
                                                         alert('❌ DriveSync module not loaded');
                                                     }
                                                 }}
-                                                className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-semibold"
+                                                className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3e54] font-semibold"
                                             >
                                                 🔐 Sign in with Google
                                             </button>
@@ -6766,7 +6823,7 @@
                                                         alert('❌ Save failed: ' + err.message);
                                                     }
                                                 }}
-                                                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold"
+                                                className="px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5d7a6d] font-semibold"
                                             >
                                                 💾 Save to Drive
                                             </button>
@@ -6820,7 +6877,7 @@
                                                         alert('❌ Load failed: ' + err.message);
                                                     }
                                                 }}
-                                                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold"
+                                                className="px-4 py-2 bg-stone text-white rounded-lg hover:bg-stone-dark font-semibold"
                                             >
                                                 📂 Load from Drive
                                             </button>
@@ -6832,7 +6889,7 @@
                                     </div>
 
                                     {/* Download from Master */}
-                                    <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                                    <div className="p-4 bg-[#f5f3f0] border-2 border-stone-light rounded-lg">
                                         <h4 className="font-semibold text-blue-900 mb-2">📥 Download Community Corrections</h4>
                                         <p className="text-sm text-gray-700 mb-3">
                                             Get the latest corrections from the community master collection
@@ -6842,7 +6899,7 @@
                                                 setShowCloudSyncModal(false);
                                                 await downloadCorrectionsFromCloud(MASTER_PASTE_RAW_URL);
                                             }}
-                                            className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold"
+                                            className="w-full px-4 py-2 bg-stone text-white rounded-lg hover:bg-stone-dark font-semibold"
                                         >
                                             Download from Master Collection
                                         </button>
@@ -6879,7 +6936,7 @@
                                     </div>
 
                                     {/* Upload Your Corrections */}
-                                    <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
+                                    <div className="p-4 bg-[#f0f5f3] border-2 border-[#b5d4c8] rounded-lg">
                                         <h4 className="font-semibold text-green-900 mb-2">📤 Share Your Corrections</h4>
                                         <p className="text-sm text-gray-700 mb-3">
                                             Export your corrections and submit them to the community via GitHub Issue
@@ -6889,11 +6946,11 @@
                                                 setShowCloudSyncModal(false);
                                                 await uploadCorrectionsToCloud();
                                             }}
-                                            className="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold"
+                                            className="w-full px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5d7a6d] font-semibold"
                                         >
                                             📥 Export & Create Issue
                                         </button>
-                                        <div className="mt-3 text-xs text-gray-600 bg-white p-2 rounded border border-green-300">
+                                        <div className="mt-3 text-xs text-gray-600 bg-white p-2 rounded border border-patina">
                                             <p className="font-semibold mb-1">How it works:</p>
                                             <ol className="list-decimal list-inside space-y-1">
                                                 <li>Downloads your corrections as a JSON file</li>
