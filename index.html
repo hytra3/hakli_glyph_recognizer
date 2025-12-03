@@ -3833,6 +3833,16 @@
                                         >
                                             {isImageLoading ? 'Loading...' : 'Browse Files'}
                                         </button>
+                                        
+                                        <div className="pt-3 mt-3 border-t border-gray-300">
+                                            <p className="text-xs text-gray-500 mb-2">or load a saved session:</p>
+                                            <button
+                                                onClick={() => setShowCloudSyncModal(true)}
+                                                className="px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5a7968] font-medium text-sm transition-colors"
+                                            >
+                                                ☁️ Load from Google Drive
+                                            </button>
+                                        </div>
                                     </div>
                                     
                                     {chartLoadStatus === 'loading' && (
