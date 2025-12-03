@@ -6852,9 +6852,19 @@
                                                                 // Restore image with OpenCV processing
                                                                 if (hkiData.image) {
                                                                     setIsImageLoading(true);
+                                                                    
+                                                                    // Clear old display states
+                                                                    setDisplayImage(null);
+                                                                    setPreprocessedMat(null);
+                                                                    
                                                                     const img = new Image();
                                                                     img.onload = () => {
                                                                         setImage(hkiData.image);
+                                                                        
+                                                                        // Force the displayed image element to update
+                                                                        if (imageRef.current) {
+                                                                            imageRef.current.src = hkiData.image;
+                                                                        }
                                                                         
                                                                         // Create OpenCV Mat from image
                                                                         if (isOpenCvReady) {
