@@ -1,8 +1,8 @@
 // Hakli Glyph Recognizer - Service Worker
-// Version 251203b
+// Version 251203d
 
-const CACHE_NAME = 'hakli-v251203b';
-const RUNTIME_CACHE = 'hakli-runtime-v251203b';
+const CACHE_NAME = 'hakli-v251203d';
+const RUNTIME_CACHE = 'hakli-runtime-v251203d';
 
 // Critical files to cache on install
 const CORE_ASSETS = [
