@@ -11,7 +11,7 @@
     <link rel="manifest" href="manifest.json">
     
     <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#8b5cf6">
+    <meta name="theme-color" content="#5d4e6d">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -3309,6 +3309,39 @@
                 setIsErasing(false);
             };
             
+            // Touch event handlers for mobile
+            const handleEraserTouchStart = (e) => {
+                if (!eraserMode || !eraserCanvasRef.current) return;
+                e.preventDefault(); // Prevent scrolling while erasing
+                setIsErasing(true);
+                const touch = e.touches[0];
+                const mouseEvent = {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                };
+                drawEraser(mouseEvent);
+            };
+            
+            const handleEraserTouchMove = (e) => {
+                if (!eraserMode || !isErasing || !eraserCanvasRef.current) return;
+                e.preventDefault(); // Prevent scrolling while erasing
+                const touch = e.touches[0];
+                const mouseEvent = {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                };
+                drawEraser(mouseEvent);
+            };
+            
+            const handleEraserTouchEnd = () => {
+                if (isErasing && eraserCanvasRef.current) {
+                    // Save current canvas state to history
+                    const imageData = eraserCanvasRef.current.toDataURL();
+                    setEraserHistory(prev => [...prev, imageData]);
+                }
+                setIsErasing(false);
+            };
+            
             const drawEraser = (e) => {
                 const canvas = eraserCanvasRef.current;
                 if (!canvas) return;
@@ -4129,9 +4162,14 @@
                                                         onMouseMove={handleEraserMouseMove}
                                                         onMouseUp={handleEraserMouseUp}
                                                         onMouseLeave={handleEraserMouseUp}
+                                                        onTouchStart={handleEraserTouchStart}
+                                                        onTouchMove={handleEraserTouchMove}
+                                                        onTouchEnd={handleEraserTouchEnd}
+                                                        onTouchCancel={handleEraserTouchEnd}
                                                         className="max-w-full"
                                                         style={{
-                                                            cursor: `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize * 2}" height="${brushSize * 2}" viewBox="0 0 ${brushSize * 2} ${brushSize * 2}"><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="white" stroke-width="2"/><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="black" stroke-width="1"/></svg>') ${brushSize} ${brushSize}, crosshair`
+                                                            cursor: `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize * 2}" height="${brushSize * 2}" viewBox="0 0 ${brushSize * 2} ${brushSize * 2}"><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="white" stroke-width="2"/><circle cx="${brushSize}" cy="${brushSize}" r="${brushSize - 1}" fill="none" stroke="black" stroke-width="1"/></svg>') ${brushSize} ${brushSize}, crosshair`,
+                                                            touchAction: 'none' // Prevent default touch behaviors
                                                         }}
                                                     />
                                                 </div>

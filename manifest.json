@@ -5,7 +5,7 @@
   "start_url": "/hakli_glyph_recognizer/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#8b5cf6",
+  "theme_color": "#5d4e6d",
   "orientation": "portrait",
   "scope": "/hakli_glyph_recognizer/",
   "icons": [
