@@ -6856,6 +6856,8 @@
                                                                     // Clear old display states
                                                                     setDisplayImage(null);
                                                                     setPreprocessedMat(null);
+                                                                    setImageRotation(0); // Reset rotation - HKI image is already correctly oriented
+                                                                    setRotatedImageDimensions(null);
                                                                     
                                                                     const img = new Image();
                                                                     img.onload = () => {
