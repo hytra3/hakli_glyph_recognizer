@@ -345,8 +345,7 @@ This tool is designed for:
 ---
 
 ## 🏆 Credits
-
-**Author:** Marty Heaton (©marty heaton)  
+**Author:** marty heaton (©hudhud holdings)  
 **Project:** Hakli Glyph Recognizer  
 **Purpose:** Documenting endangered Dhofari script  
 **Language:** Jibbali/Hakli (Semitic, Modern South Arabian)  
