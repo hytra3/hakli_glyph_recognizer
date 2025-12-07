@@ -167,6 +167,35 @@
     <script>
         // Verify backend
         console.log('🚀 Hakli Glyph Recognizer - Modular v251205');
+        
+        // List available TTS voices after they load
+        if ('speechSynthesis' in window) {
+            // Voices load asynchronously, so we need to wait
+            const listVoices = () => {
+                const voices = window.speechSynthesis.getVoices();
+                const arabicVoices = voices.filter(v => v.lang.startsWith('ar'));
+                const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+                
+                console.log('🔊 Text-to-Speech Voices Available:');
+                console.log('📗 English voices:', englishVoices.length);
+                englishVoices.forEach(v => console.log('  -', v.name, '(' + v.lang + ')'));
+                console.log('📕 Arabic voices:', arabicVoices.length);
+                if (arabicVoices.length > 0) {
+                    arabicVoices.forEach(v => console.log('  -', v.name, '(' + v.lang + ')'));
+                } else {
+                    console.log('  ⚠️ No Arabic voices found. Install Arabic language pack for better pronunciation.');
+                }
+            };
+            
+            // Try immediately (sometimes works)
+            if (window.speechSynthesis.getVoices().length > 0) {
+                listVoices();
+            }
+            // Also listen for voices to load (more reliable)
+            window.speechSynthesis.onvoiceschanged = listVoices;
+        } else {
+            console.warn('⚠️ Text-to-speech not supported in this browser');
+        }
         const modulesLoaded = {
             config: typeof CONFIG !== 'undefined',
             utils: typeof Utils !== 'undefined',
@@ -430,27 +459,65 @@
                 // Create speech utterance
                 const utterance = new SpeechSynthesisUtterance(text);
                 
-                // Configure voice settings
-                utterance.lang = showArabicLabels ? 'ar-SA' : 'en-US'; // Arabic or English
-                utterance.rate = 0.7;  // Slower for clarity (0.1-10, default 1)
-                utterance.pitch = 1.0; // Normal pitch (0-2, default 1)
+                // Configure voice settings based on language
+                if (showArabicLabels) {
+                    // Arabic settings
+                    utterance.lang = 'ar-SA';  // Arabic (Saudi Arabia) - closest to Omani Arabic
+                    utterance.rate = 0.6;      // Slower for Semitic pronunciation
+                    utterance.pitch = 1.0;
+                } else {
+                    // English transliteration settings
+                    utterance.lang = 'en-US';
+                    utterance.rate = 0.7;
+                    utterance.pitch = 1.0;
+                }
+                
                 utterance.volume = 1.0; // Full volume (0-1)
                 
-                // Optional: Try to use a specific voice if available
+                // Try to select the best available voice
                 const voices = window.speechSynthesis.getVoices();
-                const preferredVoice = voices.find(voice => 
-                    showArabicLabels 
-                        ? voice.lang.startsWith('ar') 
-                        : voice.lang.startsWith('en')
-                );
-                if (preferredVoice) {
-                    utterance.voice = preferredVoice;
+                
+                if (showArabicLabels) {
+                    // Prioritize Arabic voices in this order:
+                    // 1. ar-SA (Saudi) - closest to Omani/Jibbali
+                    // 2. ar-EG (Egyptian) - widely understood
+                    // 3. ar-* (any other Arabic)
+                    const preferredVoice = voices.find(voice => voice.lang === 'ar-SA') ||
+                                          voices.find(voice => voice.lang === 'ar-EG') ||
+                                          voices.find(voice => voice.lang.startsWith('ar-')) ||
+                                          voices.find(voice => voice.lang.startsWith('ar'));
+                    
+                    if (preferredVoice) {
+                        utterance.voice = preferredVoice;
+                        console.log('🔊 Using Arabic voice:', preferredVoice.name, '(' + preferredVoice.lang + ')');
+                    } else {
+                        console.warn('⚠️ No Arabic voice found. Using system default.');
+                        console.log('💡 Tip: Install Arabic language pack on your device for better pronunciation.');
+                    }
+                } else {
+                    // English voice selection
+                    const preferredVoice = voices.find(voice => voice.lang === 'en-US') ||
+                                          voices.find(voice => voice.lang.startsWith('en'));
+                    if (preferredVoice) {
+                        utterance.voice = preferredVoice;
+                    }
                 }
                 
                 // Error handling
                 utterance.onerror = (event) => {
                     console.error('Speech synthesis error:', event);
-                    alert('❌ Text-to-speech failed. Your browser may not support this feature.');
+                    if (event.error === 'not-allowed') {
+                        alert('❌ Text-to-speech blocked. Please allow audio playback in your browser.');
+                    } else if (event.error === 'language-unavailable') {
+                        alert('❌ Arabic language not available.\n\n💡 Install Arabic language pack on your device:\n\n• Windows: Settings > Time & Language > Language\n• macOS: System Preferences > Accessibility > Speech\n• iOS: Settings > General > Keyboard > Keyboards > Add Arabic\n• Android: Settings > System > Languages & input > Text-to-speech');
+                    } else {
+                        alert('❌ Text-to-speech failed: ' + event.error);
+                    }
+                };
+                
+                // Success callback
+                utterance.onend = () => {
+                    console.log('✅ Speech synthesis completed');
                 };
                 
                 // Speak the text
@@ -6324,62 +6391,80 @@
                             
                             {!isExportOptionsCollapsed && (
                             <>
-                            <div className="flex flex-wrap gap-3">
-                                <button 
-                                    onClick={saveToGoogleDrive}
-                                    className="px-4 py-2 bg-stone-dark text-white rounded hover:bg-stone-dark flex items-center gap-2 font-semibold"
-                                    title="Saves to local cache + downloads JSON backup"
-                                >
-                                    💾 Save to Cache + Download
-                                </button>
-                                <button 
-                                    onClick={exportDetectionData}
-                                    className="px-4 py-2 bg-ancient-purple text-white rounded hover:bg-[#4a3e54] flex items-center gap-2"
-                                >
-                                    📊 Export JSON (Download)
-                                </button>
-                                <button
-                                    onClick={openJsonViewer}
-                                    className="px-4 py-2 bg-patina text-white rounded hover:bg-teal-600 flex items-center gap-2"
-                                    title="Open JSON viewer to load exported data"
-                                >
-                                    👁️ Open JSON Viewer
-                                </button>
-                                <button
-                                    onClick={exportHtmlReport}
-                                    className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600 flex items-center gap-2"
-                                >
-                                    📄 Export HTML Report
-                                </button>
-                                <button 
-                                    onClick={exportAnnotatedImage}
-                                    className="px-4 py-2 bg-stone text-white rounded hover:bg-stone-dark flex items-center gap-2"
-                                >
-                                    🖼️ Export Annotated Image
-                                </button>
-                                {viewMode === 'reading' && (
+                            {/* ESSENTIAL EXPORTS - Row 1 */}
+                            <div className="mb-4">
+                                <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">Essential Exports</h4>
+                                <div className="flex flex-wrap gap-3">
                                     <button 
-                                        onClick={exportTranscription}
-                                        className="px-4 py-2 bg-patina text-white rounded hover:bg-[#5d7a6d] flex items-center gap-2"
+                                        onClick={saveToGoogleDrive}
+                                        className="px-4 py-2 bg-stone-dark text-white rounded hover:bg-stone flex items-center gap-2 font-semibold"
+                                        title="Save complete inscription to Google Drive (recommended)"
                                     >
-                                        📝 Export Transcription (TXT)
+                                        ☁️ Save to Google Drive
                                     </button>
-                                )}
-                                <button
-                                    onClick={exportCorrectionMemory}
-                                    className="px-4 py-2 bg-ochre text-white rounded hover:bg-[#a18259] flex items-center gap-2"
-                                >
-                                    🧠 Export Correction Memory
-                                </button>
-                                <button
-                                    onClick={() => setShowCorrectionAnalysis(true)}
-                                    className="px-4 py-2 bg-ancient-purple text-white rounded hover:bg-[#4a3e54] flex items-center gap-2"
-                                >
-                                    📊 Analyze Corrections
-                                </button>
+                                    <button
+                                        onClick={exportHtmlReport}
+                                        className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600 flex items-center gap-2"
+                                        title="Generate beautiful bilingual report"
+                                    >
+                                        📄 Export HTML Report
+                                    </button>
+                                </div>
                             </div>
-                            <div className="mt-3 text-xs text-gray-600">
-                                <strong>Workflow:</strong> Export JSON with translations → Open JSON Viewer → Load JSON → View beautiful bilingual report! Also available: HTML reports, annotated images, and plain text transcriptions.
+
+                            {/* TEXT & IMAGES - Row 2 */}
+                            <div className="mb-4">
+                                <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">Text & Images</h4>
+                                <div className="flex flex-wrap gap-3">
+                                    {viewMode === 'reading' && (
+                                        <button 
+                                            onClick={exportTranscription}
+                                            className="px-4 py-2 bg-patina text-white rounded hover:bg-[#5d7a6d] flex items-center gap-2"
+                                            title="Export transcription as plain text file"
+                                        >
+                                            📋 Export Transcription (TXT)
+                                        </button>
+                                    )}
+                                    <button 
+                                        onClick={exportAnnotatedImage}
+                                        className="px-4 py-2 bg-stone text-white rounded hover:bg-stone-dark flex items-center gap-2"
+                                        title="Export image with glyph boxes and labels"
+                                    >
+                                        🖼️ Export Annotated Image
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* COMMUNITY SHARING - Row 3 */}
+                            <div className="mb-4">
+                                <h4 className="text-xs font-semibold text-gray-600 uppercase mb-2">Community Sharing (Public-Safe)</h4>
+                                <div className="flex flex-wrap gap-3">
+                                    <button
+                                        onClick={exportCorrectionMemory}
+                                        className="px-4 py-2 bg-ochre text-white rounded hover:bg-[#a18259] flex items-center gap-2"
+                                        title="Export glyph corrections for community (no images/locations)"
+                                    >
+                                        🧠 Share Glyph Corrections
+                                    </button>
+                                    <button
+                                        onClick={() => setShowCorrectionAnalysis(true)}
+                                        className="px-4 py-2 bg-ancient-purple text-white rounded hover:bg-[#4a3e54] flex items-center gap-2"
+                                        title="View statistics on which glyphs you've corrected"
+                                    >
+                                        📊 View Correction Stats
+                                    </button>
+                                    <button
+                                        onClick={openJsonViewer}
+                                        className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 flex items-center gap-2"
+                                        title="Advanced: View raw JSON data for debugging"
+                                    >
+                                        🔍 Advanced: Raw JSON
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-gray-700">
+                                <strong>💡 Tip:</strong> Use <strong>☁️ Save to Google Drive</strong> to preserve your work with full inscription data (private). Use <strong>🧠 Share Glyph Corrections</strong> to contribute template improvements to the community (public-safe, no images).
                             </div>
                             </>
                             )}
