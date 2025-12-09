@@ -68,6 +68,9 @@
         .detection-box.validated-incorrect { border-color: #a0674f; background: rgba(239, 68, 68, 0.25); }
         .detection-box.unvalidated { border-color: #8b7d6b; background: rgba(59, 130, 246, 0.25); }
         .detection-box.selected { border-color: #b8956a; background: rgba(245, 158, 11, 0.3); border-width: 4px; }
+        .detection-box.uncertain { border-style: dashed; border-color: #f97316; background: rgba(249, 115, 22, 0.15); }
+        .detection-box.uncertain.validated-correct { border-style: dashed; border-color: #6b8e7f; }
+        .detection-box.uncertain.validated-incorrect { border-style: dashed; border-color: #a0674f; }
 
         .detection-label {
             position: absolute;
@@ -1384,8 +1387,7 @@
                             setProcessingProgress({ current: regionIndex + 1, total: totalRegions });
                             console.log('📊 Progress:', regionIndex + 1, 'of', totalRegions);    
 
-                            let bestMatch = null;
-                            let bestRawConfidence = 0; // Track unweighted confidence for fair comparison
+                            let topMatches = []; // Track top 3 matches
 
                             for (const glyph of equivalenceChart.glyphs) {
                                 // Check primary image
@@ -1393,15 +1395,12 @@
                                     const matches = performTemplateMatchingOnRegion(processImg, loadedGlyphImages[glyph.id], region, glyph.id);
                                     totalMatches += matches.length;
                                     for (const match of matches) {
-                                        if (match.confidence > bestRawConfidence) {
-                                            bestRawConfidence = match.confidence;
-                                            bestMatch = {
-                                                glyph,
-                                                confidence: match.confidence,
-                                                position: region.bounds,
-                                                matchType: 'primary'
-                                            };
-                                        }
+                                        topMatches.push({
+                                            glyph,
+                                            confidence: match.confidence,
+                                            position: region.bounds,
+                                            matchType: 'primary'
+                                        });
                                     }
                                 }
 
@@ -1412,17 +1411,14 @@
                                         if (loadedGlyphImages[variantKey]) {
                                             const matches = performTemplateMatchingOnRegion(processImg, loadedGlyphImages[variantKey], region, `${glyph.id}_v${i}`);
                                             for (const match of matches) {
-                                                const weightedConfidence = match.confidence * 0.95; // Less penalty
-                                                if (match.confidence > bestRawConfidence) { // Compare UNWEIGHTED
-                                                    bestRawConfidence = match.confidence;
-                                                    bestMatch = {
-                                                        glyph,
-                                                        confidence: weightedConfidence, // Store weighted
-                                                        position: region.bounds,
-                                                        matchType: 'variant',
-                                                        variantIndex: i
-                                                    };
-                                                }
+                                                const weightedConfidence = match.confidence * 0.95;
+                                                topMatches.push({
+                                                    glyph,
+                                                    confidence: weightedConfidence,
+                                                    position: region.bounds,
+                                                    matchType: 'variant',
+                                                    variantIndex: i
+                                                });
                                             }
                                         }
                                     }
@@ -1435,29 +1431,42 @@
                                         if (loadedGlyphImages[exampleKey]) {
                                             const matches = performTemplateMatchingOnRegion(processImg, loadedGlyphImages[exampleKey], region, `${glyph.id}_ex${i}`);
                                             for (const match of matches) {
-                                                const weightedConfidence = match.confidence * 0.90; // Less penalty
-                                                if (match.confidence > bestRawConfidence) { // Compare UNWEIGHTED
-                                                    bestRawConfidence = match.confidence;
-                                                    bestMatch = {
-                                                        glyph,
-                                                        confidence: weightedConfidence, // Store weighted
-                                                        position: region.bounds,
-                                                        matchType: 'example',
-                                                        exampleIndex: i
-                                                    };
-                                                }
+                                                const weightedConfidence = match.confidence * 0.90;
+                                                topMatches.push({
+                                                    glyph,
+                                                    confidence: weightedConfidence,
+                                                    position: region.bounds,
+                                                    matchType: 'example',
+                                                    exampleIndex: i
+                                                });
                                             }
                                         }
                                     }
                                 }
                             }
 
+                            // Sort by confidence and keep top 3
+                            topMatches.sort((a, b) => b.confidence - a.confidence);
+                            const top3 = topMatches.slice(0, 3);
+                            
+                            // Use best match as primary
+                            const bestMatch = top3[0];
+                            
                             if (bestMatch && bestMatch.confidence > 0.30) {
+                                // Check if there's a close second match (within 15%)
+                                const hasCloseMatch = top3.length > 1 && 
+                                    (bestMatch.confidence - top3[1].confidence) < 0.15;
+                                
                                 results.push({
                                     ...bestMatch,
-                                    regionIndex: regionIndex
+                                    regionIndex: regionIndex,
+                                    alternatives: top3.slice(1), // Include 2nd and 3rd place
+                                    hasCloseMatch: hasCloseMatch,
+                                    selectedAlternative: null // Track if user manually selects different option
                                 });
-                                console.log(`✅ Region ${regionIndex + 1}: ${bestMatch.glyph.name} (${Math.round(bestMatch.confidence * 100)}%)`);
+                                
+                                const altText = hasCloseMatch ? ` (alt: ${top3[1].glyph.name})` : '';
+                                console.log(`✅ Region ${regionIndex + 1}: ${bestMatch.glyph.name} (${Math.round(bestMatch.confidence * 100)}%)${altText}`);
                             }
                         }
                         // Reset progress when done
@@ -2345,6 +2354,16 @@
                     console.log('Correction saved to memory:', originalGlyph.name, '→', correctedGlyph.name);
                 } catch (error) {
                     console.error('Failed to save correction:', error);
+                }
+            };
+            
+            // Helper function for tracking corrections by ID
+            const trackCorrection = (originalGlyphId, correctedGlyphId) => {
+                const originalGlyph = equivalenceChart.glyphs.find(g => g.id === originalGlyphId);
+                const correctedGlyph = equivalenceChart.glyphs.find(g => g.id === correctedGlyphId);
+                
+                if (originalGlyph && correctedGlyph) {
+                    saveCorrectionToMemory(originalGlyph, correctedGlyph, 0.85); // Default confidence for swaps
                 }
             };
 
@@ -5092,6 +5111,7 @@
                                                         fill={isAdjusting ? "rgba(251, 146, 60, 0.15)" : `${boxColor}40`}
                                                         stroke={templateTrainingMode && selectedForTemplate === index ? "#a855f7" : (isAdjusting ? "#fb923c" : boxColor)}
                                                         strokeWidth={templateTrainingMode && selectedForTemplate === index ? "4" : (isAdjusting ? "3" : "2")}
+                                                        strokeDasharray={detection.hasCloseMatch && !isAdjusting ? "8, 4" : "none"}
                                                         className={templateTrainingMode ? 'cursor-pointer' : ''}
                                                         style={{
                                                             transition: 'stroke 0.2s, stroke-width 0.2s'
@@ -5239,7 +5259,7 @@
                                     return (
                                         <div
                                             key={`detection-${index}`}
-                                            className={`detection-box ${isSelected ? 'selected' : ''} ${isAdjusting ? 'ring-4 ring-orange-400' : ''} ${templateTrainingMode ? 'cursor-pointer hover:ring-4 hover:ring-purple-400' : ''}`}
+                                            className={`detection-box ${detection.hasCloseMatch ? 'uncertain' : ''} ${isSelected ? 'selected' : ''} ${isAdjusting ? 'ring-4 ring-orange-400' : ''} ${templateTrainingMode ? 'cursor-pointer hover:ring-4 hover:ring-purple-400' : ''}`}
                                             style={{
                                                 left: detection.position.x * scaleX + 'px',
                                                 top: detection.position.y * scaleY + 'px',
@@ -5809,6 +5829,69 @@
                                                 </div>
                                             </div>
                                             <div className="text-xs text-gray-500">Confidence: {Math.round(result.confidence * 100)}%</div>
+                                            
+                                            {/* Top Matches - show alternatives if they exist */}
+                                            {result.alternatives && result.alternatives.length > 0 && (
+                                                <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded">
+                                                    <div className="text-xs font-semibold text-orange-700 mb-1">Top matches:</div>
+                                                    <div className="space-y-1">
+                                                        {/* Show current selection */}
+                                                        <button
+                                                            className="flex items-center gap-2 text-xs w-full hover:bg-orange-100 p-1 rounded"
+                                                            disabled
+                                                        >
+                                                            <span className="text-green-600">✓</span>
+                                                            <span className="font-semibold">{result.glyph.name}</span>
+                                                            <span className="text-gray-500">({Math.round(result.confidence * 100)}%)</span>
+                                                            <span className="text-xs text-gray-400 ml-auto">← selected</span>
+                                                        </button>
+                                                        
+                                                        {/* Show alternatives as clickable options */}
+                                                        {result.alternatives.slice(0, 2).map((alt, altIndex) => (
+                                                            <button
+                                                                key={altIndex}
+                                                                onClick={() => {
+                                                                    // Swap alternative with primary
+                                                                    const updatedResults = [...recognitionResults];
+                                                                    const resultIndex = updatedResults.findIndex(r => r.regionIndex === result.regionIndex);
+                                                                    
+                                                                    if (resultIndex !== -1) {
+                                                                        // Store original for tracking
+                                                                        const original = { ...updatedResults[resultIndex] };
+                                                                        
+                                                                        // Swap: alternative becomes primary
+                                                                        updatedResults[resultIndex] = {
+                                                                            ...alt,
+                                                                            regionIndex: result.regionIndex,
+                                                                            alternatives: [
+                                                                                { glyph: original.glyph, confidence: original.confidence, matchType: original.matchType },
+                                                                                ...result.alternatives.filter((_, i) => i !== altIndex)
+                                                                            ],
+                                                                            hasCloseMatch: true,
+                                                                            selectedAlternative: alt.glyph.name,
+                                                                            corrected: true,
+                                                                            originalGlyph: result.originalGlyph || result.glyph
+                                                                        };
+                                                                        
+                                                                        // Track as correction
+                                                                        trackCorrection(result.glyph.id, alt.glyph.id);
+                                                                        
+                                                                        setRecognitionResults(updatedResults);
+                                                                        console.log(`🔄 Swapped ${result.glyph.name} → ${alt.glyph.name}`);
+                                                                    }
+                                                                }}
+                                                                className="flex items-center gap-2 text-xs w-full hover:bg-orange-100 p-1 rounded cursor-pointer"
+                                                            >
+                                                                <span className="text-gray-400">○</span>
+                                                                <span>{alt.glyph.name}</span>
+                                                                <span className="text-gray-500">({Math.round(alt.confidence * 100)}%)</span>
+                                                                <span className="text-xs text-blue-500 ml-auto">tap to select</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            
                                             {result.regionIndex !== undefined && isolatedGlyphs[result.regionIndex]?.thumbnail && (
                                                 <div className="mt-2 flex items-center gap-2">
                                                     <span className="text-xs text-gray-500">Region:</span>
