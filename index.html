@@ -3970,7 +3970,48 @@
                                         <div className="pt-3 mt-3 border-t border-gray-300">
                                             <p className="text-xs text-gray-500 mb-2">or load a saved session:</p>
                                             <button
-                                                onClick={() => setShowCloudSyncModal(true)}
+                                                onClick={async () => {
+                                                    if (typeof DriveSync === 'undefined' || !DriveSync.isSignedIn()) {
+                                                        alert('⚠️ Please sign in to Google Drive first.\n\nClick the button below to sign in, then try loading again.');
+                                                        setShowCloudSyncModal(true);
+                                                        return;
+                                                    }
+                                                    
+                                                    try {
+                                                        const files = await DriveSync.listFiles();
+                                                        console.log('Drive files:', files);
+                                                        
+                                                        if (files.length === 0) {
+                                                            alert('📂 No HKI files found in your Hakli_Inscriptions folder.\n\nSave an inscription first to create HKI files.');
+                                                            return;
+                                                        }
+                                                        
+                                                        // Load all file thumbnails
+                                                        setShowFilePickerModal({ files, isLoading: true });
+                                                        
+                                                        const filesWithThumbnails = await Promise.all(
+                                                            files.map(async (file) => {
+                                                                try {
+                                                                    const hkiData = await DriveSync.loadFromCloud(file.id);
+                                                                    return {
+                                                                        ...file,
+                                                                        thumbnail: hkiData.image || null,
+                                                                        title: hkiData.inscriptionTitle || file.name,
+                                                                        location: hkiData.location || null
+                                                                    };
+                                                                } catch (err) {
+                                                                    console.error(`Failed to load thumbnail for ${file.name}:`, err);
+                                                                    return { ...file, thumbnail: null, title: file.name, location: null };
+                                                                }
+                                                            })
+                                                        );
+                                                        
+                                                        setShowFilePickerModal({ files: filesWithThumbnails, isLoading: false });
+                                                    } catch (err) {
+                                                        console.error('Load error:', err);
+                                                        alert('❌ Load failed: ' + err.message);
+                                                    }
+                                                }}
                                                 className="px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5a7968] font-medium text-sm transition-colors"
                                             >
                                                 ☁️ Load from Google Drive
@@ -6327,12 +6368,12 @@
                         </div>
                     </div>
 
-                    {recognitionResults.length > 0 && (
-                        <div className="mt-6 p-4 bg-[#f7f3ed] rounded-lg border-2 border-ochre">
-                            <button
-                                onClick={() => setIsCorrectionMemoryCollapsed(!isCorrectionMemoryCollapsed)}
-                                className="flex items-center gap-2 font-semibold text-gray-900 hover:text-gray-700 mb-3"
-                            >
+                    {/* Cloud Storage & Sharing - Always visible */}
+                    <div className="mt-6 p-4 bg-[#f7f3ed] rounded-lg border-2 border-ochre">
+                        <button
+                            onClick={() => setIsCorrectionMemoryCollapsed(!isCorrectionMemoryCollapsed)}
+                            className="flex items-center gap-2 font-semibold text-gray-900 hover:text-gray-700 mb-3"
+                        >
                                 <span>{isCorrectionMemoryCollapsed ? '▶' : '▼'}</span>
                                 <h3>☁️ Cloud Storage & Sharing</h3>
                             </button>
@@ -6509,14 +6550,14 @@
                             </DismissableTip>
                             </>
                             )}
-                            </div>
-                    )}
-                    {recognitionResults.length > 0 && (       
-                        <div className="mt-6 p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
-                            <button
-                                onClick={() => setIsExportOptionsCollapsed(!isExportOptionsCollapsed)}
-                                className="flex items-center gap-2 font-semibold text-gray-900 hover:text-gray-700 mb-3"
-                            >
+                    </div>
+                    
+                    {/* Export Options - Always visible */}
+                    <div className="mt-6 p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+                        <button
+                            onClick={() => setIsExportOptionsCollapsed(!isExportOptionsCollapsed)}
+                            className="flex items-center gap-2 font-semibold text-gray-900 hover:text-gray-700 mb-3"
+                        >
                                 <span>{isExportOptionsCollapsed ? '▶' : '▼'}</span>
                                 <h3>Export Options</h3>
                             </button>
@@ -6579,8 +6620,7 @@
                             </DismissableTip>
                             </>
                             )}
-                        </div>
-                    )}
+                    </div>
                     
                     {showChartViewer && equivalenceChart && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowChartViewer(false)}>
@@ -7016,7 +7056,7 @@
                                         </p>
                                         
                                         {/* Sign In Row */}
-                                        <div className="flex gap-2 flex-wrap mb-3">
+                                        <div className="flex gap-2 flex-wrap mb-3 items-center">
                                             <button
                                                 onClick={async () => {
                                                     if (typeof DriveSync !== 'undefined') {
@@ -7040,8 +7080,28 @@
                                                 }}
                                                 className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3e54] font-semibold"
                                             >
-                                                🔐 Sign in with Google
+                                                {(() => {
+                                                    try {
+                                                        return (typeof DriveSync !== 'undefined' && DriveSync.isSignedIn && DriveSync.isSignedIn()) 
+                                                            ? '✅ Signed In' 
+                                                            : '🔐 Sign in with Google';
+                                                    } catch {
+                                                        return '🔐 Sign in with Google';
+                                                    }
+                                                })()}
                                             </button>
+                                            {(() => {
+                                                try {
+                                                    if (typeof DriveSync !== 'undefined' && DriveSync.isSignedIn && DriveSync.isSignedIn()) {
+                                                        return (
+                                                            <span className="text-sm text-green-600 font-medium">
+                                                                ✓ Connected to Google Drive
+                                                            </span>
+                                                        );
+                                                    }
+                                                } catch {}
+                                                return null;
+                                            })()}
                                         </div>
                                         
                                         {/* Save/Load Row */}
