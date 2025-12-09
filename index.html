@@ -286,8 +286,10 @@
             const [imageRotation, setImageRotation] = useState(0);
             const [rotatedImageDimensions, setRotatedImageDimensions] = useState(null); // { width, height } of rotated image used in recognition
             const [showCloudSyncModal, setShowCloudSyncModal] = useState(false);
+            const [showCommunityModal, setShowCommunityModal] = useState(false);
             const [customGistUrl, setCustomGistUrl] = useState('');
             const [showFilePickerModal, setShowFilePickerModal] = useState(null); // { files: [], isLoading: boolean }
+            const [showTopMatches, setShowTopMatches] = useState(false); // Toggle for showing alternative matches in cards
             const [trimMode, setTrimMode] = useState(null); // Index of detection being trimmed, or null
             const [excludeMode, setExcludeMode] = useState(null); // Index of detection being excluded, or null
             const [excludeRegions, setExcludeRegions] = useState([]); // Array of exclusion boxes
@@ -5736,7 +5738,7 @@
                             </h3>
                             
                             {/* Validation Statistics */}
-                            <div className="mb-4 flex flex-wrap gap-4 text-sm">
+                            <div className="mb-4 flex flex-wrap gap-4 text-sm items-center">
                                 <div className="flex items-center gap-2">
                                     <span className="text-gray-600">Total:</span>
                                     <span className="font-semibold text-gray-900">{recognitionResults.length}</span>
@@ -5765,6 +5767,19 @@
                                         {recognitionResults.length - Object.keys(validations).length}
                                     </span>
                                 </div>
+                                
+                                {/* Top Matches Toggle */}
+                                <button
+                                    onClick={() => setShowTopMatches(!showTopMatches)}
+                                    className={`ml-auto px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                                        showTopMatches 
+                                            ? 'bg-orange-500 text-white hover:bg-orange-600' 
+                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                    }`}
+                                    title={showTopMatches ? "Hide alternative matches" : "Show alternative matches in cards"}
+                                >
+                                    {showTopMatches ? '🔽 Hide Alternatives' : '🔼 Show Alternatives'}
+                                </button>
                             </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -5830,8 +5845,8 @@
                                             </div>
                                             <div className="text-xs text-gray-500">Confidence: {Math.round(result.confidence * 100)}%</div>
                                             
-                                            {/* Top Matches - show alternatives if they exist */}
-                                            {result.alternatives && result.alternatives.length > 0 && (
+                                            {/* Top Matches - show alternatives if they exist AND toggle is on */}
+                                            {showTopMatches && result.alternatives && result.alternatives.length > 0 && (
                                                 <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded">
                                                     <div className="text-xs font-semibold text-orange-700 mb-1">Top matches:</div>
                                                     <div className="space-y-1">
@@ -6588,7 +6603,7 @@
                                              className="block text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200"
                                      />
                                         <button
-                                            onClick={() => setShowCloudSyncModal(true)}
+                                            onClick={() => setShowCommunityModal(true)}
                                             className="px-4 py-2 bg-patina text-white rounded hover:bg-[#5d7a6d] flex items-center gap-2"
                                             title="Download community template improvements"
                                             >
@@ -7131,59 +7146,103 @@
                                 </div>
 
                                 <div className="space-y-4">
-                                    {/* Google Drive Section */}
+                                    {/* Google Drive Section - Just Auth Status */}
                                     <div className="p-4 bg-[#f3f1f4] border-2 border-[#c9bfd4] rounded-lg">
-                                        <h4 className="font-semibold text-ancient-purple mb-2">💾 Google Drive Sync</h4>
+                                        <h4 className="font-semibold text-ancient-purple mb-2">💾 Google Drive Authentication</h4>
                                         <p className="text-sm text-gray-700 mb-3">
-                                            Save and load HKI inscription files from your Google Drive
+                                            Connect to Google Drive to save and load your HKI inscription files
                                         </p>
                                         
-                                        {/* Sign In Row */}
-                                        <div className="flex gap-2 flex-wrap mb-3 items-center">
-                                            <button
-                                                onClick={async () => {
-                                                    if (typeof DriveSync !== 'undefined') {
-                                                        try {
-                                                            const success = await DriveSync.initialize();
-                                                            if (success) {
-                                                                const signedIn = await DriveSync.signIn();
-                                                                if (signedIn) {
-                                                                    alert('✅ Connected to Google Drive!');
-                                                                }
-                                                            } else {
-                                                                alert('⚠️ Drive sync initialization failed. Check console.');
-                                                            }
-                                                        } catch (err) {
-                                                            console.error('Drive sign-in error:', err);
-                                                            alert('❌ Sign-in failed: ' + err.message);
-                                                        }
-                                                    } else {
-                                                        alert('❌ DriveSync module not loaded');
-                                                    }
-                                                }}
-                                                className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3e54] font-semibold"
-                                            >
-                                                {(() => {
-                                                    try {
-                                                        return (typeof DriveSync !== 'undefined' && DriveSync.isSignedIn && DriveSync.isSignedIn()) 
-                                                            ? '✅ Signed In' 
-                                                            : '🔐 Sign in with Google';
-                                                    } catch {
-                                                        return '🔐 Sign in with Google';
-                                                    }
-                                                })()}
-                                            </button>
+                                        {/* Sign In/Out */}
+                                        <div className="flex gap-2 flex-wrap items-center">
                                             {(() => {
                                                 try {
-                                                    if (typeof DriveSync !== 'undefined' && DriveSync.isSignedIn && DriveSync.isSignedIn()) {
+                                                    const isSignedIn = typeof DriveSync !== 'undefined' && DriveSync.isSignedIn && DriveSync.isSignedIn();
+                                                    
+                                                    if (isSignedIn) {
+                                                        // Show Sign Out button when signed in
                                                         return (
-                                                            <span className="text-sm text-green-600 font-medium">
-                                                                ✓ Connected to Google Drive
-                                                            </span>
+                                                            <>
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        if (typeof DriveSync !== 'undefined') {
+                                                                            try {
+                                                                                await DriveSync.signOut();
+                                                                                alert('✅ Signed out from Google Drive');
+                                                                            } catch (err) {
+                                                                                console.error('Sign-out error:', err);
+                                                                                alert('❌ Sign-out failed: ' + err.message);
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    className="px-4 py-2 bg-rust text-white rounded-lg hover:bg-[#8d5d47] font-semibold"
+                                                                >
+                                                                    🚪 Sign Out
+                                                                </button>
+                                                                <span className="text-sm text-green-600 font-medium">
+                                                                    ✓ Connected to Google Drive
+                                                                </span>
+                                                            </>
+                                                        );
+                                                    } else {
+                                                        // Show Sign In button when not signed in
+                                                        return (
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (typeof DriveSync !== 'undefined') {
+                                                                        try {
+                                                                            const success = await DriveSync.initialize();
+                                                                            if (success) {
+                                                                                const signedIn = await DriveSync.signIn();
+                                                                                if (signedIn) {
+                                                                                    alert('✅ Connected to Google Drive!');
+                                                                                }
+                                                                            } else {
+                                                                                alert('⚠️ Drive sync initialization failed. Check console.');
+                                                                            }
+                                                                        } catch (err) {
+                                                                            console.error('Drive sign-in error:', err);
+                                                                            alert('❌ Sign-in failed: ' + err.message);
+                                                                        }
+                                                                    } else {
+                                                                        alert('❌ DriveSync module not loaded');
+                                                                    }
+                                                                }}
+                                                                className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3e54] font-semibold"
+                                                            >
+                                                                🔐 Sign in with Google
+                                                            </button>
                                                         );
                                                     }
-                                                } catch {}
-                                                return null;
+                                                } catch {
+                                                    return (
+                                                        <button
+                                                            onClick={async () => {
+                                                                if (typeof DriveSync !== 'undefined') {
+                                                                    try {
+                                                                        const success = await DriveSync.initialize();
+                                                                        if (success) {
+                                                                            const signedIn = await DriveSync.signIn();
+                                                                            if (signedIn) {
+                                                                                alert('✅ Connected to Google Drive!');
+                                                                            }
+                                                                        } else {
+                                                                            alert('⚠️ Drive sync initialization failed. Check console.');
+                                                                        }
+                                                                    } catch (err) {
+                                                                        console.error('Drive sign-in error:', err);
+                                                                        alert('❌ Sign-in failed: ' + err.message);
+                                                                    }
+                                                                } else {
+                                                                    alert('❌ DriveSync module not loaded');
+                                                                }
+                                                            }}
+                                                            className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3e54] font-semibold"
+                                                        >
+                                                            🔐 Sign in with Google
+                                                        </button>
+                                                    );
+                                                }
                                             })()}
                                         </div>
                                         
@@ -7330,7 +7389,37 @@
                                             🔒 Files saved to "Hakli_Inscriptions" folder in your Drive
                                         </p>
                                     </div>
+                                </div>
 
+                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                    <button
+                                        onClick={() => setShowCloudSyncModal(false)}
+                                        className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Community Corrections Modal */}
+                    {showCommunityModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                             onClick={() => setShowCommunityModal(false)}>
+                            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+                                 onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-between mb-4 p-6 pb-4 border-b border-gray-200">
+                                    <h3 className="text-2xl font-bold text-gray-900">🌐 Community Corrections</h3>
+                                    <button
+                                        onClick={() => setShowCommunityModal(false)}
+                                        className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
+                                    >
+                                        &times;
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4 px-6">
                                     {/* Download from Master */}
                                     <div className="p-4 bg-[#f5f3f0] border-2 border-stone-light rounded-lg">
                                         <h4 className="font-semibold text-stone-dark mb-2">📥 Download Community Corrections</h4>
@@ -7339,7 +7428,7 @@
                                         </p>
                                         <button
                                             onClick={async () => {
-                                                setShowCloudSyncModal(false);
+                                                setShowCommunityModal(false);
                                                 await downloadCorrectionsFromCloud(MASTER_PASTE_RAW_URL);
                                             }}
                                             className="w-full px-4 py-2 bg-stone text-white rounded-lg hover:bg-stone-dark font-semibold"
@@ -7365,7 +7454,7 @@
                                             <button
                                                 onClick={async () => {
                                                     if (customGistUrl) {
-                                                        setShowCloudSyncModal(false);
+                                                        setShowCommunityModal(false);
                                                         await downloadCorrectionsFromCloud(customGistUrl);
                                                         setCustomGistUrl('');
                                                     }
@@ -7386,7 +7475,7 @@
                                         </p>
                                         <button
                                             onClick={async () => {
-                                                setShowCloudSyncModal(false);
+                                                setShowCommunityModal(false);
                                                 await uploadCorrectionsToCloud();
                                             }}
                                             className="w-full px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5d7a6d] font-semibold"
@@ -7405,9 +7494,9 @@
                                     </div>
                                 </div>
 
-                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                <div className="mt-4 pt-4 border-t border-gray-200 px-6 pb-6">
                                     <button
-                                        onClick={() => setShowCloudSyncModal(false)}
+                                        onClick={() => setShowCommunityModal(false)}
                                         className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
                                     >
                                         Close
