@@ -7217,6 +7217,7 @@
                                                                                 const signedIn = await DriveSync.signIn();
                                                                                 if (signedIn) {
                                                                                     alert('✅ Connected to Google Drive!');
+                                                                                    setShowCloudSyncModal(false); // Close modal after sign-in
                                                                                 }
                                                                             } else {
                                                                                 alert('⚠️ Drive sync initialization failed. Check console.');
@@ -7246,6 +7247,7 @@
                                                                             const signedIn = await DriveSync.signIn();
                                                                             if (signedIn) {
                                                                                 alert('✅ Connected to Google Drive!');
+                                                                                setShowCloudSyncModal(false); // Close modal after sign-in
                                                                             }
                                                                         } else {
                                                                             alert('⚠️ Drive sync initialization failed. Check console.');
