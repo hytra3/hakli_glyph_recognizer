@@ -6588,7 +6588,7 @@
                                             if (typeof DriveSync !== 'undefined') {
                                                 try {
                                                     await DriveSync.signOut();
-                                                    alert('✅ Signed out from Google Drive.\n\nClick "Save to Drive" or "Load from Drive" to sign in with a different account.');
+                                                    alert('✅ Signed out from Google Drive.\n\nClick "🔄 Change Account" again to sign in with a different Google account.');
                                                 } catch (err) {
                                                     console.error('Sign-out error:', err);
                                                     alert('❌ Sign-out failed: ' + err.message);
@@ -7189,7 +7189,7 @@
                                                                         if (typeof DriveSync !== 'undefined') {
                                                                             try {
                                                                                 await DriveSync.signOut();
-                                                                                alert('✅ Signed out from Google Drive');
+                                                                                alert('✅ Signed out from Google Drive.\n\nClose this window and click "🔄 Change Account" to sign in again.');
                                                                             } catch (err) {
                                                                                 console.error('Sign-out error:', err);
                                                                                 alert('❌ Sign-out failed: ' + err.message);
