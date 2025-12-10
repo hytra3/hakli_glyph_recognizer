@@ -290,6 +290,7 @@
             const [customGistUrl, setCustomGistUrl] = useState('');
             const [showFilePickerModal, setShowFilePickerModal] = useState(null); // { files: [], isLoading: boolean }
             const [showTopMatches, setShowTopMatches] = useState(false); // Toggle for showing alternative matches in cards
+            const [driveAuthStatus, setDriveAuthStatus] = useState(0); // Counter to force re-render when auth changes
             const [trimMode, setTrimMode] = useState(null); // Index of detection being trimmed, or null
             const [excludeMode, setExcludeMode] = useState(null); // Index of detection being excluded, or null
             const [excludeRegions, setExcludeRegions] = useState([]); // Array of exclusion boxes
@@ -3629,7 +3630,12 @@
                 if (originalMat && originalCanvasRef.current && showPreprocessPreview) {
                     try {
                         console.log('Displaying original mat to canvas');
-                        cv.imshow(originalCanvasRef.current, originalMat);
+                        // Use requestAnimationFrame to ensure canvas is fully rendered
+                        requestAnimationFrame(() => {
+                            if (originalCanvasRef.current && originalMat && !originalMat.isDeleted()) {
+                                cv.imshow(originalCanvasRef.current, originalMat);
+                            }
+                        });
                     } catch (error) {
                         console.error('Error showing original:', error);
                     }
@@ -3640,7 +3646,12 @@
             useEffect(() => {
                 if (preprocessedMat && preprocessCanvasRef.current && showPreprocessPreview) {
                     try {
-                        cv.imshow(preprocessCanvasRef.current, preprocessedMat);
+                        // Use requestAnimationFrame to ensure canvas is fully rendered
+                        requestAnimationFrame(() => {
+                            if (preprocessCanvasRef.current && preprocessedMat && !preprocessedMat.isDeleted()) {
+                                cv.imshow(preprocessCanvasRef.current, preprocessedMat);
+                            }
+                        });
                     } catch (error) {
                         console.error('Error showing preprocessed:', error);
                     }
@@ -6588,6 +6599,7 @@
                                             if (typeof DriveSync !== 'undefined') {
                                                 try {
                                                     await DriveSync.signOut();
+                                                    setDriveAuthStatus(prev => prev + 1); // Force re-render
                                                     alert('✅ Signed out from Google Drive.\n\nClick "🔄 Change Account" again to sign in with a different Google account.');
                                                 } catch (err) {
                                                     console.error('Sign-out error:', err);
@@ -7189,6 +7201,7 @@
                                                                         if (typeof DriveSync !== 'undefined') {
                                                                             try {
                                                                                 await DriveSync.signOut();
+                                                                                setDriveAuthStatus(prev => prev + 1); // Force re-render
                                                                                 alert('✅ Signed out from Google Drive.\n\nClose this window and click "🔄 Change Account" to sign in again.');
                                                                             } catch (err) {
                                                                                 console.error('Sign-out error:', err);
@@ -7246,6 +7259,7 @@
                                                                         if (success) {
                                                                             const signedIn = await DriveSync.signIn();
                                                                             if (signedIn) {
+                                                                                setDriveAuthStatus(prev => prev + 1); // Force re-render
                                                                                 alert('✅ Connected to Google Drive!');
                                                                                 setShowCloudSyncModal(false); // Close modal after sign-in
                                                                             }
@@ -7270,7 +7284,7 @@
                                         </div>
                                         
                                         {/* Save/Load Row */}
-                                        <div className="flex gap-4 flex-wrap mb-3" style={{rowGap: '12px'}}>
+                                        <div className="flex gap-4 flex-wrap mt-4" style={{rowGap: '12px'}}>
                                             <button
                                                 onClick={async () => {
                                                     if (typeof DriveSync === 'undefined' || !DriveSync.isSignedIn()) {
