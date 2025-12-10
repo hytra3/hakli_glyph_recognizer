@@ -6581,6 +6581,25 @@
                                     >
                                         📥 Export Full HKI
                                     </button>
+                                    <button
+                                        onClick={async () => {
+                                            if (typeof DriveSync !== 'undefined') {
+                                                try {
+                                                    await DriveSync.signOut();
+                                                    alert('✅ Signed out from Google Drive.\n\nClick "Save to Drive" or "Load from Drive" to sign in with a different account.');
+                                                } catch (err) {
+                                                    console.error('Sign-out error:', err);
+                                                    alert('❌ Sign-out failed: ' + err.message);
+                                                }
+                                            } else {
+                                                alert('❌ DriveSync module not loaded');
+                                            }
+                                        }}
+                                        className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 flex items-center gap-2"
+                                        title="Sign out and switch to a different Google account"
+                                    >
+                                        🔄 Change Account
+                                    </button>
                                 </div>
                             </div>
 
@@ -7247,7 +7266,7 @@
                                         </div>
                                         
                                         {/* Save/Load Row */}
-                                        <div className="flex gap-2 flex-wrap mb-3">
+                                        <div className="flex gap-3 flex-wrap mb-3">
                                             <button
                                                 onClick={async () => {
                                                     if (typeof DriveSync === 'undefined' || !DriveSync.isSignedIn()) {
