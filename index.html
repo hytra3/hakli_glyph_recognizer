@@ -3932,7 +3932,7 @@
                     {!image ? (
                         <div className="mb-6">
                             {/* Chart Loading Notice */}
-                            {!equivalenceChart && (
+                            {chartLoadStatus !== 'loaded' && (
                                 <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-300 rounded-lg">
                                     <div className="flex items-start gap-3">
                                         <div className="text-2xl">⏳</div>
@@ -6616,7 +6616,13 @@
                                     </button>
                                     <button
                                         onClick={async () => {
-                                            if (typeof DriveSync !== 'undefined') {
+                                            if (typeof DriveSync === 'undefined') {
+                                                alert('❌ DriveSync module not loaded');
+                                                return;
+                                            }
+                                            
+                                            // If signed in, sign out
+                                            if (DriveSync.isSignedIn()) {
                                                 try {
                                                     await DriveSync.signOut();
                                                     setDriveAuthStatus(prev => prev + 1); // Force re-render
@@ -6626,11 +6632,12 @@
                                                     alert('❌ Sign-out failed: ' + err.message);
                                                 }
                                             } else {
-                                                alert('❌ DriveSync module not loaded');
+                                                // If signed out, open the Cloud Sync modal to sign in
+                                                setShowCloudSyncModal(true);
                                             }
                                         }}
                                         className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 flex items-center gap-2"
-                                        title="Sign out and switch to a different Google account"
+                                        title={DriveSync && DriveSync.isSignedIn() ? "Sign out and switch to a different Google account" : "Sign in to Google Drive"}
                                     >
                                         🔄 Change Account
                                     </button>
