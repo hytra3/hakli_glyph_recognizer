@@ -360,12 +360,15 @@
             
             // Auto-detect reading direction using ReadingOrder module
             const autoDetectReadingOrder = () => {
-                if (typeof ReadingOrder !== 'undefined' && recognitionResults.length > 0) {
-                    const detected = ReadingOrder.detectDirection(recognitionResults);
+                const resultsToOrder = getFilteredResults(); // Use filtered results instead of all results
+                if (typeof ReadingOrder !== 'undefined' && resultsToOrder.length > 0) {
+                    const detected = ReadingOrder.detectDirection(resultsToOrder);
                     setReadingDirection(detected);
-                    const order = ReadingOrder.generateOrder(recognitionResults, detected);
-                    setReadingOrder(order);
-                    console.log(`📖 Auto-detected: ${detected}, ordered ${order.length} glyphs`);
+                    const order = ReadingOrder.generateOrder(resultsToOrder, detected);
+                    // Map filtered indices back to original indices
+                    const mappedOrder = order.map(filteredIdx => recognitionResults.indexOf(resultsToOrder[filteredIdx]));
+                    setReadingOrder(mappedOrder);
+                    console.log(`📖 Auto-detected: ${detected}, ordered ${mappedOrder.length} glyphs`);
                     return detected;
                 }
                 return null;
@@ -3027,8 +3030,9 @@
             const applyReadingDirection = (direction) => {
                 setReadingDirection(direction);
                 
-                // Auto-generate reading order based on direction
-                const sorted = recognitionResults.map((result, idx) => ({ result, idx }));
+                // Auto-generate reading order based on direction using filtered results
+                const resultsToOrder = getFilteredResults();
+                const sorted = resultsToOrder.map((result, idx) => ({ result, idx, originalIdx: recognitionResults.indexOf(result) }));
                 
                 if (direction === 'ltr') {
                     sorted.sort((a, b) => 
@@ -3046,12 +3050,12 @@
                         a.result.position.y - b.result.position.y     // Top to bottom within column
                     );
                 } else {
-                    // Detection order - just use original indices
-                    setReadingOrder(recognitionResults.map((_, idx) => idx));
+                    // Detection order - use filtered result indices mapped to original
+                    setReadingOrder(resultsToOrder.map(r => recognitionResults.indexOf(r)));
                     return;
                 }
                 
-                setReadingOrder(sorted.map(item => item.idx));
+                setReadingOrder(sorted.map(item => item.originalIdx));
             };
 
             const toggleWordBoundary = (readingOrderIndex) => {
@@ -5794,7 +5798,7 @@
                             </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {(viewMode === 'detection' ? getFilteredResults() : getReadingOrderedResults().filter(r => getFilteredResults().includes(r))).map((result, displayIndex) => {
+                        {(viewMode === 'detection' ? getFilteredResults() : getReadingOrderedResults()).map((result, displayIndex) => {
                             const originalIndex = viewMode === 'detection' ? displayIndex : recognitionResults.indexOf(result);
                             const readingOrderNum = viewMode === 'reading' ? displayIndex + 1 : null;
                             
