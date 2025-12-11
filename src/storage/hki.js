@@ -95,6 +95,7 @@ const HKIStorage = {
                 position: result.position,
                 corners: result.corners || null,
                 thumbnail: result.thumbnail || null,
+                regionIndex: result.regionIndex !== undefined ? result.regionIndex : index,
                 matchType: result.matchType,
                 isManual: result.isManual || false,
                 isMerged: result.isMerged || false,

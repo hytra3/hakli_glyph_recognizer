@@ -3834,7 +3834,10 @@
                                         // Only update progress every N images to reduce re-renders
                                         if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad || loadedCount === 1) {
                                             console.log(`📊 Progress: ${loadedCount}/${totalImagesToLoad}`);
-                                            setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
+                                            // Use setTimeout to force React to flush the update immediately
+                                            setTimeout(() => {
+                                                setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
+                                            }, 0);
                                         }
                                         resolve();
                                     };
@@ -3842,7 +3845,10 @@
                                         loadedCount++;
                                         if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad || loadedCount === 1) {
                                             console.log(`📊 Progress: ${loadedCount}/${totalImagesToLoad} (error)`);
-                                            setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
+                                            // Use setTimeout to force React to flush the update immediately
+                                            setTimeout(() => {
+                                                setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
+                                            }, 0);
                                         }
                                         resolve();
                                     };
@@ -5994,11 +6000,11 @@
                                                 </div>
                                             )}
                                             
-                                            {result.regionIndex !== undefined && isolatedGlyphs[result.regionIndex]?.thumbnail && (
+                                            {(result.thumbnail || (result.regionIndex !== undefined && isolatedGlyphs[result.regionIndex]?.thumbnail)) && (
                                                 <div className="mt-2 flex items-center gap-2">
                                                     <span className="text-xs text-gray-500">Region:</span>
                                                     <img
-                                                        src={isolatedGlyphs[result.regionIndex].thumbnail}
+                                                        src={result.thumbnail || isolatedGlyphs[result.regionIndex].thumbnail}
                                                         alt="Isolated region"
                                                         className="w-16 h-auto border border-gray-300 rounded"
                                                     />
