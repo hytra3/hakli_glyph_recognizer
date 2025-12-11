@@ -204,60 +204,84 @@ const DriveSync = {
     /**
      * Save HKI data to Google Drive
      * @param {object} hkiData - The inscription data
-     * @param {string} filename - Filename for the file
-     * @returns {Promise<object>} File metadata
+     * @param {string} filename - Optional filename (auto-generated if not provided)
+     * @returns {Promise<object>} Result with success, filename, and file metadata
      */
-    saveToCloud: async (hkiData, filename) => {
+    saveToCloud: async (hkiData, filename = null) => {
         if (!DriveSync.isSignedIn()) {
-            throw new Error('Not signed in to Google Drive');
+            return { success: false, error: 'Not signed in to Google Drive' };
         }
 
-        const folderId = await DriveSync.getOrCreateFolder();
-        const content = JSON.stringify(hkiData, null, 2);
-        const blob = new Blob([content], { type: 'application/json' });
-        
-        // Check if file already exists
-        const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${filename}' and '${folderId}' in parents and trashed=false&fields=files(id,name)`;
-        const searchResponse = await DriveSync._apiRequest(searchUrl);
-        const searchData = await searchResponse.json();
-        
-        const metadata = {
-            name: filename,
-            mimeType: 'application/json'
-        };
+        try {
+            // Auto-generate filename if not provided
+            if (!filename) {
+                const title = hkiData.inscriptionTitle || 'Inscription';
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                filename = `${title.replace(/[^a-z0-9]/gi, '_')}_${timestamp}.hki`;
+            }
 
-        if (searchData.files && searchData.files.length > 0) {
-            // Update existing file
-            const fileId = searchData.files[0].id;
-            const updateResponse = await DriveSync._apiRequest(
-                `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
-                {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: blob
-                }
-            );
-            console.log('☁️ Updated file in Drive:', filename);
-            return await updateResponse.json();
-        } else {
-            // Create new file with multipart upload
-            const form = new FormData();
-            form.append('metadata', new Blob([JSON.stringify({
-                ...metadata,
-                parents: [folderId]
-            })], { type: 'application/json' }));
-            form.append('file', blob);
+            const folderId = await DriveSync.getOrCreateFolder();
+            const content = JSON.stringify(hkiData, null, 2);
+            const blob = new Blob([content], { type: 'application/json' });
+            
+            // Check if file already exists
+            const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${filename}' and '${folderId}' in parents and trashed=false&fields=files(id,name)`;
+            const searchResponse = await DriveSync._apiRequest(searchUrl);
+            const searchData = await searchResponse.json();
+            
+            const metadata = {
+                name: filename,
+                mimeType: 'application/json'
+            };
 
-            const createResponse = await fetch(
-                'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-                {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${DriveSync._accessToken}` },
-                    body: form
-                }
-            );
-            console.log('☁️ Created file in Drive:', filename);
-            return await createResponse.json();
+            let fileData;
+            
+            if (searchData.files && searchData.files.length > 0) {
+                // Update existing file
+                const fileId = searchData.files[0].id;
+                const updateResponse = await DriveSync._apiRequest(
+                    `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+                    {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: blob
+                    }
+                );
+                fileData = await updateResponse.json();
+                console.log('☁️ Updated file in Drive:', filename);
+            } else {
+                // Create new file with multipart upload
+                const form = new FormData();
+                form.append('metadata', new Blob([JSON.stringify({
+                    ...metadata,
+                    parents: [folderId]
+                })], { type: 'application/json' }));
+                form.append('file', blob);
+
+                const createResponse = await fetch(
+                    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+                    {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${DriveSync._accessToken}` },
+                        body: form
+                    }
+                );
+                fileData = await createResponse.json();
+                console.log('☁️ Created file in Drive:', filename);
+            }
+            
+            return {
+                success: true,
+                filename: filename,
+                fileId: fileData.id,
+                fileData: fileData
+            };
+        } catch (error) {
+            console.error('Save to Drive error:', error);
+            return {
+                success: false,
+                error: error.message
+            };
         }
     },
 
@@ -321,3 +345,6 @@ const DriveSync = {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = DriveSync;
 }
+
+// Make globally available
+window.DriveSync = DriveSync;
