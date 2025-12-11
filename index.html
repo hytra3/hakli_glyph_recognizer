@@ -711,6 +711,51 @@
             
             // Open JSON viewer in new window
             const openJsonViewer = () => {
+                if (!recognitionResults || recognitionResults.length === 0) {
+                    alert('❌ No data to view. Please detect glyphs first.');
+                    return;
+                }
+                
+                // Build current data and save to cache so viewer can access it
+                const currentData = {
+                    timestamp: new Date().toISOString(),
+                    imageData: image || null,
+                    viewMode: viewMode,
+                    readingDirection: readingDirection,
+                    detections: recognitionResults.map((result, index) => ({
+                        index: index,
+                        glyph: result.glyph.name,
+                        transliteration: result.glyph.transliteration,
+                        arabic: result.glyph.arabic || result.glyph.transliteration || result.glyph.name,
+                        confidence: result.confidence,
+                        position: result.position,
+                        matchType: result.matchType,
+                        isManual: result.isManual || false,
+                        isMerged: result.isMerged || false,
+                        validated: validations[index] ? validations[index].isCorrect : null
+                    })),
+                    readingOrder: viewMode === 'reading' ? readingOrder : null,
+                    wordBoundaries: Array.from(wordBoundaries),
+                    columnBreaks: Array.from(columnBreaks || []),
+                    lineBreaks: Array.from(lineBreaks || []),
+                    translations: {
+                        english: translationEnglish || '',
+                        arabic: translationArabic || ''
+                    },
+                    statistics: {
+                        totalGlyphs: recognitionResults.length,
+                        uniqueGlyphs: new Set(recognitionResults.map(r => r.glyph.name)).size,
+                        averageConfidence: recognitionResults.length > 0 
+                            ? (recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length * 100).toFixed(1)
+                            : 0
+                    }
+                };
+                
+                // Save to cache so viewer can access it
+                const filename = `Current_Inscription_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+                saveToLocalCache(currentData, filename);
+                
+                // Open viewer window
                 const viewerUrl = window.location.href.replace('index.html', 'hakli_viewer.html').replace(/\/$/, '') + '/hakli_viewer.html';
                 window.open(viewerUrl, 'HakliViewer', 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no');
             };
@@ -3774,6 +3819,7 @@
 
                             setImageLoadingProgress({ loaded: 0, total: totalImagesToLoad });
                             console.log(`📦 Loading ${totalImagesToLoad} template images for ${chartData.glyphs.length} glyphs (examples will load in background)...`);
+                            console.log(`📊 Progress tracking: will update every ${Math.max(1, Math.floor(totalImagesToLoad / 20))} images`);
 
                             let loadedCount = 0;
                             const updateInterval = Math.max(1, Math.floor(totalImagesToLoad / 20)); // Update progress bar ~20 times
@@ -3786,14 +3832,16 @@
                                         imageCache[key] = img;
                                         loadedCount++;
                                         // Only update progress every N images to reduce re-renders
-                                        if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad) {
+                                        if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad || loadedCount === 1) {
+                                            console.log(`📊 Progress: ${loadedCount}/${totalImagesToLoad}`);
                                             setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
                                         }
                                         resolve();
                                     };
                                     img.onerror = () => {
                                         loadedCount++;
-                                        if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad) {
+                                        if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad || loadedCount === 1) {
+                                            console.log(`📊 Progress: ${loadedCount}/${totalImagesToLoad} (error)`);
                                             setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
                                         }
                                         resolve();
