@@ -19,8 +19,14 @@
     <link rel="apple-touch-icon" href="favicon.svg">
     
     <!-- React & Babel -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- DEVELOPMENT MODE (slower, more debugging info): -->
+    <!-- <script src="https://unpkg.com/react@18/umd/react.development.js"></script> -->
+    <!-- <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script> -->
+    
+    <!-- PRODUCTION MODE (faster, optimized): -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <!-- Tailwind CSS -->
@@ -3834,10 +3840,10 @@
                                         // Only update progress every N images to reduce re-renders
                                         if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad || loadedCount === 1) {
                                             console.log(`📊 Progress: ${loadedCount}/${totalImagesToLoad}`);
-                                            // Use setTimeout to force React to flush the update immediately
-                                            setTimeout(() => {
+                                            // Use requestAnimationFrame to force browser to paint the update
+                                            requestAnimationFrame(() => {
                                                 setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
-                                            }, 0);
+                                            });
                                         }
                                         resolve();
                                     };
@@ -3845,10 +3851,10 @@
                                         loadedCount++;
                                         if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad || loadedCount === 1) {
                                             console.log(`📊 Progress: ${loadedCount}/${totalImagesToLoad} (error)`);
-                                            // Use setTimeout to force React to flush the update immediately
-                                            setTimeout(() => {
+                                            // Use requestAnimationFrame to force browser to paint the update
+                                            requestAnimationFrame(() => {
                                                 setImageLoadingProgress({ loaded: loadedCount, total: totalImagesToLoad });
-                                            }, 0);
+                                            });
                                         }
                                         resolve();
                                     };
@@ -4090,7 +4096,7 @@
                                             <button
                                                 onClick={async () => {
                                                     if (typeof DriveSync === 'undefined' || !DriveSync.isSignedIn()) {
-                                                        alert('⚠️ Please sign in to Google Drive first.\n\nClick the button below to sign in, then try loading again.');
+                                                        alert('⚠️ Please sign in to Google Drive first.\n\n1. Click OK to close this message\n2. Click the "🔐 Sign in with Google" button that appears\n3. After signing in, click "Load from Google Drive" again');
                                                         setShowCloudSyncModal(true);
                                                         return;
                                                     }
@@ -6004,9 +6010,18 @@
                                                 <div className="mt-2 flex items-center gap-2">
                                                     <span className="text-xs text-gray-500">Region:</span>
                                                     <img
-                                                        src={result.thumbnail || isolatedGlyphs[result.regionIndex].thumbnail}
+                                                        src={result.thumbnail || (isolatedGlyphs[result.regionIndex]?.thumbnail)}
                                                         alt="Isolated region"
                                                         className="w-16 h-auto border border-gray-300 rounded"
+                                                        onError={(e) => {
+                                                            console.warn(`Thumbnail failed to load for index ${originalIndex}`, {
+                                                                hasResultThumbnail: !!result.thumbnail,
+                                                                regionIndex: result.regionIndex,
+                                                                hasIsolatedGlyph: !!isolatedGlyphs[result.regionIndex],
+                                                                hasIsolatedThumbnail: !!isolatedGlyphs[result.regionIndex]?.thumbnail
+                                                            });
+                                                            e.target.style.display = 'none';
+                                                        }}
                                                     />
                                                 </div>
                                             )}
