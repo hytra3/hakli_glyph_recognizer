@@ -858,7 +858,12 @@
                 };
                 
                 try {
-                    const result = await DriveSync.saveToCloud(hkiData);
+                    // Generate filename from inscription title
+                    const title = inscriptionTitle || 'Inscription';
+                    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                    const filename = `${title.replace(/[^a-z0-9]/gi, '_')}_${timestamp}.hki`;
+                    
+                    const result = await DriveSync.saveToCloud(hkiData, filename);
                     if (result.success) {
                         alert('✅ Saved to Google Drive!\n\n📁 File: ' + result.filename);
                         recordAction('save_to_drive', { filename: result.filename });
