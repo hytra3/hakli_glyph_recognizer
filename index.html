@@ -812,13 +812,32 @@
                 }
                 
                 // Prepare HKI data format
+                // Ensure all results have thumbnails - copy from isolatedGlyphs if missing
+                const resultsWithThumbnails = recognitionResults.map((result, index) => {
+                    if (result.thumbnail) {
+                        return result; // Already has thumbnail
+                    }
+                    
+                    // Try to get thumbnail from isolatedGlyphs using regionIndex
+                    if (result.regionIndex !== undefined && isolatedGlyphs[result.regionIndex]?.thumbnail) {
+                        console.log(`📸 Copying missing thumbnail for result ${index} from isolatedGlyphs[${result.regionIndex}]`);
+                        return {
+                            ...result,
+                            thumbnail: isolatedGlyphs[result.regionIndex].thumbnail
+                        };
+                    }
+                    
+                    console.warn(`⚠️ No thumbnail found for result ${index} (regionIndex: ${result.regionIndex})`);
+                    return result;
+                });
+                
                 const hkiData = {
                     version: "1.0",
                     timestamp: new Date().toISOString(),
                     inscriptionTitle: inscriptionTitle || `Inscription ${new Date().toLocaleDateString()}`,
                     location: '', // User can add this in metadata
                     image: image, // Base64 image
-                    recognitionResults: recognitionResults,
+                    recognitionResults: resultsWithThumbnails,
                     readingOrder: readingOrder,
                     readingDirection: readingDirection,
                     wordBoundaries: Array.from(wordBoundaries),
