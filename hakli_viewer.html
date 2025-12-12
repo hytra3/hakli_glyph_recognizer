@@ -494,6 +494,28 @@
         // Load recent files on startup
         window.addEventListener('load', () => {
             loadRecentFiles();
+            
+            // Check for autoload parameter in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const autoloadFile = urlParams.get('autoload');
+            
+            if (autoloadFile) {
+                console.log('🔄 Autoloading file:', autoloadFile);
+                // Find and load the specified file from cache
+                try {
+                    const cache = JSON.parse(localStorage.getItem('hakliRecentExports') || '[]');
+                    const entry = cache.find(e => e.filename === autoloadFile);
+                    
+                    if (entry) {
+                        console.log('✅ Found file in cache, loading...');
+                        loadFromCache(entry);
+                    } else {
+                        console.warn('⚠️ Autoload file not found in cache:', autoloadFile);
+                    }
+                } catch (error) {
+                    console.error('❌ Autoload failed:', error);
+                }
+            }
         });
 
         function loadRecentFiles() {
