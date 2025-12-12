@@ -20,12 +20,12 @@
     
     <!-- React & Babel -->
     <!-- DEVELOPMENT MODE (slower, more debugging info): -->
-    <!-- <script src="https://unpkg.com/react@18/umd/react.development.js"></script> -->
-    <!-- <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script> -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     
-    <!-- PRODUCTION MODE (faster, optimized): -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- PRODUCTION MODE (faster, optimized - uncomment these and comment out development above to test): -->
+    <!-- <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script> -->
+    <!-- <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script> -->
     
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
@@ -3290,6 +3290,16 @@
                         setSelectedRegions(new Set());
                         setMergeIndicator(null);
                         setAdjustmentsApplied(false); // Reset adjustment state
+                        
+                        // Clear translation/metadata fields for fresh image
+                        setTranslationEnglish('');
+                        setTranslationArabic('');
+                        setInscriptionTitle('');
+                        setInscriptionNotes('');
+                        setReadingOrder([]);
+                        setWordBoundaries(new Set());
+                        setColumnBreaks(new Set());
+                        setLineBreaks(new Set());
                         
                         // Load image into OpenCV Mat for preprocessing
                         if (isOpenCvReady) {
