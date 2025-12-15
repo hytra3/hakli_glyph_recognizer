@@ -25,7 +25,8 @@ const HKIStorage = {
         const {
             recognitionResults, validations, image, displayImage, preprocessing,
             viewMode, readingDirection, readingOrder, wordBoundaries, columnBreaks, lineBreaks,
-            translationEnglish, translationArabic, actionHistory, currentInscriptionId
+            translationEnglish, translationArabic, actionHistory, currentInscriptionId,
+            preprocessCanvasRef, preprocessedMat
         } = state;
 
         if (!recognitionResults || recognitionResults.length === 0) {
@@ -60,6 +61,16 @@ const HKIStorage = {
             metadata = { location, site, date_photographed: date, stone_type: stoneType, condition, notes };
         }
         
+        // Capture preprocessed image if available
+        let preprocessedImage = null;
+        if (preprocessCanvasRef && preprocessCanvasRef.current && preprocessedMat && !preprocessedMat.isDeleted()) {
+            try {
+                preprocessedImage = preprocessCanvasRef.current.toDataURL('image/png');
+            } catch (err) {
+                console.warn('Could not capture preprocessed image:', err);
+            }
+        }
+        
         const versionEntry = {
             version: isUpdate ? existingFile.currentVersion + 1 : 1,
             timestamp: new Date().toISOString(),
@@ -80,6 +91,7 @@ const HKIStorage = {
             images: {
                 original: image,
                 preprocessed: displayImage || image,
+                preprocessedCanvas: preprocessedImage, // NEW: actual preprocessed canvas image
                 preprocessingSettings: preprocessing
             },
             

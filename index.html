@@ -383,6 +383,7 @@
             const [brushSize, setBrushSize] = useState(15);
             const [isErasing, setIsErasing] = useState(false);
             const [eraserHistory, setEraserHistory] = useState([]); // Track canvas states for undo
+            const [eraserCursorStyle, setEraserCursorStyle] = useState('crosshair');
             const eraserCanvasRef = useRef(null);
             const preprocessCanvasRef = useRef(null);
             const originalCanvasRef = useRef(null);
@@ -2763,6 +2764,16 @@
 
                 const annotatedImageDataUrl = canvas.toDataURL();
                 const originalImageDataUrl = image;
+                
+                // Capture preprocessed image if available
+                let preprocessedImageDataUrl = null;
+                if (preprocessCanvasRef.current && preprocessedMat && !preprocessedMat.isDeleted()) {
+                    try {
+                        preprocessedImageDataUrl = preprocessCanvasRef.current.toDataURL('image/png');
+                    } catch (err) {
+                        console.warn('Could not capture preprocessed image:', err);
+                    }
+                }
 
                 // Calculate statistics
                 const totalDetections = recognitionResults.length;
@@ -2788,7 +2799,7 @@
 
                 // Add styles
                 const style = iframeDoc.createElement('style');
-                style.textContent = '* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; padding: 20px; } .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; } .header h1 { font-size: 28px; margin-bottom: 10px; } .header .date { opacity: 0.9; font-size: 14px; } .section { border-bottom: 1px solid #e5e7eb; } .section:last-child { border-bottom: none; } .section-header { padding: 20px 30px; cursor: pointer; background: #f9fafb; transition: background 0.2s; display: flex; justify-content: space-between; align-items: center; } .section-header:hover { background: #f3f4f6; } .section-title { font-size: 20px; font-weight: 600; color: #1f2937; } .section-content { padding: 10px 30px 30px 30px; } .section-content.collapsed { display: none; } .toggle-icon { font-size: 18px; color: #6b7280; transition: transform 0.2s; } .toggle-icon.collapsed { transform: rotate(-90deg); } .image-container { text-align: center; margin: 20px 0; } .image-container img { max-width: 100%; height: auto; border: 2px solid #e5e7eb; border-radius: 4px; } .image-toggle { margin: 20px 0; text-align: center; } .toggle-btn { background: #8b7d6b; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; } .toggle-btn:hover { background: #6d6355; } .toggle-btn.active { background: #6b8e7f; } .transcription-box { background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 6px; padding: 20px; font-family: "Courier New", monospace; font-size: 18px; line-height: 1.8; word-wrap: break-word; margin: 15px 0; } .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; } .stat-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; text-align: center; } .stat-value { font-size: 32px; font-weight: 700; color: #8b7d6b; margin-bottom: 5px; } .stat-label { font-size: 14px; color: #6b7280; } .detection-list { margin: 15px 0; } .detection-item { background: #f9fafb; border-left: 4px solid #8b7d6b; padding: 12px 15px; margin: 8px 0; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; } .detection-item.correct { border-left-color: #6b8e7f; } .detection-item.incorrect { border-left-color: #a0674f; } .detection-glyph { font-weight: 600; font-size: 16px; } .detection-confidence { color: #6b7280; font-size: 14px; } .footer { background: #f9fafb; padding: 20px 30px; text-align: center; color: #6b7280; font-size: 14px; } .legend { display: flex; gap: 20px; justify-content: center; margin: 15px 0; flex-wrap: wrap; } .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; } .legend-box { width: 20px; height: 20px; border-radius: 3px; }';
+                style.textContent = '* { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; padding: 20px; } .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; } .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; } .header h1 { font-size: 28px; margin-bottom: 10px; } .header .date { opacity: 0.9; font-size: 14px; } .section { border-bottom: 1px solid #e5e7eb; } .section:last-child { border-bottom: none; } .section-header { padding: 20px 30px; cursor: pointer; background: #f9fafb; transition: background 0.2s; display: flex; justify-content: space-between; align-items: center; } .section-header:hover { background: #f3f4f6; } .section-title { font-size: 20px; font-weight: 600; color: #1f2937; } .section-content { padding: 10px 30px 30px 30px; } .section-content.collapsed { display: none; } .toggle-icon { font-size: 18px; color: #6b7280; transition: transform 0.2s; } .toggle-icon.collapsed { transform: rotate(-90deg); } .image-container { text-align: center; margin: 20px 0; } .image-container img { max-width: 100%; height: auto; border: 2px solid #e5e7eb; border-radius: 4px; } .source-images-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0; } .source-image-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; } .source-image-card img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; } .source-image-label { font-size: 12px; font-weight: 600; color: #6b7280; text-align: center; margin-top: 8px; } .image-toggle { margin: 20px 0; text-align: center; } .toggle-btn { background: #8b7d6b; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; } .toggle-btn:hover { background: #6d6355; } .toggle-btn.active { background: #6b8e7f; } .transcription-box { background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 6px; padding: 20px; font-family: "Courier New", monospace; font-size: 18px; line-height: 1.8; word-wrap: break-word; margin: 15px 0; } .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; } .stat-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; text-align: center; } .stat-value { font-size: 32px; font-weight: 700; color: #8b7d6b; margin-bottom: 5px; } .stat-label { font-size: 14px; color: #6b7280; } .detection-list { margin: 15px 0; } .detection-item { background: #f9fafb; border-left: 4px solid #8b7d6b; padding: 12px 15px; margin: 8px 0; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; } .detection-item.correct { border-left-color: #6b8e7f; } .detection-item.incorrect { border-left-color: #a0674f; } .detection-glyph { font-weight: 600; font-size: 16px; } .detection-confidence { color: #6b7280; font-size: 14px; } .footer { background: #f9fafb; padding: 20px 30px; text-align: center; color: #6b7280; font-size: 14px; } .legend { display: flex; gap: 20px; justify-content: center; margin: 15px 0; flex-wrap: wrap; } .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; } .legend-box { width: 20px; height: 20px; border-radius: 3px; }';
                 iframeDoc.head.appendChild(style);
 
                 // Header
@@ -2800,7 +2811,15 @@
                 // Image section (FIRST)
                 const imageSection = iframeDoc.createElement('div');
                 imageSection.className = 'section';
-                imageSection.innerHTML = '<div class="section-header" onclick="toggleSection(this)"><div class="section-title">🖼️ Source Image</div><div class="toggle-icon">▼</div></div><div class="section-content"><div class="image-toggle"><button class="toggle-btn" id="toggleBtn" onclick="toggleImage()">Show Annotated Version</button></div><div class="legend"><div class="legend-item"><div class="legend-box" style="background: #8b7d6b;"></div><span>Unvalidated</span></div><div class="legend-item"><div class="legend-box" style="background: #6b8e7f;"></div><span>Validated Correct</span></div><div class="legend-item"><div class="legend-box" style="background: #a0674f;"></div><span>Validated Incorrect</span></div></div><div class="image-container"><img id="mainImage" src="' + originalImageDataUrl + '" alt="Hakli inscription"></div></div>';
+                
+                // Build source images grid HTML
+                let sourceImagesHtml = '<div class="source-images-grid"><div class="source-image-card"><img src="' + originalImageDataUrl + '" alt="Original image"><div class="source-image-label">📷 Original Image</div></div>';
+                if (preprocessedImageDataUrl) {
+                    sourceImagesHtml += '<div class="source-image-card"><img src="' + preprocessedImageDataUrl + '" alt="Preprocessed image"><div class="source-image-label">⚙️ Preprocessed Image</div></div>';
+                }
+                sourceImagesHtml += '</div>';
+                
+                imageSection.innerHTML = '<div class="section-header" onclick="toggleSection(this)"><div class="section-title">🖼️ Source Image</div><div class="toggle-icon">▼</div></div><div class="section-content">' + sourceImagesHtml + '<div class="image-toggle"><button class="toggle-btn" id="toggleBtn" onclick="toggleImage()">Show Annotated Version</button></div><div class="legend"><div class="legend-item"><div class="legend-box" style="background: #8b7d6b;"></div><span>Unvalidated</span></div><div class="legend-item"><div class="legend-box" style="background: #6b8e7f;"></div><span>Validated Correct</span></div><div class="legend-item"><div class="legend-box" style="background: #a0674f;"></div><span>Validated Incorrect</span></div></div><div class="image-container"><img id="mainImage" src="' + originalImageDataUrl + '" alt="Hakli inscription"></div></div>';
                 container.appendChild(imageSection);
 
                 // Transcription section (SECOND)
@@ -3570,6 +3589,38 @@
                     }
                 }
             };
+            
+            // Update eraser cursor style when brush size or canvas changes
+            useEffect(() => {
+                const updateCursorStyle = () => {
+                    const canvas = eraserCanvasRef.current;
+                    if (!canvas || !eraserMode) {
+                        setEraserCursorStyle('crosshair');
+                        return;
+                    }
+                    
+                    const rect = canvas.getBoundingClientRect();
+                    if (rect.width === 0 || canvas.width === 0) {
+                        setEraserCursorStyle('crosshair');
+                        return;
+                    }
+                    
+                    const scaleX = rect.width / canvas.width;
+                    const displayBrushSize = Math.round(brushSize * scaleX);
+                    const diameter = displayBrushSize * 2;
+                    const cursorSvg = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${diameter}" height="${diameter}" viewBox="0 0 ${diameter} ${diameter}"><circle cx="${displayBrushSize}" cy="${displayBrushSize}" r="${displayBrushSize - 1}" fill="none" stroke="white" stroke-width="2"/><circle cx="${displayBrushSize}" cy="${displayBrushSize}" r="${displayBrushSize - 1}" fill="none" stroke="black" stroke-width="1"/></svg>') ${displayBrushSize} ${displayBrushSize}, crosshair`;
+                    setEraserCursorStyle(cursorSvg);
+                };
+                
+                if (eraserMode) {
+                    // Update immediately
+                    updateCursorStyle();
+                    
+                    // Also update on window resize
+                    window.addEventListener('resize', updateCursorStyle);
+                    return () => window.removeEventListener('resize', updateCursorStyle);
+                }
+            }, [brushSize, eraserMode]);
             
             const handleEraserMouseDown = (e) => {
                 if (!eraserMode || !eraserCanvasRef.current) return;
@@ -4551,16 +4602,7 @@
                                                         onTouchCancel={handleEraserTouchEnd}
                                                         className="max-w-full"
                                                         style={{
-                                                            cursor: (() => {
-                                                                // Calculate the display size of the brush by accounting for canvas scaling
-                                                                const canvas = eraserCanvasRef.current;
-                                                                if (!canvas) return 'crosshair';
-                                                                const rect = canvas.getBoundingClientRect();
-                                                                const scaleX = rect.width / canvas.width;
-                                                                const displayBrushSize = Math.round(brushSize * scaleX);
-                                                                const diameter = displayBrushSize * 2;
-                                                                return `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="${diameter}" height="${diameter}" viewBox="0 0 ${diameter} ${diameter}"><circle cx="${displayBrushSize}" cy="${displayBrushSize}" r="${displayBrushSize - 1}" fill="none" stroke="white" stroke-width="2"/><circle cx="${displayBrushSize}" cy="${displayBrushSize}" r="${displayBrushSize - 1}" fill="none" stroke="black" stroke-width="1"/></svg>') ${displayBrushSize} ${displayBrushSize}, crosshair`;
-                                                            })(),
+                                                            cursor: eraserCursorStyle,
                                                             touchAction: 'none' // Prevent default touch behaviors
                                                         }}
                                                     />
@@ -7478,6 +7520,16 @@
                                                         }
                                                     }
                                                     
+                                                    // Capture preprocessed image if available
+                                                    let preprocessedImage = null;
+                                                    if (preprocessCanvasRef.current && preprocessedMat && !preprocessedMat.isDeleted()) {
+                                                        try {
+                                                            preprocessedImage = preprocessCanvasRef.current.toDataURL('image/png');
+                                                        } catch (err) {
+                                                            console.warn('Could not capture preprocessed image:', err);
+                                                        }
+                                                    }
+                                                    
                                                     const hkiData = {
                                                         version: '1.0',
                                                         created: new Date().toISOString(),
@@ -7487,6 +7539,7 @@
                                                         inscriptionNotes: inscriptionNotes || '',
                                                         location: locationData,
                                                         image: image,
+                                                        preprocessedImage: preprocessedImage,
                                                         preprocessing: preprocessing,
                                                         recognitionResults: recognitionResults,
                                                         readingOrder: readingOrder,

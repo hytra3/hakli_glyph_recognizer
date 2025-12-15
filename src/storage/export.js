@@ -214,6 +214,10 @@ const ExportUtils = {
 
     /**
      * Export HTML report
+     * NOTE: This is a simplified version. The main index.html has an enhanced version
+     * with source images grid (original + preprocessed thumbnails), collapsible sections,
+     * and better styling. Consider using that version or updating this to match.
+     * 
      * @param {Object} state - Application state
      * @returns {boolean} Success status
      */
@@ -221,12 +225,23 @@ const ExportUtils = {
         try {
             const {
                 recognitionResults, validations, image, displayImage,
-                translationEnglish, translationArabic, currentInscriptionId
+                translationEnglish, translationArabic, currentInscriptionId,
+                preprocessCanvasRef, preprocessedMat
             } = state;
 
             if (!recognitionResults || recognitionResults.length === 0) {
                 alert('❌ No data to export');
                 return false;
+            }
+            
+            // Capture preprocessed image if available
+            let preprocessedImageDataUrl = null;
+            if (preprocessCanvasRef && preprocessCanvasRef.current && preprocessedMat && !preprocessedMat.isDeleted()) {
+                try {
+                    preprocessedImageDataUrl = preprocessCanvasRef.current.toDataURL('image/png');
+                } catch (err) {
+                    console.warn('Could not capture preprocessed image:', err);
+                }
             }
 
             const transcription = Reading.getEnhancedTranscription(state);
@@ -236,6 +251,24 @@ const ExportUtils = {
                 correct: Object.values(validations).filter(v => v.isCorrect).length,
                 avgConfidence: (recognitionResults.reduce((sum, r) => sum + r.confidence, 0) / recognitionResults.length * 100).toFixed(1)
             };
+            
+            // Build source images grid HTML
+            let sourceImagesHtml = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0;">
+                    <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px;">
+                        <img src="${image}" alt="Original" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;">
+                        <div style="font-size: 12px; font-weight: 600; color: #6b7280; text-align: center; margin-top: 8px;">📷 Original Image</div>
+                    </div>`;
+            
+            if (preprocessedImageDataUrl) {
+                sourceImagesHtml += `
+                    <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px;">
+                        <img src="${preprocessedImageDataUrl}" alt="Preprocessed" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;">
+                        <div style="font-size: 12px; font-weight: 600; color: #6b7280; text-align: center; margin-top: 8px;">⚙️ Preprocessed Image</div>
+                    </div>`;
+            }
+            
+            sourceImagesHtml += '</div>';
 
             const html = `<!DOCTYPE html>
 <html lang="en">
@@ -288,6 +321,11 @@ const ExportUtils = {
                 <div class="stat-label">Avg Confidence</div>
             </div>
         </div>
+    </div>
+    
+    <div class="section">
+        <h2>🖼️ Source Images</h2>
+        ${sourceImagesHtml}
     </div>
 
     <div class="section">
