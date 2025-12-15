@@ -226,12 +226,22 @@ const ExportUtils = {
             const {
                 recognitionResults, validations, image, displayImage,
                 translationEnglish, translationArabic, currentInscriptionId,
-                preprocessCanvasRef, preprocessedMat
+                preprocessCanvasRef, preprocessedMat, originalCanvasRef, originalMat
             } = state;
 
             if (!recognitionResults || recognitionResults.length === 0) {
                 alert('❌ No data to export');
                 return false;
+            }
+            
+            // Capture original canvas (colored) image if available
+            let originalCanvasImageUrl = image; // fallback to image state
+            if (originalCanvasRef && originalCanvasRef.current && originalMat && !originalMat.isDeleted()) {
+                try {
+                    originalCanvasImageUrl = originalCanvasRef.current.toDataURL('image/png');
+                } catch (err) {
+                    console.warn('Could not capture original canvas image:', err);
+                }
             }
             
             // Capture preprocessed image if available
@@ -256,7 +266,7 @@ const ExportUtils = {
             let sourceImagesHtml = `
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0;">
                     <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px;">
-                        <img src="${image}" alt="Original" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;">
+                        <img src="${originalCanvasImageUrl}" alt="Original" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;">
                         <div style="font-size: 12px; font-weight: 600; color: #6b7280; text-align: center; margin-top: 8px;">📷 Original Image</div>
                     </div>`;
             
@@ -276,6 +286,7 @@ const ExportUtils = {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hakli Inscription Report - ${currentInscriptionId || 'Inscription'}</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%235d4e6d'/><text x='50' y='70' font-size='60' text-anchor='middle' fill='white' font-family='serif'>𐩠</text></svg>">
     <style>
         body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
         .header { background: #1f2937; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }

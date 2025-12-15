@@ -2765,6 +2765,16 @@
                 const annotatedImageDataUrl = canvas.toDataURL();
                 const originalImageDataUrl = image;
                 
+                // Capture original canvas (colored) image if available
+                let originalCanvasImageUrl = originalImageDataUrl; // fallback to image state
+                if (originalCanvasRef.current && originalMat && !originalMat.isDeleted()) {
+                    try {
+                        originalCanvasImageUrl = originalCanvasRef.current.toDataURL('image/png');
+                    } catch (err) {
+                        console.warn('Could not capture original canvas image:', err);
+                    }
+                }
+                
                 // Capture preprocessed image if available
                 let preprocessedImageDataUrl = null;
                 if (preprocessCanvasRef.current && preprocessedMat && !preprocessedMat.isDeleted()) {
@@ -2790,7 +2800,7 @@
 
                 const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
                 iframeDoc.open();
-                iframeDoc.write('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body></body></html>');
+                iframeDoc.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'><rect width=\'100\' height=\'100\' fill=\'%235d4e6d\'/><text x=\'50\' y=\'70\' font-size=\'60\' text-anchor=\'middle\' fill=\'white\' font-family=\'serif\'>𐩠</text></svg>"></head><body></body></html>');
                 iframeDoc.close();
 
                 // Build document structure
@@ -2813,7 +2823,7 @@
                 imageSection.className = 'section';
                 
                 // Build source images grid HTML
-                let sourceImagesHtml = '<div class="source-images-grid"><div class="source-image-card"><img src="' + originalImageDataUrl + '" alt="Original image"><div class="source-image-label">📷 Original Image</div></div>';
+                let sourceImagesHtml = '<div class="source-images-grid"><div class="source-image-card"><img src="' + originalCanvasImageUrl + '" alt="Original image"><div class="source-image-label">📷 Original Image</div></div>';
                 if (preprocessedImageDataUrl) {
                     sourceImagesHtml += '<div class="source-image-card"><img src="' + preprocessedImageDataUrl + '" alt="Preprocessed image"><div class="source-image-label">⚙️ Preprocessed Image</div></div>';
                 }
@@ -4616,14 +4626,14 @@
                                                     <input
                                                         type="range"
                                                         min="5"
-                                                        max="50"
+                                                        max="100"
                                                         value={brushSize}
                                                         onChange={(e) => setBrushSize(parseInt(e.target.value))}
                                                         className="w-full"
                                                     />
                                                     <div className="flex justify-between text-xs text-gray-500 mt-1">
                                                         <span>Fine (5px)</span>
-                                                        <span>Large (50px)</span>
+                                                        <span>Large (100px)</span>
                                                     </div>
                                                 </div>
                                                 
