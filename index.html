@@ -248,6 +248,7 @@
             const [equivalenceChart, setEquivalenceChart] = useState(null);
             const [chartLoadStatus, setChartLoadStatus] = useState('not-loaded');
             const [loadedGlyphImages, setLoadedGlyphImages] = useState({});
+            const [glyphThumbnails, setGlyphThumbnails] = useState({}); // Separate cache for thumbnail URLs
             const [manualDetectionMode, setManualDetectionMode] = useState(false);
             const [isDrawing, setIsDrawing] = useState(false);
             const [drawStart, setDrawStart] = useState(null);
@@ -2216,14 +2217,21 @@
                 const img = new Image();
                 img.onload = () => {
                     const newCache = { ...loadedGlyphImages };
+                    const newThumbnails = { ...glyphThumbnails };
                     if (templateType === 'primary') {
-                        newCache[glyph.id] = img;
+                        newCache[glyph.id] = img; // For OpenCV
+                        newThumbnails[glyph.id] = img.src; // For display
                     } else if (templateType === 'variant') {
-                        newCache[`${glyph.id}_variant_${glyph.images.variants.length - 1}`] = img;
+                        const key = `${glyph.id}_variant_${glyph.images.variants.length - 1}`;
+                        newCache[key] = img;
+                        newThumbnails[key] = img.src;
                     } else if (templateType === 'example') {
-                        newCache[`${glyph.id}_example_${glyph.images.examples.length - 1}`] = img;
+                        const key = `${glyph.id}_example_${glyph.images.examples.length - 1}`;
+                        newCache[key] = img;
+                        newThumbnails[key] = img.src;
                     }
                     setLoadedGlyphImages(newCache);
+                    setGlyphThumbnails(newThumbnails);
                 };
                 img.src = imageDataUrl;
 
@@ -3915,7 +3923,8 @@
                         .then(response => response.json())
                         .then(chartData => {
                             setEquivalenceChart(chartData);
-                            const imageCache = {};
+                            const imageCache = {}; // For OpenCV (HTMLImageElement objects)
+                            const thumbnailCache = {}; // For display (src URLs)
                             const loadPromises = [];
 
                             // Count total images to load
@@ -3939,7 +3948,8 @@
                                     const img = new Image();
                                     img.crossOrigin = 'anonymous';
                                     img.onload = () => {
-                                        imageCache[key] = img;
+                                        imageCache[key] = img; // Store HTMLImageElement for OpenCV
+                                        thumbnailCache[key] = img.src; // Store src URL for display
                                         loadedCount++;
                                         // Only update progress every N images to reduce re-renders
                                         if (loadedCount % updateInterval === 0 || loadedCount === totalImagesToLoad || loadedCount === 1) {
@@ -3985,7 +3995,8 @@
 
                             Promise.all(loadPromises).then(() => {
                                 console.log(`✅ Loaded ${Object.keys(imageCache).length} images for ${chartData.glyphs.length} glyphs`);
-                                setLoadedGlyphImages(imageCache);
+                                setLoadedGlyphImages(imageCache); // For OpenCV
+                                setGlyphThumbnails(thumbnailCache); // For display
                                 setChartLoadStatus('loaded');
                                 setImageLoadingProgress({ loaded: 0, total: 0 }); // Reset
                                 
@@ -4005,7 +4016,8 @@
                                 if (lazyLoadPromises.length > 0) {
                                     console.log(`🔄 Loading ${lazyLoadPromises.length} example images in background...`);
                                     Promise.all(lazyLoadPromises).then(() => {
-                                        setLoadedGlyphImages(prev => ({...prev, ...imageCache}));
+                                        setLoadedGlyphImages(prev => ({...prev, ...imageCache})); // For OpenCV
+                                        setGlyphThumbnails(prev => ({...prev, ...thumbnailCache})); // For display
                                         console.log(`✅ All example images loaded`);
                                     });
                                 }
@@ -6008,9 +6020,9 @@
                                                 <div className="flex-1">
                                                     <div className="font-medium text-gray-900 flex items-center gap-2">
                                                         {/* Glyph thumbnail */}
-                                                        {loadedGlyphImages[result.glyph.id] && (
+                                                        {glyphThumbnails[result.glyph.id] && (
                                                             <img 
-                                                                src={loadedGlyphImages[result.glyph.id]} 
+                                                                src={glyphThumbnails[result.glyph.id]} 
                                                                 alt={result.glyph.name}
                                                                 className="w-10 h-10 object-contain border-2 border-stone rounded bg-white flex-shrink-0"
                                                                 title={`Template for ${result.glyph.name}`}
@@ -6062,9 +6074,9 @@
                                                     <div className="space-y-1">
                                                         {/* Debug: Log glyph IDs and available images */}
                                                         {(() => {
-                                                            if (!loadedGlyphImages[result.glyph.id]) {
+                                                            if (!glyphThumbnails[result.glyph.id]) {
                                                                 console.warn(`Missing thumbnail for ${result.glyph.name} (ID: ${result.glyph.id})`);
-                                                                console.log('Available glyph IDs:', Object.keys(loadedGlyphImages).slice(0, 10));
+                                                                console.log('Available thumbnail IDs:', Object.keys(glyphThumbnails).slice(0, 10));
                                                             }
                                                             return null;
                                                         })()}
@@ -6074,9 +6086,9 @@
                                                             disabled
                                                         >
                                                             <span className="text-green-600">✓</span>
-                                                            {loadedGlyphImages[result.glyph.id] ? (
+                                                            {glyphThumbnails[result.glyph.id] ? (
                                                                 <img 
-                                                                    src={loadedGlyphImages[result.glyph.id]} 
+                                                                    src={glyphThumbnails[result.glyph.id]} 
                                                                     alt={result.glyph.name}
                                                                     className="w-8 h-8 object-contain border border-green-500 rounded bg-white flex-shrink-0"
                                                                 />
@@ -6127,9 +6139,9 @@
                                                                 className="flex items-center gap-2 text-xs w-full hover:bg-orange-100 p-1 rounded cursor-pointer"
                                                             >
                                                                 <span className="text-gray-400">○</span>
-                                                                {loadedGlyphImages[alt.glyph.id] ? (
+                                                                {glyphThumbnails[alt.glyph.id] ? (
                                                                     <img 
-                                                                        src={loadedGlyphImages[alt.glyph.id]} 
+                                                                        src={glyphThumbnails[alt.glyph.id]} 
                                                                         alt={alt.glyph.name}
                                                                         className="w-8 h-8 object-contain border border-gray-300 rounded bg-white flex-shrink-0"
                                                                     />
