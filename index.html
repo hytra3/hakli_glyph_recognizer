@@ -2265,11 +2265,30 @@
                             return;
                         }
 
-                        // Use the erased canvas if available (from modal), otherwise generate thumbnail
+                        // Generate thumbnail from the erased canvas if available, otherwise from original with exclusions
                         let thumbnail;
                         if (excludeRegionCanvasRef.current) {
-                            thumbnail = excludeRegionCanvasRef.current.toDataURL();
+                            // Crop the erased canvas to show only the new bounds
+                            const erasedCanvas = excludeRegionCanvasRef.current;
+                            const cropCanvas = document.createElement('canvas');
+                            cropCanvas.width = newBounds.width;
+                            cropCanvas.height = newBounds.height;
+                            const ctx = cropCanvas.getContext('2d');
+                            
+                            // Calculate relative position within the original region
+                            const relativeX = minX;
+                            const relativeY = minY;
+                            
+                            // Draw the cropped portion
+                            ctx.drawImage(
+                                erasedCanvas,
+                                relativeX, relativeY, newBounds.width, newBounds.height,
+                                0, 0, newBounds.width, newBounds.height
+                            );
+                            
+                            thumbnail = cropCanvas.toDataURL();
                         } else {
+                            // Fallback: generate from original image with exclusions
                             thumbnail = extractRegionThumbnailWithExclusions(tempImg, { bounds: newBounds }, excludeRegions, originalBounds);
                         }
 
@@ -6728,10 +6747,12 @@
                                                     // Start exclude mode for this specific detection
                                                     setExcludeMode(originalIndex);
                                                     setExcludeRegions([]);
-                                                    // Enable eraser mode if not already active
-                                                    if (!eraserMode) {
-                                                        toggleEraserMode();
-                                                    }
+                                                    // Enable eraser mode with delay to ensure modal is rendered
+                                                    setTimeout(() => {
+                                                        if (!eraserMode) {
+                                                            toggleEraserMode();
+                                                        }
+                                                    }, 150);
                                                 }} 
                                                 className={`text-sm ${excludeMode === originalIndex ? 'text-red-600' : 'text-ancient-purple hover:text-ancient-purple'}`}
                                                 title="Use eraser to exclude unwanted portions"
