@@ -7748,6 +7748,115 @@
                                                                 </div>
                                                             )}
                                                         </div>
+                                                        
+                                                        {/* Detected Glyphs from Current Recognition */}
+                                                        {(() => {
+                                                            const detectedGlyphs = recognitionResults.filter(r => r.glyph.id === glyph.id);
+                                                            if (detectedGlyphs.length === 0 || !preprocessCanvasRef.current) return null;
+                                                            
+                                                            return (
+                                                                <div className="mt-3 pt-3 border-t border-gray-200">
+                                                                    <div className="flex items-center gap-2 mb-2">
+                                                                        <h4 className="text-sm font-semibold text-gray-700">
+                                                                            🎯 Detected in Current Image ({detectedGlyphs.length})
+                                                                        </h4>
+                                                                        <span className="text-xs text-blue-600">
+                                                                            From recognition
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {detectedGlyphs.map((detection, idx) => {
+                                                                            const regionDataUrl = detection.thumbnail || (() => {
+                                                                                // Fallback: extract from preprocessed canvas
+                                                                                const canvas = document.createElement('canvas');
+                                                                                const bounds = detection.position;
+                                                                                canvas.width = bounds.width;
+                                                                                canvas.height = bounds.height;
+                                                                                const ctx = canvas.getContext('2d');
+                                                                                ctx.drawImage(
+                                                                                    preprocessCanvasRef.current,
+                                                                                    bounds.x, bounds.y, bounds.width, bounds.height,
+                                                                                    0, 0, bounds.width, bounds.height
+                                                                                );
+                                                                                return canvas.toDataURL();
+                                                                            })();
+                                                                            
+                                                                            return (
+                                                                                <div key={idx} className="relative group">
+                                                                                    <img 
+                                                                                        src={regionDataUrl}
+                                                                                        alt={`Detected ${idx + 1}`}
+                                                                                        className="h-16 border-2 border-blue-300 rounded hover:border-blue-500 transition-colors bg-white p-1"
+                                                                                    />
+                                                                                    {/* Add buttons on hover */}
+                                                                                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity rounded flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
+                                                                                        <button
+                                                                                            onClick={() => {
+                                                                                                const updated = { ...equivalenceChart };
+                                                                                                const glyphIndex = updated.glyphs.findIndex(g => g.id === glyph.id);
+                                                                                                if (glyphIndex >= 0) {
+                                                                                                    if (!updated.glyphs[glyphIndex].images.variants) {
+                                                                                                        updated.glyphs[glyphIndex].images.variants = [];
+                                                                                                    }
+                                                                                                    updated.glyphs[glyphIndex].images.variants.push(regionDataUrl);
+                                                                                                    const newIdx = updated.glyphs[glyphIndex].images.variants.length - 1;
+                                                                                                    setEquivalenceChart(updated);
+                                                                                                    
+                                                                                                    const img = new Image();
+                                                                                                    img.onload = () => {
+                                                                                                        const key = `${glyph.id}_variant_${newIdx}`;
+                                                                                                        setLoadedGlyphImages(prev => ({...prev, [key]: img}));
+                                                                                                        setGlyphThumbnails(prev => ({...prev, [key]: img.src}));
+                                                                                                    };
+                                                                                                    img.src = regionDataUrl;
+                                                                                                    
+                                                                                                    alert(`✅ Added as variant`);
+                                                                                                }
+                                                                                            }}
+                                                                                            className="px-1.5 py-0.5 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+                                                                                            title="Add as variant"
+                                                                                        >
+                                                                                            ➕V
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => {
+                                                                                                const updated = { ...equivalenceChart };
+                                                                                                const glyphIndex = updated.glyphs.findIndex(g => g.id === glyph.id);
+                                                                                                if (glyphIndex >= 0) {
+                                                                                                    if (!updated.glyphs[glyphIndex].images.examples) {
+                                                                                                        updated.glyphs[glyphIndex].images.examples = [];
+                                                                                                    }
+                                                                                                    updated.glyphs[glyphIndex].images.examples.push(regionDataUrl);
+                                                                                                    const newIdx = updated.glyphs[glyphIndex].images.examples.length - 1;
+                                                                                                    setEquivalenceChart(updated);
+                                                                                                    
+                                                                                                    const img = new Image();
+                                                                                                    img.onload = () => {
+                                                                                                        const key = `${glyph.id}_example_${newIdx}`;
+                                                                                                        setLoadedGlyphImages(prev => ({...prev, [key]: img}));
+                                                                                                        setGlyphThumbnails(prev => ({...prev, [key]: img.src}));
+                                                                                                    };
+                                                                                                    img.src = regionDataUrl;
+                                                                                                    
+                                                                                                    alert(`✅ Added as example`);
+                                                                                                }
+                                                                                            }}
+                                                                                            className="px-1.5 py-0.5 bg-purple-500 text-white text-xs rounded hover:bg-purple-600"
+                                                                                            title="Add as example"
+                                                                                        >
+                                                                                            ➕E
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                    <p className="text-xs text-gray-500 mt-2">
+                                                                        💡 Hover over detected glyphs to add them as variants (V) or examples (E)
+                                                                    </p>
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </div>
                                                 </div>
                                             </div>
@@ -7776,6 +7885,86 @@
                                         >
                                             💾 Download Updated JSON
                                         </button>
+                                        <label
+                                            htmlFor="upload-json-file"
+                                            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold cursor-pointer flex items-center gap-2"
+                                            title="Upload a JSON file to reload the glyph database"
+                                        >
+                                            📤 Upload JSON
+                                        </label>
+                                        <input
+                                            type="file"
+                                            id="upload-json-file"
+                                            accept=".json,application/json"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files[0];
+                                                if (file) {
+                                                    const reader = new FileReader();
+                                                    reader.onload = (ev) => {
+                                                        try {
+                                                            const jsonData = JSON.parse(ev.target.result);
+                                                            
+                                                            // Validate it's a glyph chart
+                                                            if (!jsonData.glyphs || !Array.isArray(jsonData.glyphs)) {
+                                                                alert('⚠️ Invalid JSON format. Must contain a "glyphs" array.');
+                                                                return;
+                                                            }
+                                                            
+                                                            // Set the new chart
+                                                            setEquivalenceChart(jsonData);
+                                                            setChartLoadStatus('loaded');
+                                                            
+                                                            // Reload all images
+                                                            const imageCache = {};
+                                                            const thumbnailCache = {};
+                                                            const loadPromises = [];
+                                                            
+                                                            const createImageLoader = (url, key) => {
+                                                                return new Promise((resolve) => {
+                                                                    const img = new Image();
+                                                                    img.crossOrigin = 'anonymous';
+                                                                    img.onload = () => {
+                                                                        imageCache[key] = img;
+                                                                        thumbnailCache[key] = img.src;
+                                                                        resolve();
+                                                                    };
+                                                                    img.onerror = () => resolve();
+                                                                    img.src = url;
+                                                                });
+                                                            };
+                                                            
+                                                            for (const glyph of jsonData.glyphs) {
+                                                                if (glyph.images?.primary) {
+                                                                    loadPromises.push(createImageLoader(glyph.images.primary, glyph.id));
+                                                                }
+                                                                if (glyph.images?.variants) {
+                                                                    glyph.images.variants.forEach((url, idx) => {
+                                                                        loadPromises.push(createImageLoader(url, `${glyph.id}_variant_${idx}`));
+                                                                    });
+                                                                }
+                                                                if (glyph.images?.examples) {
+                                                                    glyph.images.examples.forEach((url, idx) => {
+                                                                        loadPromises.push(createImageLoader(url, `${glyph.id}_example_${idx}`));
+                                                                    });
+                                                                }
+                                                            }
+                                                            
+                                                            Promise.all(loadPromises).then(() => {
+                                                                setLoadedGlyphImages(imageCache);
+                                                                setGlyphThumbnails(thumbnailCache);
+                                                                alert(`✅ Loaded ${jsonData.glyphs.length} glyphs with ${Object.keys(imageCache).length} images`);
+                                                            });
+                                                            
+                                                        } catch (error) {
+                                                            alert(`❌ Error parsing JSON: ${error.message}`);
+                                                        }
+                                                    };
+                                                    reader.readAsText(file);
+                                                }
+                                                e.target.value = ''; // Reset input
+                                            }}
+                                        />
                                         <button
                                             onClick={() => setShowChartViewer(false)}
                                             className="flex-1 px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3e54] font-semibold"
