@@ -7417,6 +7417,46 @@
                                                                 ) : (
                                                                     <span className="text-xs text-rust">❌ Not loaded</span>
                                                                 )}
+                                                                {/* Replace Primary Button */}
+                                                                <label 
+                                                                    htmlFor={`replace-primary-${glyph.id}`}
+                                                                    className="ml-auto px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 cursor-pointer"
+                                                                    title="Replace primary template"
+                                                                >
+                                                                    🔄 Replace
+                                                                </label>
+                                                                <input
+                                                                    type="file"
+                                                                    id={`replace-primary-${glyph.id}`}
+                                                                    accept="image/*"
+                                                                    className="hidden"
+                                                                    onChange={(e) => {
+                                                                        const file = e.target.files[0];
+                                                                        if (file) {
+                                                                            const reader = new FileReader();
+                                                                            reader.onload = (ev) => {
+                                                                                const dataUrl = ev.target.result;
+                                                                                const updated = { ...equivalenceChart };
+                                                                                const glyphIndex = updated.glyphs.findIndex(g => g.id === glyph.id);
+                                                                                if (glyphIndex >= 0) {
+                                                                                    updated.glyphs[glyphIndex].images.primary = dataUrl;
+                                                                                    setEquivalenceChart(updated);
+                                                                                    
+                                                                                    // Update caches
+                                                                                    const img = new Image();
+                                                                                    img.onload = () => {
+                                                                                        setLoadedGlyphImages(prev => ({...prev, [glyph.id]: img}));
+                                                                                        setGlyphThumbnails(prev => ({...prev, [glyph.id]: img.src}));
+                                                                                    };
+                                                                                    img.src = dataUrl;
+                                                                                    
+                                                                                    alert(`✅ Replaced primary template for "${glyph.name}"`);
+                                                                                }
+                                                                            };
+                                                                            reader.readAsDataURL(file);
+                                                                        }
+                                                                    }}
+                                                                />
                                                             </div>
                                                             <div className="flex flex-wrap gap-2">
                                                                 {primaryLoaded ? (
@@ -7437,74 +7477,277 @@
                                                         </div>
 
                                                         {/* Variants */}
-                                                        {variantCount > 0 && (
-                                                            <div className="mb-3">
-                                                                <div className="flex items-center gap-2 mb-2">
-                                                                    <h4 className="text-sm font-semibold text-gray-700">
-                                                                        Variants ({variantsLoaded}/{variantCount})
-                                                                    </h4>
-                                                                    {variantsLoaded === variantCount ? (
-                                                                        <span className="text-xs text-patina">✅ All loaded</span>
-                                                                    ) : (
-                                                                        <span className="text-xs text-orange-600">⚠️ {variantCount - variantsLoaded} missing</span>
-                                                                    )}
-                                                                </div>
+                                                        <div className="mb-3">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <h4 className="text-sm font-semibold text-gray-700">
+                                                                    Variants ({variantCount})
+                                                                </h4>
+                                                                {variantsLoaded === variantCount && variantCount > 0 ? (
+                                                                    <span className="text-xs text-patina">✅ All loaded</span>
+                                                                ) : variantCount > 0 ? (
+                                                                    <span className="text-xs text-orange-600">⚠️ {variantCount - variantsLoaded} missing</span>
+                                                                ) : null}
+                                                                {/* Add Variant Button */}
+                                                                <label 
+                                                                    htmlFor={`add-variant-${glyph.id}`}
+                                                                    className="ml-auto px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 cursor-pointer"
+                                                                    title="Add a variant template"
+                                                                >
+                                                                    ➕ Add Variant
+                                                                </label>
+                                                                <input
+                                                                    type="file"
+                                                                    id={`add-variant-${glyph.id}`}
+                                                                    accept="image/*"
+                                                                    className="hidden"
+                                                                    onChange={(e) => {
+                                                                        const file = e.target.files[0];
+                                                                        if (file) {
+                                                                            const reader = new FileReader();
+                                                                            reader.onload = (ev) => {
+                                                                                const dataUrl = ev.target.result;
+                                                                                const updated = { ...equivalenceChart };
+                                                                                const glyphIndex = updated.glyphs.findIndex(g => g.id === glyph.id);
+                                                                                if (glyphIndex >= 0) {
+                                                                                    if (!updated.glyphs[glyphIndex].images.variants) {
+                                                                                        updated.glyphs[glyphIndex].images.variants = [];
+                                                                                    }
+                                                                                    updated.glyphs[glyphIndex].images.variants.push(dataUrl);
+                                                                                    const newIdx = updated.glyphs[glyphIndex].images.variants.length - 1;
+                                                                                    setEquivalenceChart(updated);
+                                                                                    
+                                                                                    // Update caches
+                                                                                    const img = new Image();
+                                                                                    img.onload = () => {
+                                                                                        const key = `${glyph.id}_variant_${newIdx}`;
+                                                                                        setLoadedGlyphImages(prev => ({...prev, [key]: img}));
+                                                                                        setGlyphThumbnails(prev => ({...prev, [key]: img.src}));
+                                                                                    };
+                                                                                    img.src = dataUrl;
+                                                                                    
+                                                                                    alert(`✅ Added variant to "${glyph.name}"`);
+                                                                                }
+                                                                            };
+                                                                            reader.readAsDataURL(file);
+                                                                        }
+                                                                        e.target.value = ''; // Reset input
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                            {variantCount > 0 && (
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {glyph.images.variants.map((_, idx) => {
                                                                         const variantImg = loadedGlyphImages[`${glyph.id}_variant_${idx}`];
-                                                                        return variantImg ? (
+                                                                        return (
                                                                             <div key={idx} className="relative group">
-                                                                                <img 
-                                                                                    src={variantImg.src} 
-                                                                                    alt={`Variant ${idx + 1}: ${glyph.name}`}
-                                                                                    className="h-16 border-2 border-gray-300 rounded hover:border-ancient-purple transition-colors bg-white p-1"
-                                                                                />
-                                                                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div key={idx} className="h-16 w-16 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
-                                                                                V{idx + 1}
+                                                                                {variantImg ? (
+                                                                                    <>
+                                                                                        <img 
+                                                                                            src={variantImg.src} 
+                                                                                            alt={`Variant ${idx + 1}: ${glyph.name}`}
+                                                                                            className="h-16 border-2 border-gray-300 rounded hover:border-ancient-purple transition-colors bg-white p-1"
+                                                                                        />
+                                                                                        {/* Action buttons on hover */}
+                                                                                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity rounded flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
+                                                                                            <button
+                                                                                                onClick={() => {
+                                                                                                    if (confirm(`Set variant ${idx + 1} as primary template for "${glyph.name}"?`)) {
+                                                                                                        const updated = { ...equivalenceChart };
+                                                                                                        const glyphIndex = updated.glyphs.findIndex(g => g.id === glyph.id);
+                                                                                                        if (glyphIndex >= 0) {
+                                                                                                            // Swap: variant becomes primary, old primary becomes variant
+                                                                                                            const oldPrimary = updated.glyphs[glyphIndex].images.primary;
+                                                                                                            updated.glyphs[glyphIndex].images.primary = updated.glyphs[glyphIndex].images.variants[idx];
+                                                                                                            updated.glyphs[glyphIndex].images.variants[idx] = oldPrimary;
+                                                                                                            setEquivalenceChart(updated);
+                                                                                                            
+                                                                                                            // Update caches
+                                                                                                            const primaryImg = new Image();
+                                                                                                            primaryImg.onload = () => {
+                                                                                                                setLoadedGlyphImages(prev => ({...prev, [glyph.id]: primaryImg}));
+                                                                                                                setGlyphThumbnails(prev => ({...prev, [glyph.id]: primaryImg.src}));
+                                                                                                            };
+                                                                                                            primaryImg.src = updated.glyphs[glyphIndex].images.primary;
+                                                                                                            
+                                                                                                            const variantImg = new Image();
+                                                                                                            variantImg.onload = () => {
+                                                                                                                const key = `${glyph.id}_variant_${idx}`;
+                                                                                                                setLoadedGlyphImages(prev => ({...prev, [key]: variantImg}));
+                                                                                                                setGlyphThumbnails(prev => ({...prev, [key]: variantImg.src}));
+                                                                                                            };
+                                                                                                            variantImg.src = updated.glyphs[glyphIndex].images.variants[idx];
+                                                                                                            
+                                                                                                            alert(`⭐ Set as primary template`);
+                                                                                                        }
+                                                                                                    }
+                                                                                                }}
+                                                                                                className="px-1.5 py-0.5 bg-amber-500 text-white text-xs rounded hover:bg-amber-600"
+                                                                                                title="Set as primary"
+                                                                                            >
+                                                                                                ⭐
+                                                                                            </button>
+                                                                                            <button
+                                                                                                onClick={() => {
+                                                                                                    if (confirm(`Delete variant ${idx + 1}?`)) {
+                                                                                                        const updated = { ...equivalenceChart };
+                                                                                                        const glyphIndex = updated.glyphs.findIndex(g => g.id === glyph.id);
+                                                                                                        if (glyphIndex >= 0) {
+                                                                                                            updated.glyphs[glyphIndex].images.variants.splice(idx, 1);
+                                                                                                            setEquivalenceChart(updated);
+                                                                                                            
+                                                                                                            // Remove from caches
+                                                                                                            const key = `${glyph.id}_variant_${idx}`;
+                                                                                                            setLoadedGlyphImages(prev => {
+                                                                                                                const newCache = {...prev};
+                                                                                                                delete newCache[key];
+                                                                                                                return newCache;
+                                                                                                            });
+                                                                                                            setGlyphThumbnails(prev => {
+                                                                                                                const newCache = {...prev};
+                                                                                                                delete newCache[key];
+                                                                                                                return newCache;
+                                                                                                            });
+                                                                                                            
+                                                                                                            alert(`🗑️ Deleted variant`);
+                                                                                                        }
+                                                                                                    }
+                                                                                                }}
+                                                                                                className="px-1.5 py-0.5 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                                                                                                title="Delete variant"
+                                                                                            >
+                                                                                                🗑️
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <div className="h-16 w-16 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
+                                                                                        V{idx + 1}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         );
                                                                     })}
                                                                 </div>
-                                                            </div>
-                                                        )}
+                                                            )}
+                                                        </div>
 
                                                         {/* Examples */}
-                                                        {exampleCount > 0 && (
-                                                            <div>
-                                                                <div className="flex items-center gap-2 mb-2">
-                                                                    <h4 className="text-sm font-semibold text-gray-700">
-                                                                        Examples ({examplesLoaded}/{exampleCount})
-                                                                    </h4>
-                                                                    {examplesLoaded === exampleCount ? (
-                                                                        <span className="text-xs text-patina">✅ All loaded</span>
-                                                                    ) : (
-                                                                        <span className="text-xs text-orange-600">⚠️ {exampleCount - examplesLoaded} missing</span>
-                                                                    )}
-                                                                </div>
+                                                        <div>
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <h4 className="text-sm font-semibold text-gray-700">
+                                                                    Examples ({exampleCount})
+                                                                </h4>
+                                                                {examplesLoaded === exampleCount && exampleCount > 0 ? (
+                                                                    <span className="text-xs text-patina">✅ All loaded</span>
+                                                                ) : exampleCount > 0 ? (
+                                                                    <span className="text-xs text-orange-600">⚠️ {exampleCount - examplesLoaded} missing</span>
+                                                                ) : null}
+                                                                {/* Add Example Button */}
+                                                                <label 
+                                                                    htmlFor={`add-example-${glyph.id}`}
+                                                                    className="ml-auto px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200 cursor-pointer"
+                                                                    title="Add an example from inscription"
+                                                                >
+                                                                    ➕ Add Example
+                                                                </label>
+                                                                <input
+                                                                    type="file"
+                                                                    id={`add-example-${glyph.id}`}
+                                                                    accept="image/*"
+                                                                    className="hidden"
+                                                                    onChange={(e) => {
+                                                                        const file = e.target.files[0];
+                                                                        if (file) {
+                                                                            const reader = new FileReader();
+                                                                            reader.onload = (ev) => {
+                                                                                const dataUrl = ev.target.result;
+                                                                                const updated = { ...equivalenceChart };
+                                                                                const glyphIndex = updated.glyphs.findIndex(g => g.id === glyph.id);
+                                                                                if (glyphIndex >= 0) {
+                                                                                    if (!updated.glyphs[glyphIndex].images.examples) {
+                                                                                        updated.glyphs[glyphIndex].images.examples = [];
+                                                                                    }
+                                                                                    updated.glyphs[glyphIndex].images.examples.push(dataUrl);
+                                                                                    const newIdx = updated.glyphs[glyphIndex].images.examples.length - 1;
+                                                                                    setEquivalenceChart(updated);
+                                                                                    
+                                                                                    // Update caches
+                                                                                    const img = new Image();
+                                                                                    img.onload = () => {
+                                                                                        const key = `${glyph.id}_example_${newIdx}`;
+                                                                                        setLoadedGlyphImages(prev => ({...prev, [key]: img}));
+                                                                                        setGlyphThumbnails(prev => ({...prev, [key]: img.src}));
+                                                                                    };
+                                                                                    img.src = dataUrl;
+                                                                                    
+                                                                                    alert(`✅ Added example to "${glyph.name}"`);
+                                                                                }
+                                                                            };
+                                                                            reader.readAsDataURL(file);
+                                                                        }
+                                                                        e.target.value = ''; // Reset input
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                            {exampleCount > 0 && (
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {glyph.images.examples.map((_, idx) => {
                                                                         const exampleImg = loadedGlyphImages[`${glyph.id}_example_${idx}`];
-                                                                        return exampleImg ? (
+                                                                        return (
                                                                             <div key={idx} className="relative group">
-                                                                                <img 
-                                                                                    src={exampleImg.src} 
-                                                                                    alt={`Example ${idx + 1}: ${glyph.name}`}
-                                                                                    className="h-16 border-2 border-gray-300 rounded hover:border-ancient-purple transition-colors bg-white p-1"
-                                                                                />
-                                                                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded"></div>
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div key={idx} className="h-16 w-16 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
-                                                                                E{idx + 1}
+                                                                                {exampleImg ? (
+                                                                                    <>
+                                                                                        <img 
+                                                                                            src={exampleImg.src} 
+                                                                                            alt={`Example ${idx + 1}: ${glyph.name}`}
+                                                                                            className="h-16 border-2 border-gray-300 rounded hover:border-ancient-purple transition-colors bg-white p-1"
+                                                                                        />
+                                                                                        {/* Delete button on hover */}
+                                                                                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity rounded flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                                                            <button
+                                                                                                onClick={() => {
+                                                                                                    if (confirm(`Delete example ${idx + 1}?`)) {
+                                                                                                        const updated = { ...equivalenceChart };
+                                                                                                        const glyphIndex = updated.glyphs.findIndex(g => g.id === glyph.id);
+                                                                                                        if (glyphIndex >= 0) {
+                                                                                                            updated.glyphs[glyphIndex].images.examples.splice(idx, 1);
+                                                                                                            setEquivalenceChart(updated);
+                                                                                                            
+                                                                                                            // Remove from caches
+                                                                                                            const key = `${glyph.id}_example_${idx}`;
+                                                                                                            setLoadedGlyphImages(prev => {
+                                                                                                                const newCache = {...prev};
+                                                                                                                delete newCache[key];
+                                                                                                                return newCache;
+                                                                                                            });
+                                                                                                            setGlyphThumbnails(prev => {
+                                                                                                                const newCache = {...prev};
+                                                                                                                delete newCache[key];
+                                                                                                                return newCache;
+                                                                                                            });
+                                                                                                            
+                                                                                                            alert(`🗑️ Deleted example`);
+                                                                                                        }
+                                                                                                    }
+                                                                                                }}
+                                                                                                className="px-1.5 py-0.5 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                                                                                                title="Delete example"
+                                                                                            >
+                                                                                                🗑️
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <div className="h-16 w-16 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs">
+                                                                                        E{idx + 1}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         );
                                                                     })}
                                                                 </div>
-                                                            </div>
-                                                        )}
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
