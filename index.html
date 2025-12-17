@@ -2265,7 +2265,13 @@
                             return;
                         }
 
-                        const thumbnail = extractRegionThumbnailWithExclusions(tempImg, { bounds: newBounds }, excludeRegions, originalBounds);
+                        // Use the erased canvas if available (from modal), otherwise generate thumbnail
+                        let thumbnail;
+                        if (excludeRegionCanvasRef.current) {
+                            thumbnail = excludeRegionCanvasRef.current.toDataURL();
+                        } else {
+                            thumbnail = extractRegionThumbnailWithExclusions(tempImg, { bounds: newBounds }, excludeRegions, originalBounds);
+                        }
 
                         const newDetection = {
                             glyph: { id: 'unknown', name: 'Unknown', transliteration: '?' },
@@ -3326,11 +3332,10 @@
                     applyTrim(trimMode, bounds);
                 }
 
-                // Exclude mode
-                if (excludeMode !== null && bounds.width > 10 && bounds.height > 10) {
-                    // Add to exclusion regions
-                    setExcludeRegions(prev => [...prev, bounds]);
-                }
+                // Exclude mode - DISABLED: box drawing no longer used, only eraser works
+                // if (excludeMode !== null && bounds.width > 10 && bounds.height > 10) {
+                //     setExcludeRegions(prev => [...prev, bounds]);
+                // }
 
                 setIsDrawing(false);
                 setDrawStart(null);
