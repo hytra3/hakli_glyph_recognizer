@@ -685,9 +685,11 @@
             const [eraserMode, setEraserMode] = useState(false);
             const [brushSize, setBrushSize] = useState(15);
             const [isErasing, setIsErasing] = useState(false);
+            const [isErasingExclude, setIsErasingExclude] = useState(false); // Track erasing on exclude modal canvas
             const [eraserHistory, setEraserHistory] = useState([]); // Track canvas states for undo
             const [eraserCursorStyle, setEraserCursorStyle] = useState('crosshair');
             const eraserCanvasRef = useRef(null);
+            const excludeRegionCanvasRef = useRef(null); // Canvas for erasing in exclude modal
             const preprocessCanvasRef = useRef(null);
             const originalCanvasRef = useRef(null);
             
@@ -4396,6 +4398,25 @@
                 }
             }, [showGlyphEditor]);
 
+            // Load thumbnail into exclude canvas when exclude mode opens
+            useEffect(() => {
+                if (excludeMode !== null && recognitionResults[excludeMode] && excludeRegionCanvasRef.current) {
+                    const regionIndex = recognitionResults[excludeMode].regionIndex;
+                    if (regionIndex !== undefined && isolatedGlyphs[regionIndex]?.thumbnail) {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = excludeRegionCanvasRef.current;
+                            if (!canvas) return;
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+                        };
+                        img.src = isolatedGlyphs[regionIndex].thumbnail;
+                    }
+                }
+            }, [excludeMode, recognitionResults, isolatedGlyphs]);
+
             return (
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     {/* Update Banner */}
@@ -6223,25 +6244,120 @@
                                         {recognitionResults[excludeMode].regionIndex !== undefined &&
                                             isolatedGlyphs[recognitionResults[excludeMode].regionIndex]?.thumbnail && (
                                                 <div className="flex-shrink-0">
-                                                    <div className="text-xs text-gray-600 mb-1 text-center">Current Region:</div>
-                                                    <img
-                                                        src={isolatedGlyphs[recognitionResults[excludeMode].regionIndex].thumbnail}
-                                                        alt="Current region"
-                                                        className="w-24 h-auto border-2 border-ancient-purple rounded"
-                                                    />
+                                                    <div className="text-xs text-gray-600 mb-1 text-center">Erase Here:</div>
+                                                    <div 
+                                                        className="relative border-2 border-ancient-purple rounded bg-white"
+                                                        style={{ cursor: eraserCursorStyle }}
+                                                    >
+                                                        <canvas
+                                                            ref={excludeRegionCanvasRef}
+                                                            className="max-w-[200px] h-auto"
+                                                            onMouseDown={(e) => {
+                                                                if (!excludeRegionCanvasRef.current) return;
+                                                                setIsErasingExclude(true);
+                                                                const canvas = excludeRegionCanvasRef.current;
+                                                                const rect = canvas.getBoundingClientRect();
+                                                                const scaleX = canvas.width / rect.width;
+                                                                const scaleY = canvas.height / rect.height;
+                                                                const x = (e.clientX - rect.left) * scaleX;
+                                                                const y = (e.clientY - rect.top) * scaleY;
+                                                                const ctx = canvas.getContext('2d');
+                                                                ctx.fillStyle = 'white';
+                                                                ctx.beginPath();
+                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+                                                                ctx.fill();
+                                                                
+                                                                // Track as exclusion
+                                                                const exclusionBox = {
+                                                                    x: Math.max(0, x - brushSize),
+                                                                    y: Math.max(0, y - brushSize),
+                                                                    width: brushSize * 2,
+                                                                    height: brushSize * 2
+                                                                };
+                                                                setExcludeRegions(prev => [...prev, exclusionBox]);
+                                                            }}
+                                                            onMouseMove={(e) => {
+                                                                if (!isErasingExclude || !excludeRegionCanvasRef.current) return;
+                                                                const canvas = excludeRegionCanvasRef.current;
+                                                                const rect = canvas.getBoundingClientRect();
+                                                                const scaleX = canvas.width / rect.width;
+                                                                const scaleY = canvas.height / rect.height;
+                                                                const x = (e.clientX - rect.left) * scaleX;
+                                                                const y = (e.clientY - rect.top) * scaleY;
+                                                                const ctx = canvas.getContext('2d');
+                                                                ctx.fillStyle = 'white';
+                                                                ctx.beginPath();
+                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+                                                                ctx.fill();
+                                                                
+                                                                // Track as exclusion
+                                                                const exclusionBox = {
+                                                                    x: Math.max(0, x - brushSize),
+                                                                    y: Math.max(0, y - brushSize),
+                                                                    width: brushSize * 2,
+                                                                    height: brushSize * 2
+                                                                };
+                                                                setExcludeRegions(prev => [...prev, exclusionBox]);
+                                                            }}
+                                                            onMouseUp={() => setIsErasingExclude(false)}
+                                                            onMouseLeave={() => setIsErasingExclude(false)}
+                                                            onTouchStart={(e) => {
+                                                                if (!excludeRegionCanvasRef.current) return;
+                                                                e.preventDefault();
+                                                                setIsErasingExclude(true);
+                                                                const touch = e.touches[0];
+                                                                const canvas = excludeRegionCanvasRef.current;
+                                                                const rect = canvas.getBoundingClientRect();
+                                                                const scaleX = canvas.width / rect.width;
+                                                                const scaleY = canvas.height / rect.height;
+                                                                const x = (touch.clientX - rect.left) * scaleX;
+                                                                const y = (touch.clientY - rect.top) * scaleY;
+                                                                const ctx = canvas.getContext('2d');
+                                                                ctx.fillStyle = 'white';
+                                                                ctx.beginPath();
+                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+                                                                ctx.fill();
+                                                            }}
+                                                            onTouchMove={(e) => {
+                                                                if (!isErasingExclude || !excludeRegionCanvasRef.current) return;
+                                                                e.preventDefault();
+                                                                const touch = e.touches[0];
+                                                                const canvas = excludeRegionCanvasRef.current;
+                                                                const rect = canvas.getBoundingClientRect();
+                                                                const scaleX = canvas.width / rect.width;
+                                                                const scaleY = canvas.height / rect.height;
+                                                                const x = (touch.clientX - rect.left) * scaleX;
+                                                                const y = (touch.clientY - rect.top) * scaleY;
+                                                                const ctx = canvas.getContext('2d');
+                                                                ctx.fillStyle = 'white';
+                                                                ctx.beginPath();
+                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+                                                                ctx.fill();
+                                                            }}
+                                                            onTouchEnd={() => setIsErasingExclude(false)}
+                                                        />
+                                                    </div>
+                                                    <p className="text-xs text-center text-gray-500 mt-1">or use eraser on main image</p>
                                                 </div>
                                             )}
                                     </div>
                                 </div>
 
                                 <div className="mb-4 p-4 bg-[#f5f3f0] border border-stone-light rounded-lg">
-                                    <h4 className="font-semibold text-stone-dark mb-2">🧹 How to Exclude Regions:</h4>
-                                    <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
-                                        <li><strong className="text-stone-dark">USE THE ERASER</strong> - Paint over unwanted portions of this detection on the image above</li>
-                                        <li>The <strong>purple dashed border</strong> shows which detection you're editing</li>
-                                        <li>Erased areas will be excluded from this detection only</li>
-                                        <li>When done erasing, click <strong className="text-patina">"✓ Apply Exclusions"</strong> below</li>
-                                    </ol>
+                                    <h4 className="font-semibold text-stone-dark mb-2">🧹 Two Ways to Exclude:</h4>
+                                    <div className="text-sm text-gray-700 space-y-3">
+                                        <div>
+                                            <strong className="text-ancient-purple">Option A: Erase on thumbnail</strong>
+                                            <p className="text-xs mt-1">Paint directly on the region image above (easier to see)</p>
+                                        </div>
+                                        <div>
+                                            <strong className="text-ancient-purple">Option B: Erase on main image</strong>
+                                            <p className="text-xs mt-1">Use the eraser tool on the main canvas - purple dashed border shows this detection</p>
+                                        </div>
+                                        <div className="pt-2 border-t border-stone-light">
+                                            <p className="text-xs">Erased areas will be excluded from this detection only. Click <strong>"✓ Apply Exclusions"</strong> when done.</p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="mb-4 p-3 bg-[#f7f3ed] border border-[#d4c4a8] rounded">
