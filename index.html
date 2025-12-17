@@ -595,6 +595,8 @@
             const [trimMode, setTrimMode] = useState(null); // Index of detection being trimmed, or null
             const [excludeMode, setExcludeMode] = useState(null); // Index of detection being excluded, or null
             const [excludeRegions, setExcludeRegions] = useState([]); // Array of exclusion boxes
+            const [excludeEraserMode, setExcludeEraserMode] = useState(false); // Eraser-based exclusion mode
+            const [excludedDetections, setExcludedDetections] = useState(new Set()); // Set of excluded detection indices
             const [selectedIsolatedRegion, setSelectedIsolatedRegion] = useState(null); // to enable delete when show isolated
             const [templateTrainingMode, setTemplateTrainingMode] = useState(false); // add glyph to template 
             const [selectedForTemplate, setSelectedForTemplate] = useState(null);
@@ -4011,6 +4013,28 @@
                 ctx.beginPath();
                 ctx.arc(x, y, brushSize, 0, Math.PI * 2);
                 ctx.fill();
+                
+                // If in exclude-eraser mode, check which detections overlap with this erased area
+                if (excludeEraserMode && recognitionResults.length > 0) {
+                    const newExcluded = new Set(excludedDetections);
+                    recognitionResults.forEach((result, idx) => {
+                        const bounds = result.position;
+                        // Check if eraser circle overlaps with detection bounds
+                        const circleRadius = brushSize;
+                        const closestX = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width));
+                        const closestY = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height));
+                        const distanceX = x - closestX;
+                        const distanceY = y - closestY;
+                        const distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+                        
+                        if (distanceSquared < (circleRadius * circleRadius)) {
+                            newExcluded.add(idx);
+                        }
+                    });
+                    if (newExcluded.size !== excludedDetections.size) {
+                        setExcludedDetections(newExcluded);
+                    }
+                }
             };
             
             const undoLastStroke = () => {
@@ -5229,6 +5253,55 @@
                                     {manualDetectionMode ? 'Exit Manual Mode' : 'Manual Detection'}
                                 </button>
                                 
+                                <button 
+                                    onClick={() => {
+                                        const newMode = !excludeEraserMode;
+                                        
+                                        if (!newMode && excludedDetections.size > 0) {
+                                            // Exiting exclude mode with exclusions - delete them
+                                            if (confirm(`Delete ${excludedDetections.size} excluded detection${excludedDetections.size > 1 ? 's' : ''}?`)) {
+                                                // Delete detections in reverse order to maintain indices
+                                                const sortedIndices = Array.from(excludedDetections).sort((a, b) => b - a);
+                                                sortedIndices.forEach(idx => {
+                                                    deleteDetection(idx);
+                                                });
+                                                setExcludedDetections(new Set());
+                                            }
+                                        }
+                                        
+                                        setExcludeEraserMode(newMode);
+                                        if (newMode) {
+                                            // Entering exclude mode - also enable eraser
+                                            if (!eraserMode) {
+                                                toggleEraserMode();
+                                            }
+                                            setExcludedDetections(new Set()); // Clear previous exclusions
+                                        } else {
+                                            // Exiting exclude mode - turn off eraser
+                                            if (eraserMode) {
+                                                toggleEraserMode();
+                                            }
+                                        }
+                                    }}
+                                    className={`px-4 py-2 rounded ${excludeEraserMode ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                >
+                                    {excludeEraserMode ? `🔥 Exit Exclude Mode${excludedDetections.size > 0 ? ` (${excludedDetections.size})` : ''}` : '🔥 Exclude Mode'}
+                                </button>
+                                
+                                {excludeEraserMode && (
+                                    <div className="mt-4 p-4 bg-red-50 border-2 border-red-200 rounded-lg">
+                                        <h4 className="font-semibold text-red-700 mb-2">🔥 Exclude Mode Active</h4>
+                                        <p className="text-sm text-red-700 mb-2">
+                                            Use the eraser to paint over unwanted detections. They will fade out and be excluded from the final results.
+                                        </p>
+                                        <div className="text-xs text-red-600">
+                                            <div>• Erased regions mark detections for exclusion</div>
+                                            <div>• Excluded detection cards will fade to 30% opacity</div>
+                                            <div>• Click "🔥 Exit Exclude Mode" to finish</div>
+                                        </div>
+                                    </div>
+                                )}
+                                
                                 <button
                                     onClick={() => setTemplateTrainingMode(!templateTrainingMode)}
                                     className={`px-4 py-2 rounded ${templateTrainingMode ? 'bg-[#4a3e54] text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
@@ -5434,7 +5507,7 @@
                             )}
                             {recognitionResults.length > 0 && showDetectionCanvasTip && (
                                 <div className="mt-3 p-3 bg-[#f7f3ed] border border-[#d4c4a8] rounded text-sm text-[#6d5d42] flex items-center justify-between">
-                                    <span>💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) Merge (⚡) and Exclude (🔥) buttons will appear. Click wrench (🔧) to adjust box corners by dragging.</span>
+                                    <span>💡 Tip: Ctrl/Cmd+Click any detection box to select it. Delete (✕) Merge (⚡) buttons will appear. Click wrench (🔧) to adjust box corners by dragging.</span>
                                     <button 
                                         onClick={() => setShowDetectionCanvasTip(false)}
                                         className="ml-3 text-yellow-600 hover:text-[#6d5d42] font-bold text-lg leading-none flex-shrink-0"
@@ -6311,11 +6384,13 @@
                         {(viewMode === 'detection' ? getFilteredResults() : getReadingOrderedResults()).map((result, displayIndex) => {
                             const originalIndex = viewMode === 'detection' ? displayIndex : recognitionResults.indexOf(result);
                             const readingOrderNum = viewMode === 'reading' ? displayIndex + 1 : null;
+                            const isExcluded = excludedDetections.has(originalIndex);
                             
                             return (
                                 <div 
                                     key={`result-${originalIndex}`} 
-                                    className={`p-3 bg-white rounded border ${selectedRegions.has(originalIndex) ? 'ring-2 ring-ochre' : ''} ${validations[originalIndex] ? (validations[originalIndex].isCorrect ? 'border-patina' : 'border-rust') : 'border-gray-200'} ${viewMode === 'reading' ? 'cursor-move' : ''}`}
+                                    className={`p-3 bg-white rounded border ${selectedRegions.has(originalIndex) ? 'ring-2 ring-ochre' : ''} ${validations[originalIndex] ? (validations[originalIndex].isCorrect ? 'border-patina' : 'border-rust') : 'border-gray-200'} ${viewMode === 'reading' ? 'cursor-move' : ''} ${isExcluded ? 'opacity-30' : ''}`}
+                                    style={isExcluded ? { transition: 'opacity 0.3s ease' } : {}}
                                     draggable={viewMode === 'reading'}
                                     onDragStart={(e) => viewMode === 'reading' && handleDragStart(e, displayIndex)}
                                     onDragOver={(e) => viewMode === 'reading' && handleDragOver(e, displayIndex)}
@@ -6498,16 +6573,6 @@
                                                 title="Change glyph"
                                             >
                                                 ✏️
-                                            </button>
-                                            <button 
-                                                onClick={() => {
-                                                    setExcludeMode(originalIndex);
-                                                    setExcludeRegions([]);
-                                                }} 
-                                                className="text-ancient-purple hover:text-ancient-purple text-sm"
-                                                title="Exclude regions from this detection"
-                                            >
-                                                🔥
                                             </button>
                                             <button 
                                                 onClick={() => startAdjustMode(originalIndex)} 
