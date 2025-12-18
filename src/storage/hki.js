@@ -26,7 +26,11 @@ const HKIStorage = {
             recognitionResults, validations, image, displayImage, preprocessing,
             viewMode, readingDirection, readingOrder, wordBoundaries, columnBreaks, lineBreaks,
             translationEnglish, translationArabic, actionHistory, currentInscriptionId,
+<<<<<<< HEAD
             preprocessCanvasRef, preprocessedMat
+=======
+            inscriptionComplete, inscriptionTitle
+>>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
         } = state;
 
         if (!recognitionResults || recognitionResults.length === 0) {
@@ -87,6 +91,8 @@ const HKIStorage = {
             created: isUpdate ? existingFile.created : new Date().toISOString(),
             lastModified: new Date().toISOString(),
             versions: isUpdate ? [...existingFile.versions, versionEntry] : [versionEntry],
+            inscriptionTitle: inscriptionTitle || `Inscription ${new Date().toLocaleDateString()}`,
+            complete: inscriptionComplete || false,
             
             images: {
                 original: image,
@@ -221,6 +227,9 @@ const HKIStorage = {
             setTranslationEnglish(hkiData.translations.english || '');
             setTranslationArabic(hkiData.translations.arabic || '');
             setActionHistory(hkiData.actionHistory || []);
+            
+            if (setInscriptionTitle) setInscriptionTitle(hkiData.inscriptionTitle || "");
+            if (setInscriptionComplete) setInscriptionComplete(hkiData.complete || false);
             
             if (setShowLibraryModal) setShowLibraryModal(false);
             
