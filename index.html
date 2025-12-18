@@ -175,7 +175,7 @@
     
     <script>
         // App version for update checking
-        const APP_VERSION = 'v251218b';
+        const APP_VERSION = 'v251218c';
         
         // Verify backend
         console.log('🚀 Hakli Glyph Recognizer - Modular ' + APP_VERSION);
@@ -968,6 +968,17 @@
                         
                         // Restore all other data
                         setRecognitionResults(sessionData.recognitionResults || []);
+                        
+                        // Reconstruct isolatedGlyphs for exclude mode
+                        if (sessionData.recognitionResults && sessionData.recognitionResults.length > 0) {
+                            const reconstructedGlyphs = sessionData.recognitionResults.map(result => ({
+                                thumbnail: result.thumbnail || null,
+                                position: result.position,
+                                corners: result.corners
+                            }));
+                            setIsolatedGlyphs(reconstructedGlyphs);
+                        }
+                        
                         setReadingOrder(sessionData.readingOrder || []);
                         setWordBoundaries(new Set(sessionData.wordBoundaries || []));
                         setColumnBreaks(new Set(sessionData.columnBreaks || []));
@@ -9389,7 +9400,17 @@
                                                             }
                                                             
                                                             // Restore all other data
-                                                            if (hkiData.recognitionResults) setRecognitionResults(hkiData.recognitionResults);
+                                                            if (hkiData.recognitionResults) {
+                                                                setRecognitionResults(hkiData.recognitionResults);
+                                                                
+                                                                // Reconstruct isolatedGlyphs for exclude mode
+                                                                const reconstructedGlyphs = hkiData.recognitionResults.map(result => ({
+                                                                    thumbnail: result.thumbnail || null,
+                                                                    position: result.position,
+                                                                    corners: result.corners
+                                                                }));
+                                                                setIsolatedGlyphs(reconstructedGlyphs);
+                                                            }
                                                             if (hkiData.readingOrder) setReadingOrder(hkiData.readingOrder);
                                                             if (hkiData.readingDirection) setReadingDirection(hkiData.readingDirection);
                                                             if (hkiData.wordBoundaries) setWordBoundaries(new Set(hkiData.wordBoundaries));
