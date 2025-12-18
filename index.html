@@ -689,6 +689,7 @@
             const [isErasingExclude, setIsErasingExclude] = useState(false); // Track erasing on exclude modal canvas
             const [eraserHistory, setEraserHistory] = useState([]); // Track canvas states for undo
             const [eraserCursorStyle, setEraserCursorStyle] = useState('crosshair');
+            const [excludeCursorStyle, setExcludeCursorStyle] = useState('crosshair');
             const eraserCanvasRef = useRef(null);
             const excludeRegionCanvasRef = useRef(null); // Canvas for erasing in exclude modal
             const preprocessCanvasRef = useRef(null);
@@ -4425,6 +4426,50 @@
                 }
             }, [excludeMode, recognitionResults, isolatedGlyphs]);
 
+            // Update eraser cursor to show brush size circle
+            useEffect(() => {
+                const createCursorCircle = (size) => {
+                    const canvas = document.createElement('canvas');
+                    const diameter = Math.min(size * 2, 64); // Cap at 64px for cursor
+                    canvas.width = diameter;
+                    canvas.height = diameter;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Draw circle outline
+                    ctx.strokeStyle = '#9333ea'; // Purple
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(diameter / 2, diameter / 2, (diameter / 2) - 2, 0, Math.PI * 2);
+                    ctx.stroke();
+                    
+                    // Add center crosshair
+                    ctx.strokeStyle = '#9333ea';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(diameter / 2 - 4, diameter / 2);
+                    ctx.lineTo(diameter / 2 + 4, diameter / 2);
+                    ctx.moveTo(diameter / 2, diameter / 2 - 4);
+                    ctx.lineTo(diameter / 2, diameter / 2 + 4);
+                    ctx.stroke();
+                    
+                    return `url(${canvas.toDataURL()}) ${diameter / 2} ${diameter / 2}, crosshair`;
+                };
+                
+                // Update cursor for main eraser
+                if (eraserMode) {
+                    setEraserCursorStyle(createCursorCircle(brushSize));
+                } else {
+                    setEraserCursorStyle('crosshair');
+                }
+                
+                // Update cursor for exclude modal eraser
+                if (excludeMode !== null) {
+                    setExcludeCursorStyle(createCursorCircle(excludeBrushSize));
+                } else {
+                    setExcludeCursorStyle('crosshair');
+                }
+            }, [brushSize, excludeBrushSize, eraserMode, excludeMode]);
+
             return (
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     {/* Update Banner */}
@@ -6214,7 +6259,7 @@
                                                     <div className="text-xs text-gray-600 mb-1 text-center">Erase Here:</div>
                                                     <div 
                                                         className="relative border-2 border-ancient-purple rounded bg-white"
-                                                        style={{ cursor: eraserCursorStyle }}
+                                                        style={{ cursor: excludeCursorStyle }}
                                                     >
                                                         <canvas
                                                             key={`exclude-canvas-${excludeMode}`}
@@ -7118,17 +7163,17 @@
                                     <div className="space-y-4">
                                         {/* Inscription Title Field with Status Badge */}
                                         <div className="mb-4 pb-4 border-b border-[#b5d4c8]">
-                                            <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-2 mb-2">
                                                 <label className="block text-sm font-semibold text-gray-700">
                                                     🏷️ Inscription Title (optional):
                                                 </label>
-                                                {/* Subtle Status Badge */}
-                                                <span className={`text-xs px-2 py-1 rounded ${
+                                                {/* Subtle Status Badge - inline with label */}
+                                                <span className={`text-xs px-2 py-0.5 rounded ${
                                                     inscriptionComplete 
                                                         ? 'bg-green-100 text-green-700' 
                                                         : 'bg-yellow-100 text-yellow-700'
                                                 }`}>
-                                                    {inscriptionComplete ? '🟢 Complete' : '🟡 Draft'}
+                                                    {inscriptionComplete ? '🟢' : '🟡'}
                                                 </span>
                                             </div>
                                             <input
