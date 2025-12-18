@@ -175,7 +175,7 @@
     
     <script>
         // App version for update checking
-        const APP_VERSION = 'v251218';
+        const APP_VERSION = 'v251218b';
         
         // Verify backend
         console.log('🚀 Hakli Glyph Recognizer - Modular ' + APP_VERSION);
@@ -4596,13 +4596,15 @@
                                         onClick={() => setShowChartViewer(true)} 
                                         className="px-4 py-2 bg-ancient-purple text-white rounded hover:bg-[#4a3e54]" 
                                         disabled={chartLoadStatus !== 'loaded'}
+                                        title="Edit glyphs, add variants/examples, and manage your template library"
                                     >
-                                        📊 View Chart
+                                        📊 Manage Chart
                                     </button>
                                     <button 
                                         onClick={() => setChartLoadStatus('not-loaded')} 
                                         className="px-4 py-2 bg-stone text-white rounded hover:bg-stone-dark" 
                                         disabled={chartLoadStatus === 'loading'}
+                                        title="Reload chart from GitHub (⚠️ This will discard any unsaved changes from your current session)"
                                     >
                                         🔄 Reload Chart
                                     </button>
@@ -8172,13 +8174,14 @@
                                                 alert('📥 Downloaded updated equivalence chart JSON');
                                             }}
                                             className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 font-semibold"
+                                            title="Save chart to your computer (for backup or to upload to GitHub later)"
                                         >
                                             💾 Download Updated JSON
                                         </button>
                                         <label
                                             htmlFor="upload-json-file"
                                             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold cursor-pointer flex items-center gap-2"
-                                            title="Upload a JSON file to reload the glyph database"
+                                            title="Load a JSON file from your computer (only needed to restore a previous version - changes are temporary for this session)"
                                         >
                                             📤 Upload JSON
                                         </label>
