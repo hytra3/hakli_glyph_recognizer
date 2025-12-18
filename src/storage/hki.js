@@ -26,11 +26,8 @@ const HKIStorage = {
             recognitionResults, validations, image, displayImage, preprocessing,
             viewMode, readingDirection, readingOrder, wordBoundaries, columnBreaks, lineBreaks,
             translationEnglish, translationArabic, actionHistory, currentInscriptionId,
-<<<<<<< HEAD
+            inscriptionComplete, inscriptionTitle,
             preprocessCanvasRef, preprocessedMat
-=======
-            inscriptionComplete, inscriptionTitle
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
         } = state;
 
         if (!recognitionResults || recognitionResults.length === 0) {
@@ -180,7 +177,8 @@ const HKIStorage = {
                 setRecognitionResults, setValidations, setViewMode, setReadingDirection,
                 setReadingOrder, setWordBoundaries, setColumnBreaks, setLineBreaks,
                 setTranslationEnglish, setTranslationArabic, setActionHistory,
-                setShowLibraryModal
+                setShowLibraryModal,
+                setInscriptionTitle, setInscriptionComplete
             } = setters;
 
             setCurrentInscriptionId(hkiData.inscriptionId);
