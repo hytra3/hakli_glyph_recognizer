@@ -175,7 +175,7 @@
     
     <script>
         // App version for update checking
-        const APP_VERSION = 'v251218c';
+        const APP_VERSION = 'v251218d';
         
         // Verify backend
         console.log('🚀 Hakli Glyph Recognizer - Modular ' + APP_VERSION);
@@ -971,11 +971,15 @@
                         
                         // Reconstruct isolatedGlyphs for exclude mode
                         if (sessionData.recognitionResults && sessionData.recognitionResults.length > 0) {
-                            const reconstructedGlyphs = sessionData.recognitionResults.map(result => ({
-                                thumbnail: result.thumbnail || null,
-                                position: result.position,
-                                corners: result.corners
-                            }));
+                            const reconstructedGlyphs = [];
+                            sessionData.recognitionResults.forEach((result, index) => {
+                                const regionIdx = result.regionIndex !== undefined ? result.regionIndex : index;
+                                reconstructedGlyphs[regionIdx] = {
+                                    thumbnail: result.thumbnail || null,
+                                    position: result.position,
+                                    corners: result.corners
+                                };
+                            });
                             setIsolatedGlyphs(reconstructedGlyphs);
                         }
                         
@@ -9404,11 +9408,15 @@
                                                                 setRecognitionResults(hkiData.recognitionResults);
                                                                 
                                                                 // Reconstruct isolatedGlyphs for exclude mode
-                                                                const reconstructedGlyphs = hkiData.recognitionResults.map(result => ({
-                                                                    thumbnail: result.thumbnail || null,
-                                                                    position: result.position,
-                                                                    corners: result.corners
-                                                                }));
+                                                                const reconstructedGlyphs = [];
+                                                                hkiData.recognitionResults.forEach((result, index) => {
+                                                                    const regionIdx = result.regionIndex !== undefined ? result.regionIndex : index;
+                                                                    reconstructedGlyphs[regionIdx] = {
+                                                                        thumbnail: result.thumbnail || null,
+                                                                        position: result.position,
+                                                                        corners: result.corners
+                                                                    };
+                                                                });
                                                                 setIsolatedGlyphs(reconstructedGlyphs);
                                                             }
                                                             if (hkiData.readingOrder) setReadingOrder(hkiData.readingOrder);
