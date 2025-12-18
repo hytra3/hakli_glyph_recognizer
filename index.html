@@ -684,6 +684,7 @@
             const [isImageLoading, setIsImageLoading] = useState(false);
             const [eraserMode, setEraserMode] = useState(false);
             const [brushSize, setBrushSize] = useState(15);
+            const [excludeBrushSize, setExcludeBrushSize] = useState(20); // Separate brush size for exclude modal
             const [isErasing, setIsErasing] = useState(false);
             const [isErasingExclude, setIsErasingExclude] = useState(false); // Track erasing on exclude modal canvas
             const [eraserHistory, setEraserHistory] = useState([]); // Track canvas states for undo
@@ -974,6 +975,7 @@
                         setTranslationArabic(sessionData.translationArabic || '');
                         setInscriptionTitle(sessionData.inscriptionTitle || '');
                         setInscriptionNotes(sessionData.inscriptionNotes || '');
+                        setInscriptionComplete(sessionData.complete || false); // Load completion status
                         setReadingDirection(sessionData.readingDirection || 'detection');
                         setViewMode(sessionData.viewMode || 'detection');
                         
@@ -1141,6 +1143,7 @@
                     version: "1.0",
                     timestamp: new Date().toISOString(),
                     inscriptionTitle: inscriptionTitle || `Inscription ${new Date().toLocaleDateString()}`,
+                    complete: inscriptionComplete, // Completion status
                     location: '', // User can add this in metadata
                     image: image, // Base64 image
                     recognitionResults: resultsWithThumbnails,
@@ -1200,6 +1203,7 @@
             // Inscription Metadata
             const [inscriptionNotes, setInscriptionNotes] = useState('');
             const [inscriptionTitle, setInscriptionTitle] = useState('');
+            const [inscriptionComplete, setInscriptionComplete] = useState(false); // Track completion status
 
             const MASTER_PASTE_URL = ''; // Will update after first upload
             const MASTER_PASTE_RAW_URL = ''; // Will update after first upload
@@ -6228,15 +6232,15 @@
                                                                 const ctx = canvas.getContext('2d');
                                                                 ctx.fillStyle = 'white';
                                                                 ctx.beginPath();
-                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+                                                                ctx.arc(x, y, excludeBrushSize, 0, Math.PI * 2);
                                                                 ctx.fill();
                                                                 
                                                                 // Track as exclusion
                                                                 const exclusionBox = {
-                                                                    x: Math.max(0, x - brushSize),
-                                                                    y: Math.max(0, y - brushSize),
-                                                                    width: brushSize * 2,
-                                                                    height: brushSize * 2
+                                                                    x: Math.max(0, x - excludeBrushSize),
+                                                                    y: Math.max(0, y - excludeBrushSize),
+                                                                    width: excludeBrushSize * 2,
+                                                                    height: excludeBrushSize * 2
                                                                 };
                                                                 setExcludeRegions(prev => [...prev, exclusionBox]);
                                                             }}
@@ -6251,15 +6255,15 @@
                                                                 const ctx = canvas.getContext('2d');
                                                                 ctx.fillStyle = 'white';
                                                                 ctx.beginPath();
-                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+                                                                ctx.arc(x, y, excludeBrushSize, 0, Math.PI * 2);
                                                                 ctx.fill();
                                                                 
                                                                 // Track as exclusion
                                                                 const exclusionBox = {
-                                                                    x: Math.max(0, x - brushSize),
-                                                                    y: Math.max(0, y - brushSize),
-                                                                    width: brushSize * 2,
-                                                                    height: brushSize * 2
+                                                                    x: Math.max(0, x - excludeBrushSize),
+                                                                    y: Math.max(0, y - excludeBrushSize),
+                                                                    width: excludeBrushSize * 2,
+                                                                    height: excludeBrushSize * 2
                                                                 };
                                                                 setExcludeRegions(prev => [...prev, exclusionBox]);
                                                             }}
@@ -6279,7 +6283,7 @@
                                                                 const ctx = canvas.getContext('2d');
                                                                 ctx.fillStyle = 'white';
                                                                 ctx.beginPath();
-                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+                                                                ctx.arc(x, y, excludeBrushSize, 0, Math.PI * 2);
                                                                 ctx.fill();
                                                             }}
                                                             onTouchMove={(e) => {
@@ -6295,7 +6299,7 @@
                                                                 const ctx = canvas.getContext('2d');
                                                                 ctx.fillStyle = 'white';
                                                                 ctx.beginPath();
-                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+                                                                ctx.arc(x, y, excludeBrushSize, 0, Math.PI * 2);
                                                                 ctx.fill();
                                                             }}
                                                             onTouchEnd={() => setIsErasingExclude(false)}
@@ -6311,6 +6315,31 @@
                                     <div className="text-sm text-gray-700 space-y-2">
                                         <p><strong className="text-ancient-purple">Paint directly on the region image above</strong> to erase unwanted portions.</p>
                                         <p className="text-xs text-gray-600">Use your mouse or finger to paint over areas you want to remove. Click <strong>"✓ Apply Exclusions"</strong> when done.</p>
+                                    </div>
+                                    
+                                    {/* Brush Size Toggle */}
+                                    <div className="mt-3 pt-3 border-t border-stone-light">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-semibold text-stone-dark">Brush Size:</span>
+                                            <button
+                                                onClick={() => setExcludeBrushSize(10)}
+                                                className={`px-3 py-1 text-xs rounded ${excludeBrushSize === 10 ? 'bg-ancient-purple text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                            >
+                                                Small (10px)
+                                            </button>
+                                            <button
+                                                onClick={() => setExcludeBrushSize(20)}
+                                                className={`px-3 py-1 text-xs rounded ${excludeBrushSize === 20 ? 'bg-ancient-purple text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                            >
+                                                Medium (20px)
+                                            </button>
+                                            <button
+                                                onClick={() => setExcludeBrushSize(35)}
+                                                className={`px-3 py-1 text-xs rounded ${excludeBrushSize === 35 ? 'bg-ancient-purple text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                            >
+                                                Large (35px)
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -7087,11 +7116,21 @@
                                     )}
 
                                     <div className="space-y-4">
-                                        {/* Inscription Title Field */}
+                                        {/* Inscription Title Field with Status Badge */}
                                         <div className="mb-4 pb-4 border-b border-[#b5d4c8]">
-                                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                                🏷️ Inscription Title (optional):
-                                            </label>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="block text-sm font-semibold text-gray-700">
+                                                    🏷️ Inscription Title (optional):
+                                                </label>
+                                                {/* Subtle Status Badge */}
+                                                <span className={`text-xs px-2 py-1 rounded ${
+                                                    inscriptionComplete 
+                                                        ? 'bg-green-100 text-green-700' 
+                                                        : 'bg-yellow-100 text-yellow-700'
+                                                }`}>
+                                                    {inscriptionComplete ? '🟢 Complete' : '🟡 Draft'}
+                                                </span>
+                                            </div>
                                             <input
                                                 type="text"
                                                 value={inscriptionTitle}
@@ -7100,6 +7139,20 @@
                                                 placeholder="e.g., Salalah Temple Inscription, Site A Fragment 3..."
                                             />
                                             <p className="text-xs text-gray-500 mt-1">This title will be used in the filename and Drive listing</p>
+                                            
+                                            {/* Completion Checkbox */}
+                                            <div className="mt-3 flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    id="inscription-complete"
+                                                    checked={inscriptionComplete}
+                                                    onChange={(e) => setInscriptionComplete(e.target.checked)}
+                                                    className="w-4 h-4 text-patina border-gray-300 rounded focus:ring-patina"
+                                                />
+                                                <label htmlFor="inscription-complete" className="text-sm text-gray-700">
+                                                    Mark this inscription as complete
+                                                </label>
+                                            </div>
                                         </div>
 
                                         {/* Language Toggle */}
@@ -9097,6 +9150,18 @@
                                             >
                                                 📍 Location
                                             </button>
+                                            <button
+                                                onClick={() => {
+                                                    const statusFilter = showFilePickerModal.statusFilter || 'all';
+                                                    const nextFilter = statusFilter === 'all' ? 'draft' : statusFilter === 'draft' ? 'complete' : 'all';
+                                                    setShowFilePickerModal({ ...showFilePickerModal, statusFilter: nextFilter, groupBy: null });
+                                                }}
+                                                className="px-3 py-1 bg-white bg-opacity-20 hover:bg-opacity-30 rounded transition-all"
+                                            >
+                                                {showFilePickerModal.statusFilter === 'draft' ? '🟡 Draft' : 
+                                                 showFilePickerModal.statusFilter === 'complete' ? '🟢 Complete' : 
+                                                 '📊 All'}
+                                            </button>
                                         </div>
                                     )}
                                 </div>
@@ -9186,9 +9251,18 @@
                                                 ));
                                             } else {
                                                 // Normal grid view (no grouping)
+                                                // Apply status filter
+                                                const filteredFiles = showFilePickerModal.files?.filter(file => {
+                                                    if (!showFilePickerModal.statusFilter || showFilePickerModal.statusFilter === 'all') return true;
+                                                    const isComplete = file.complete === true;
+                                                    if (showFilePickerModal.statusFilter === 'complete') return isComplete;
+                                                    if (showFilePickerModal.statusFilter === 'draft') return !isComplete;
+                                                    return true;
+                                                }) || [];
+                                                
                                                 return (
                                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                                        {showFilePickerModal.files?.map((file) => renderFileCard(file))}
+                                                        {filteredFiles.map((file) => renderFileCard(file))}
                                                     </div>
                                                 );
                                             }
@@ -9325,9 +9399,19 @@
                                                     
                                                     {/* File Info */}
                                                     <div className="p-4">
-                                                        <h4 className="font-bold text-gray-900 truncate mb-1 group-hover:text-ancient-purple transition-colors">
-                                                            {file.title || file.name}
-                                                        </h4>
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <h4 className="font-bold text-gray-900 truncate group-hover:text-ancient-purple transition-colors flex-1">
+                                                                {file.title || file.name}
+                                                            </h4>
+                                                            {/* Status Badge */}
+                                                            <span className={`text-xs px-2 py-0.5 rounded ml-2 flex-shrink-0 ${
+                                                                file.complete 
+                                                                    ? 'bg-green-100 text-green-700' 
+                                                                    : 'bg-yellow-100 text-yellow-700'
+                                                            }`}>
+                                                                {file.complete ? '🟢' : '🟡'}
+                                                            </span>
+                                                        </div>
                                                         <div className="flex items-center justify-between text-xs text-gray-500">
                                                             <span className="truncate flex-1 pr-2">{file.name}</span>
                                                         </div>
