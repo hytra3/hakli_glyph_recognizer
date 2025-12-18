@@ -175,7 +175,7 @@
     
     <script>
         // App version for update checking
-        const APP_VERSION = 'v251217';
+        const APP_VERSION = 'v251218';
         
         // Verify backend
         console.log('🚀 Hakli Glyph Recognizer - Modular ' + APP_VERSION);
@@ -689,10 +689,7 @@
             const [isErasingExclude, setIsErasingExclude] = useState(false); // Track erasing on exclude modal canvas
             const [eraserHistory, setEraserHistory] = useState([]); // Track canvas states for undo
             const [eraserCursorStyle, setEraserCursorStyle] = useState('crosshair');
-<<<<<<< HEAD
-=======
             const [excludeCursorStyle, setExcludeCursorStyle] = useState('crosshair');
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
             const eraserCanvasRef = useRef(null);
             const excludeRegionCanvasRef = useRef(null); // Canvas for erasing in exclude modal
             const preprocessCanvasRef = useRef(null);
@@ -4409,12 +4406,6 @@
                 if (excludeMode !== null && recognitionResults[excludeMode] && excludeRegionCanvasRef.current) {
                     const regionIndex = recognitionResults[excludeMode].regionIndex;
                     if (regionIndex !== undefined && isolatedGlyphs[regionIndex]?.thumbnail) {
-<<<<<<< HEAD
-                        const img = new Image();
-                        img.onload = () => {
-                            const canvas = excludeRegionCanvasRef.current;
-                            if (!canvas) return;
-=======
                         const canvas = excludeRegionCanvasRef.current;
                         
                         // Clear canvas first
@@ -4424,23 +4415,35 @@
                         const img = new Image();
                         img.onload = () => {
                             if (!canvas || !excludeRegionCanvasRef.current) return;
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
                             canvas.width = img.width;
                             canvas.height = img.height;
                             const ctx = canvas.getContext('2d');
                             ctx.drawImage(img, 0, 0);
-<<<<<<< HEAD
-=======
                             console.log(`✓ Loaded thumbnail for detection ${excludeMode} into exclude canvas`);
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
                         };
                         img.src = isolatedGlyphs[regionIndex].thumbnail;
                     }
                 }
             }, [excludeMode, recognitionResults, isolatedGlyphs]);
 
-<<<<<<< HEAD
-=======
+            // Helper function to wrap characters with superscripts/subscripts for vertical text
+            const renderVerticalText = (text) => {
+                // Match any character followed by a superscript (¹²³) or subscript (₁₂₃)
+                const parts = text.split(/([a-zA-Zḥḫḍʾʿ][¹²³⁴⁵⁶⁷⁸⁹⁰₁₂₃₄₅₆₇₈₉₀])/g);
+                
+                return parts.map((part, index) => {
+                    // If this part contains a base character + superscript/subscript, wrap it
+                    if (/[a-zA-Zḥḫḍʾʿ][¹²³⁴⁵⁶⁷⁸⁹⁰₁₂₃₄₅₆₇₈₉₀]/.test(part)) {
+                        return (
+                            <span key={index} style={{ textCombineUpright: 'all' }}>
+                                {part}
+                            </span>
+                        );
+                    }
+                    return part;
+                });
+            };
+
             // Update eraser cursor to show brush size circle
             useEffect(() => {
                 const createCursorCircle = (size) => {
@@ -4485,7 +4488,6 @@
                 }
             }, [brushSize, excludeBrushSize, eraserMode, excludeMode]);
 
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
             return (
                 <div className="max-w-6xl mx-auto p-6 bg-white">
                     {/* Update Banner */}
@@ -6275,16 +6277,10 @@
                                                     <div className="text-xs text-gray-600 mb-1 text-center">Erase Here:</div>
                                                     <div 
                                                         className="relative border-2 border-ancient-purple rounded bg-white"
-<<<<<<< HEAD
-                                                        style={{ cursor: eraserCursorStyle }}
-                                                    >
-                                                        <canvas
-=======
                                                         style={{ cursor: excludeCursorStyle }}
                                                     >
                                                         <canvas
                                                             key={`exclude-canvas-${excludeMode}`}
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
                                                             ref={excludeRegionCanvasRef}
                                                             className="max-w-[200px] h-auto"
                                                             onMouseDown={(e) => {
@@ -6299,26 +6295,15 @@
                                                                 const ctx = canvas.getContext('2d');
                                                                 ctx.fillStyle = 'white';
                                                                 ctx.beginPath();
-<<<<<<< HEAD
-                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
-=======
                                                                 ctx.arc(x, y, excludeBrushSize, 0, Math.PI * 2);
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
                                                                 ctx.fill();
                                                                 
                                                                 // Track as exclusion
                                                                 const exclusionBox = {
-<<<<<<< HEAD
-                                                                    x: Math.max(0, x - brushSize),
-                                                                    y: Math.max(0, y - brushSize),
-                                                                    width: brushSize * 2,
-                                                                    height: brushSize * 2
-=======
                                                                     x: Math.max(0, x - excludeBrushSize),
                                                                     y: Math.max(0, y - excludeBrushSize),
                                                                     width: excludeBrushSize * 2,
                                                                     height: excludeBrushSize * 2
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
                                                                 };
                                                                 setExcludeRegions(prev => [...prev, exclusionBox]);
                                                             }}
@@ -6333,26 +6318,15 @@
                                                                 const ctx = canvas.getContext('2d');
                                                                 ctx.fillStyle = 'white';
                                                                 ctx.beginPath();
-<<<<<<< HEAD
-                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
-=======
                                                                 ctx.arc(x, y, excludeBrushSize, 0, Math.PI * 2);
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
                                                                 ctx.fill();
                                                                 
                                                                 // Track as exclusion
                                                                 const exclusionBox = {
-<<<<<<< HEAD
-                                                                    x: Math.max(0, x - brushSize),
-                                                                    y: Math.max(0, y - brushSize),
-                                                                    width: brushSize * 2,
-                                                                    height: brushSize * 2
-=======
                                                                     x: Math.max(0, x - excludeBrushSize),
                                                                     y: Math.max(0, y - excludeBrushSize),
                                                                     width: excludeBrushSize * 2,
                                                                     height: excludeBrushSize * 2
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
                                                                 };
                                                                 setExcludeRegions(prev => [...prev, exclusionBox]);
                                                             }}
@@ -6372,11 +6346,7 @@
                                                                 const ctx = canvas.getContext('2d');
                                                                 ctx.fillStyle = 'white';
                                                                 ctx.beginPath();
-<<<<<<< HEAD
-                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
-=======
                                                                 ctx.arc(x, y, excludeBrushSize, 0, Math.PI * 2);
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
                                                                 ctx.fill();
                                                             }}
                                                             onTouchMove={(e) => {
@@ -6392,11 +6362,7 @@
                                                                 const ctx = canvas.getContext('2d');
                                                                 ctx.fillStyle = 'white';
                                                                 ctx.beginPath();
-<<<<<<< HEAD
-                                                                ctx.arc(x, y, brushSize, 0, Math.PI * 2);
-=======
                                                                 ctx.arc(x, y, excludeBrushSize, 0, Math.PI * 2);
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
                                                                 ctx.fill();
                                                             }}
                                                             onTouchEnd={() => setIsErasingExclude(false)}
@@ -6413,8 +6379,6 @@
                                         <p><strong className="text-ancient-purple">Paint directly on the region image above</strong> to erase unwanted portions.</p>
                                         <p className="text-xs text-gray-600">Use your mouse or finger to paint over areas you want to remove. Click <strong>"✓ Apply Exclusions"</strong> when done.</p>
                                     </div>
-<<<<<<< HEAD
-=======
                                     
                                     {/* Brush Size Toggle */}
                                     <div className="mt-3 pt-3 border-t border-stone-light">
@@ -6440,7 +6404,6 @@
                                             </button>
                                         </div>
                                     </div>
->>>>>>> 1c72545d5ccd527971536f641cbf72c893f2b57b
                                 </div>
 
                                 <div className="mb-4 p-3 bg-[#f7f3ed] border border-[#d4c4a8] rounded">
@@ -7076,7 +7039,7 @@
                                                                         : '"Courier New", monospace'
                                                                 }}
                                                             >
-                                                                {columnText}
+                                                                {renderVerticalText(columnText)}
                                                             </div>
                                                         ))}
                                                     </div>
