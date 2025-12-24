@@ -145,6 +145,11 @@
             const [showArabicLabels, setShowArabicLabels] = useState(false);
             const [isPreprocessingCollapsed, setIsPreprocessingCollapsed] = useState(false);
             
+            // Enhanced detection card state
+            const [expandedCards, setExpandedCards] = useState(new Set()); // Cards showing alternatives
+            const [excludedDetections, setExcludedDetections] = useState(new Set()); // Excluded from reading
+            const [editingBoxIdx, setEditingBoxIdx] = useState(null); // Index of detection being edited
+            
             // Chart Manager state
             const [showChartManager, setShowChartManager] = useState(false);
             const [showGlyphEditor, setShowGlyphEditor] = useState(false);
@@ -164,6 +169,12 @@
             const [opencvReady, setOpencvReady] = useState(false);
             const originalMatRef = useRef(null);
             const preprocessedMatRef = useRef(null);
+            
+            // Track dimensions of the image used for recognition (for box alignment)
+            const [recognitionSourceDims, setRecognitionSourceDims] = useState(null);
+            
+            // Debounce timer for real-time preprocessing
+            const preprocessDebounceRef = useRef(null);
             
             const imageRef = useRef(null);
             const imageContainerRef = useRef(null);
@@ -285,12 +296,14 @@
                         }
                     }
                     
+                    // Clear previous recognition state
                     setRecognitionResults([]);
                     setValidations({});
                     setReadingOrder([]);
                     setWordBoundaries(new Set());
                     setLineBreaks(new Set());
                     setSelectedRegions(new Set());
+                    setRecognitionSourceDims(null);
                     setIsImageLoading(false);
                 };
                 reader.onerror = () => {
@@ -317,6 +330,11 @@
                         );
                         const dataUrl = matToDataUrl(preprocessedMatRef.current);
                         setDisplayImage(dataUrl);
+                        // Track the dimensions of the preprocessed image for box alignment
+                        setRecognitionSourceDims({
+                            width: preprocessedMatRef.current.cols,
+                            height: preprocessedMatRef.current.rows
+                        });
                         console.log('✅ Preprocessing applied via Preprocessing module');
                     } else {
                         // Fallback: manual preprocessing
@@ -386,6 +404,11 @@
                         
                         const dataUrl = matToDataUrl(gray);
                         setDisplayImage(dataUrl);
+                        // Track the dimensions of the preprocessed image for box alignment
+                        setRecognitionSourceDims({
+                            width: gray.cols,
+                            height: gray.rows
+                        });
                         console.log('✅ Preprocessing applied (fallback)');
                     }
                 } catch (error) {
@@ -409,7 +432,32 @@
                     preprocessedMatRef.current.delete();
                     preprocessedMatRef.current = null;
                 }
+                // Reset recognition source dims to original
+                setRecognitionSourceDims(null);
             }, [originalImage]);
+            
+            // ========== REAL-TIME PREPROCESSING ==========
+            // Auto-apply preprocessing when settings change (with debounce)
+            useEffect(() => {
+                // Only auto-apply if we have an image and OpenCV
+                if (!originalMatRef.current || !opencvReady) return;
+                
+                // Clear previous timeout
+                if (preprocessDebounceRef.current) {
+                    clearTimeout(preprocessDebounceRef.current);
+                }
+                
+                // Debounce: wait 150ms after last change before applying
+                preprocessDebounceRef.current = setTimeout(() => {
+                    applyPreprocessing();
+                }, 150);
+                
+                return () => {
+                    if (preprocessDebounceRef.current) {
+                        clearTimeout(preprocessDebounceRef.current);
+                    }
+                };
+            }, [preprocessing, opencvReady, applyPreprocessing]);
             
             // ========== RECOGNITION ==========
             const recognizeGlyphs = useCallback(async () => {
@@ -436,6 +484,13 @@
                     if (!inputMat) {
                         inputMat = await loadImageToMat(displayImage);
                     }
+                    
+                    // Store the dimensions of the image we're running recognition on
+                    // This is critical for aligning detection boxes later
+                    setRecognitionSourceDims({
+                        width: inputMat.cols,
+                        height: inputMat.rows
+                    });
                     
                     // Clone for isolation (Isolation module may modify it)
                     const matForIsolation = inputMat.clone();
@@ -654,6 +709,119 @@
                     return updated;
                 });
                 setReadingOrder(prev => prev.filter(i => i !== index).map(i => i > index ? i - 1 : i));
+                setExcludedDetections(prev => {
+                    const updated = new Set();
+                    prev.forEach(i => {
+                        if (i < index) updated.add(i);
+                        else if (i > index) updated.add(i - 1);
+                    });
+                    return updated;
+                });
+                setExpandedCards(prev => {
+                    const updated = new Set();
+                    prev.forEach(i => {
+                        if (i < index) updated.add(i);
+                        else if (i > index) updated.add(i - 1);
+                    });
+                    return updated;
+                });
+            }, []);
+            
+            // Change glyph assignment to an alternative match
+            const changeGlyphAssignment = useCallback((detectionIdx, newGlyph) => {
+                setRecognitionResults(prev => {
+                    const updated = [...prev];
+                    if (updated[detectionIdx]) {
+                        updated[detectionIdx] = {
+                            ...updated[detectionIdx],
+                            glyph: newGlyph,
+                            // Find confidence from topMatches
+                            confidence: updated[detectionIdx].topMatches?.find(m => m.glyph.id === newGlyph.id)?.confidence || updated[detectionIdx].confidence
+                        };
+                    }
+                    return updated;
+                });
+                // Clear validation when glyph changes
+                setValidations(prev => {
+                    const updated = { ...prev };
+                    delete updated[detectionIdx];
+                    return updated;
+                });
+            }, []);
+            
+            // Toggle exclusion of a detection from reading order
+            const toggleExcludeDetection = useCallback((index) => {
+                setExcludedDetections(prev => {
+                    const updated = new Set(prev);
+                    if (updated.has(index)) {
+                        updated.delete(index);
+                    } else {
+                        updated.add(index);
+                    }
+                    return updated;
+                });
+            }, []);
+            
+            // Merge two selected detections
+            const mergeSelectedDetections = useCallback(() => {
+                if (selectedRegions.size !== 2) {
+                    alert('Select exactly 2 detections to merge');
+                    return;
+                }
+                
+                const indices = Array.from(selectedRegions).sort((a, b) => a - b);
+                const [idx1, idx2] = indices;
+                const det1 = recognitionResults[idx1];
+                const det2 = recognitionResults[idx2];
+                
+                if (!det1 || !det2) return;
+                
+                // Create merged detection - use higher confidence one as base
+                const baseDet = det1.confidence >= det2.confidence ? det1 : det2;
+                const mergedPosition = {
+                    x: Math.min(det1.position.x, det2.position.x),
+                    y: Math.min(det1.position.y, det2.position.y),
+                    width: Math.max(det1.position.x + det1.position.width, det2.position.x + det2.position.width) - Math.min(det1.position.x, det2.position.x),
+                    height: Math.max(det1.position.y + det1.position.height, det2.position.y + det2.position.height) - Math.min(det1.position.y, det2.position.y)
+                };
+                
+                const merged = {
+                    ...baseDet,
+                    position: mergedPosition,
+                    isMerged: true,
+                    mergedFrom: [idx1, idx2]
+                };
+                
+                // Remove both, add merged at first position
+                setRecognitionResults(prev => {
+                    const updated = prev.filter((_, i) => i !== idx1 && i !== idx2);
+                    updated.splice(idx1, 0, merged);
+                    return updated;
+                });
+                
+                setSelectedRegions(new Set());
+                setReadingOrder(prev => {
+                    // Remove old indices, adjust remaining
+                    return prev
+                        .filter(i => i !== idx1 && i !== idx2)
+                        .map(i => i > idx2 ? i - 2 : i > idx1 ? i - 1 : i)
+                        .concat([idx1]); // Add merged at end
+                });
+                
+                alert('✅ Detections merged');
+            }, [selectedRegions, recognitionResults]);
+            
+            // Toggle card expansion (show alternatives)
+            const toggleCardExpansion = useCallback((index) => {
+                setExpandedCards(prev => {
+                    const updated = new Set(prev);
+                    if (updated.has(index)) {
+                        updated.delete(index);
+                    } else {
+                        updated.add(index);
+                    }
+                    return updated;
+                });
             }, []);
 
             // ============================================
@@ -829,8 +997,14 @@
                                                 
                                                 const containerRect = imageContainerRef.current?.getBoundingClientRect();
                                                 const imgRect = img.getBoundingClientRect();
-                                                const scaleX = imgRect.width / img.naturalWidth;
-                                                const scaleY = imgRect.height / img.naturalHeight;
+                                                
+                                                // Use tracked recognition source dimensions if available
+                                                // This ensures boxes align correctly even if the display image changed
+                                                const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
+                                                const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
+                                                
+                                                const scaleX = imgRect.width / sourceWidth;
+                                                const scaleY = imgRect.height / sourceHeight;
                                                 const offsetX = (containerRect?.width - imgRect.width) / 2 || 0;
                                                 const offsetY = (containerRect?.height - imgRect.height) / 2 || 0;
                                                 
@@ -901,55 +1075,111 @@
                                                     className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'detection' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}>🔍 Detection</button>
                                                 <button onClick={() => setViewMode('reading')}
                                                     className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'reading' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}>📖 Reading</button>
-                                                <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); }}}
+                                                <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); setExcludedDetections(new Set()); setExpandedCards(new Set()); }}}
                                                     className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200" title="Clear all detections">🗑</button>
                                             </div>
                                             
+                                            {/* Merge button when 2 selected */}
+                                            {selectedRegions.size === 2 && (
+                                                <button onClick={mergeSelectedDetections}
+                                                    className="w-full mb-2 px-2 py-1.5 bg-ochre text-white rounded text-xs hover:bg-[#a07f5a]">
+                                                    🔗 Merge {selectedRegions.size} Selected
+                                                </button>
+                                            )}
+                                            
                                             <div className="flex-1 overflow-y-auto space-y-2">
-                                                {(viewMode === 'reading' ? readingOrder : recognitionResults.map((_, i) => i)).map((idx, displayIdx) => {
+                                                {(viewMode === 'reading' 
+                                                    ? readingOrder.filter(i => !excludedDetections.has(i))
+                                                    : recognitionResults.map((_, i) => i)
+                                                ).map((idx, displayIdx) => {
                                                     const result = recognitionResults[idx];
                                                     if (!result) return null;
                                                     
                                                     const validation = validations[idx];
                                                     const isSelected = selectedRegions.has(idx);
+                                                    const isExpanded = expandedCards.has(idx);
+                                                    const isExcluded = excludedDetections.has(idx);
                                                     const conf = Math.round(result.confidence * 100);
                                                     
                                                     let borderColor = 'border-gray-200';
-                                                    if (isSelected) borderColor = 'border-ochre';
+                                                    if (isExcluded) borderColor = 'border-gray-300';
+                                                    else if (isSelected) borderColor = 'border-ochre';
                                                     else if (validation?.isCorrect) borderColor = 'border-patina';
                                                     else if (validation && !validation.isCorrect) borderColor = 'border-rust';
                                                     
                                                     return (
-                                                        <div key={idx} className={`border-2 ${borderColor} rounded-lg p-2 cursor-pointer hover:shadow ${isSelected ? 'bg-yellow-50' : ''}`}
-                                                            onClick={() => setSelectedRegions(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n; })}>
-                                                            <div className="flex gap-2">
-                                                                {result.thumbnail && <div className="w-10 h-10 bg-gray-100 rounded overflow-hidden flex-shrink-0">
-                                                                    <img src={result.thumbnail} alt="" className="w-full h-full object-contain" />
-                                                                </div>}
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="flex items-center gap-1">
-                                                                        <span className="font-bold text-xs text-gray-500">#{viewMode === 'reading' ? displayIdx + 1 : idx + 1}</span>
-                                                                        <span className={`text-xs font-medium ${conf >= 70 ? 'text-patina' : conf >= 50 ? 'text-ochre' : 'text-rust'}`}>{conf}%</span>
-                                                                    </div>
-                                                                    <div className="font-medium text-gray-900 text-sm truncate">{result.glyph.name}</div>
-                                                                    <div className="text-lg text-ancient-purple leading-tight">{result.glyph.arabic || result.glyph.transliteration}</div>
-                                                                </div>
-                                                                <div className="flex flex-col gap-1">
-                                                                    {!validation ? (
-                                                                        <>
-                                                                            <button onClick={(e) => { e.stopPropagation(); validateDetection(idx, true); }}
-                                                                                className="w-6 h-6 bg-patina text-white rounded text-xs hover:bg-[#5a7d6e]" title="Mark correct">✓</button>
-                                                                            <button onClick={(e) => { e.stopPropagation(); validateDetection(idx, false); }}
-                                                                                className="w-6 h-6 bg-rust text-white rounded text-xs hover:bg-[#8a574a]" title="Mark incorrect">✗</button>
-                                                                        </>
-                                                                    ) : (
-                                                                        <button onClick={(e) => { e.stopPropagation(); setValidations(prev => { const n = {...prev}; delete n[idx]; return n; }); }}
-                                                                            className="w-6 h-6 bg-gray-400 text-white rounded text-xs hover:bg-gray-500" title="Clear validation">↩</button>
+                                                        <div key={idx} className={`border-2 ${borderColor} rounded-lg overflow-hidden ${isSelected ? 'bg-yellow-50' : ''} ${isExcluded ? 'opacity-50' : ''}`}>
+                                                            {/* Main card header */}
+                                                            <div className="p-2 cursor-pointer hover:bg-gray-50"
+                                                                onClick={() => setSelectedRegions(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n; })}>
+                                                                <div className="flex gap-2">
+                                                                    {result.thumbnail && (
+                                                                        <div className="w-10 h-10 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+                                                                            <img src={result.thumbnail} alt="" className="w-full h-full object-contain" />
+                                                                        </div>
                                                                     )}
-                                                                    <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete this detection?')) deleteDetection(idx); }}
-                                                                        className="w-6 h-6 bg-red-500 text-white rounded text-xs hover:bg-red-600" title="Delete detection">🗑</button>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-1">
+                                                                            <span className="font-bold text-xs text-gray-500">#{viewMode === 'reading' ? displayIdx + 1 : idx + 1}</span>
+                                                                            <span className={`text-xs font-medium ${conf >= 70 ? 'text-patina' : conf >= 50 ? 'text-ochre' : 'text-rust'}`}>{conf}%</span>
+                                                                            {isExcluded && <span className="text-xs text-gray-400">(excluded)</span>}
+                                                                            {result.isMerged && <span className="text-xs text-blue-500">🔗</span>}
+                                                                        </div>
+                                                                        <div className="font-medium text-gray-900 text-sm truncate">{result.glyph.name}</div>
+                                                                        <div className="text-lg text-ancient-purple leading-tight">{result.glyph.arabic || result.glyph.transliteration}</div>
+                                                                    </div>
+                                                                    <div className="flex flex-col gap-1">
+                                                                        {!validation ? (
+                                                                            <>
+                                                                                <button onClick={(e) => { e.stopPropagation(); validateDetection(idx, true); }}
+                                                                                    className="w-6 h-6 bg-patina text-white rounded text-xs hover:bg-[#5a7d6e]" title="Mark correct">✓</button>
+                                                                                <button onClick={(e) => { e.stopPropagation(); validateDetection(idx, false); }}
+                                                                                    className="w-6 h-6 bg-rust text-white rounded text-xs hover:bg-[#8a574a]" title="Mark incorrect">✗</button>
+                                                                            </>
+                                                                        ) : (
+                                                                            <button onClick={(e) => { e.stopPropagation(); setValidations(prev => { const n = {...prev}; delete n[idx]; return n; }); }}
+                                                                                className="w-6 h-6 bg-gray-400 text-white rounded text-xs hover:bg-gray-500" title="Clear validation">↩</button>
+                                                                        )}
+                                                                        <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) deleteDetection(idx); }}
+                                                                            className="w-6 h-6 bg-red-500 text-white rounded text-xs hover:bg-red-600" title="Delete">🗑</button>
+                                                                    </div>
                                                                 </div>
                                                             </div>
+                                                            
+                                                            {/* Action buttons row */}
+                                                            <div className="px-2 pb-2 flex gap-1 flex-wrap">
+                                                                <button onClick={(e) => { e.stopPropagation(); toggleCardExpansion(idx); }}
+                                                                    className={`px-2 py-0.5 rounded text-xs ${isExpanded ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                                                    title="Show alternative matches">
+                                                                    {isExpanded ? '▼' : '▶'} Alts {result.topMatches?.length > 1 ? `(${result.topMatches.length - 1})` : ''}
+                                                                </button>
+                                                                <button onClick={(e) => { e.stopPropagation(); toggleExcludeDetection(idx); }}
+                                                                    className={`px-2 py-0.5 rounded text-xs ${isExcluded ? 'bg-gray-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                                                    title={isExcluded ? 'Include in reading' : 'Exclude from reading'}>
+                                                                    {isExcluded ? '👁 Include' : '🚫 Exclude'}
+                                                                </button>
+                                                            </div>
+                                                            
+                                                            {/* Expanded: Alternative matches */}
+                                                            {isExpanded && result.topMatches && result.topMatches.length > 1 && (
+                                                                <div className="px-2 pb-2 border-t border-gray-100 bg-gray-50">
+                                                                    <div className="text-xs text-gray-500 mb-1 pt-1">Alternative matches:</div>
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {result.topMatches.slice(1, 6).map((alt, altIdx) => (
+                                                                            <button key={altIdx}
+                                                                                onClick={(e) => { e.stopPropagation(); changeGlyphAssignment(idx, alt.glyph); }}
+                                                                                className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 rounded hover:border-ancient-purple hover:bg-purple-50 transition-colors"
+                                                                                title={`Switch to ${alt.glyph.name} (${Math.round(alt.confidence * 100)}%)`}>
+                                                                                {glyphThumbnails[alt.glyph.id] && (
+                                                                                    <img src={glyphThumbnails[alt.glyph.id]} alt="" className="w-5 h-5 object-contain" />
+                                                                                )}
+                                                                                <span className="text-xs font-medium">{alt.glyph.transliteration}</span>
+                                                                                <span className="text-xs text-gray-400">{Math.round(alt.confidence * 100)}%</span>
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     );
                                                 })}
