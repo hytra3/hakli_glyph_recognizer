@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hakli Glyph Recognizer - Modular v2</title>
+    <title>Hakli Glyph Recognizer</title>
     <meta name="description" content="Ancient South Arabian script recognition tool for field documentation">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     
@@ -50,6 +50,7 @@
         function onOpenCvReady() {
             isOpenCvReady = true;
             console.log('✅ OpenCV.js is ready');
+            window.dispatchEvent(new Event('opencv-ready'));
         }
     </script>
     <script async src="https://docs.opencv.org/4.5.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
@@ -63,6 +64,7 @@
             border: 3px solid;
             border-radius: 4px;
             cursor: pointer;
+            box-sizing: border-box;
         }
         .detection-box.validated-correct { border-color: #6b8e7f; background: rgba(107, 142, 127, 0.25); }
         .detection-box.validated-incorrect { border-color: #a0674f; background: rgba(239, 68, 68, 0.25); }
@@ -72,30 +74,30 @@
 
         .detection-label {
             position: absolute;
-            top: -25px;
+            top: -24px;
             left: 0;
-            padding: 2px 8px;
-            font-size: 12px;
+            padding: 2px 6px;
+            font-size: 11px;
             font-weight: bold;
             color: white;
             border-radius: 3px;
             white-space: nowrap;
-            opacity: 0.9;
+            opacity: 0.95;
         }
         
         .reading-order-badge {
             position: absolute;
-            top: -20px;
-            left: -20px;
-            width: 28px;
-            height: 28px;
+            top: -18px;
+            left: -18px;
+            width: 24px;
+            height: 24px;
             background-color: #b8956a;
             border: 2px solid #8d7350;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: bold;
             color: white;
             z-index: 20;
@@ -108,7 +110,7 @@
         }
     </style>
 </head>
-<body>
+<body class="bg-gray-100">
     <div id="root"></div>
 
     <!-- ========================================== -->
@@ -144,496 +146,889 @@
     <script src="src/core/state.js"></script>
 
     <!-- ========================================== -->
-    <!-- REACT HOOKS                               -->
-    <!-- ========================================== -->
-    <script type="text/babel" src="src/hooks/useAppState.js"></script>
-    <script type="text/babel" src="src/hooks/useHistory.js"></script>
-    <script type="text/babel" src="src/hooks/useRecognition.js"></script>
-
-    <!-- ========================================== -->
-    <!-- REACT COMPONENTS                          -->
-    <!-- ========================================== -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx"></script>
-    <script type="text/babel" src="src/components/detection/DetectionComponents.jsx"></script>
-    <script type="text/babel" src="src/components/panels/PreprocessingPanel.jsx"></script>
-    <script type="text/babel" src="src/components/panels/TranscriptionPanel.jsx"></script>
-    <script type="text/babel" src="src/components/modals/GlyphEditorModal.jsx"></script>
-
-    <!-- ========================================== -->
     <!-- MAIN APPLICATION                          -->
     <!-- ========================================== -->
     <script type="text/babel">
-        const APP_VERSION = 'v2.0.0-modular';
+        const APP_VERSION = 'v251224';
         
-        // Verify modules loaded
         console.log('🚀 Hakli Glyph Recognizer - Modular ' + APP_VERSION);
-        
-        const modulesLoaded = {
-            // Backend
-            config: typeof CONFIG !== 'undefined',
-            utils: typeof Utils !== 'undefined',
-            hki: typeof HKIStorage !== 'undefined',
-            cache: typeof CacheStorage !== 'undefined',
-            corrections: typeof CorrectionMemory !== 'undefined',
-            export: typeof ExportUtils !== 'undefined',
-            driveSync: typeof DriveSync !== 'undefined',
-            // Recognition
-            isolation: typeof Isolation !== 'undefined',
-            matching: typeof Matching !== 'undefined',
-            preprocessing: typeof Preprocessing !== 'undefined',
-            nms: typeof NMS !== 'undefined',
-            // State
-            appState: typeof AppState !== 'undefined',
-            // Hooks
-            useAppState: typeof useAppState !== 'undefined',
-            useHistory: typeof useHistory !== 'undefined',
-            useRecognition: typeof useRecognition !== 'undefined',
-            // Components
-            collapsibleSection: typeof CollapsibleSection !== 'undefined',
-            detectionBox: typeof DetectionBox !== 'undefined',
-            glyphEditorModal: typeof GlyphEditorModal !== 'undefined'
-        };
-        
-        console.log('📦 Module status:', modulesLoaded);
-        
-        const missingModules = Object.entries(modulesLoaded)
-            .filter(([k, v]) => !v)
-            .map(([k]) => k);
-        
-        if (missingModules.length > 0) {
-            console.warn('⚠️ Missing modules:', missingModules.join(', '));
-        } else {
-            console.log('✅ All modules loaded successfully');
-        }
 
         // ============================================
         // MAIN APP COMPONENT
         // ============================================
         function HakliGlyphRecognizer() {
-            const { useState, useEffect, useRef, useCallback } = React;
+            const { useState, useEffect, useRef, useCallback, useMemo } = React;
             
-            // Use the centralized state hook
-            const appState = useAppState();
-            const { state, filteredResults, orderedResults } = appState;
+            // ========== STATE ==========
+            const [originalImage, setOriginalImage] = useState(null);
+            const [displayImage, setDisplayImage] = useState(null);
+            const [isImageLoading, setIsImageLoading] = useState(false);
             
-            // Refs
+            const [chartData, setChartData] = useState(null);
+            const [chartStatus, setChartStatus] = useState('not-loaded');
+            const [loadedGlyphImages, setLoadedGlyphImages] = useState({});
+            const [glyphThumbnails, setGlyphThumbnails] = useState({});
+            const [chartLoadProgress, setChartLoadProgress] = useState({ loaded: 0, total: 0 });
+            
+            const [recognitionResults, setRecognitionResults] = useState([]);
+            const [validations, setValidations] = useState({});
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
+            
+            const [viewMode, setViewMode] = useState('detection');
+            const [readingDirection, setReadingDirection] = useState('rtl');
+            const [readingOrder, setReadingOrder] = useState([]);
+            const [wordBoundaries, setWordBoundaries] = useState(new Set());
+            const [lineBreaks, setLineBreaks] = useState(new Set());
+            
+            const [selectedRegions, setSelectedRegions] = useState(new Set());
+            const [showArabicLabels, setShowArabicLabels] = useState(false);
+            const [isPreprocessingCollapsed, setIsPreprocessingCollapsed] = useState(false);
+            const [showPreview, setShowPreview] = useState(true);
+            
+            const [preprocessing, setPreprocessing] = useState({
+                rotation: 0,
+                useAdaptiveThreshold: false,
+                blockSize: 11,
+                constantOffset: 2,
+                gaussianBlur: 0,
+                morphologyOperation: 'none',
+                invertColors: false
+            });
+            
+            const [opencvReady, setOpencvReady] = useState(false);
+            const originalMatRef = useRef(null);
+            const preprocessedMatRef = useRef(null);
+            
             const imageRef = useRef(null);
             const imageContainerRef = useRef(null);
-            const preprocessCanvasRef = useRef(null);
-            const originalCanvasRef = useRef(null);
             const fileInputRef = useRef(null);
             
-            // History hook
-            const history = useHistory(state, {
-                setRecognitionResults: appState.setRecognitionResults,
-                setValidations: appState.setValidations,
-                setReadingOrder: appState.setReadingOrder,
-                setWordBoundaries: appState.setWordBoundaries,
-                setLineBreaks: appState.setLineBreaks,
-                setColumnBreaks: appState.setColumnBreaks
-            });
+            // ========== OPENCV SETUP ==========
+            useEffect(() => {
+                const checkOpenCV = () => {
+                    if (typeof cv !== 'undefined' && cv.Mat) {
+                        setOpencvReady(true);
+                        console.log('✅ OpenCV ready in React');
+                    } else {
+                        setTimeout(checkOpenCV, 100);
+                    }
+                };
+                checkOpenCV();
+                
+                return () => {
+                    if (originalMatRef.current) {
+                        try { originalMatRef.current.delete(); } catch(e) {}
+                    }
+                    if (preprocessedMatRef.current) {
+                        try { preprocessedMatRef.current.delete(); } catch(e) {}
+                    }
+                };
+            }, []);
             
-            // Recognition hook
-            const recognition = useRecognition(state, appState, {
-                imageRef,
-                imageContainerRef
-            });
-            
-            // Load glyph chart on mount
+            // ========== LOAD CHART ==========
             useEffect(() => {
                 const loadChart = async () => {
-                    appState.setChartStatus('loading');
+                    setChartStatus('loading');
                     try {
                         const response = await fetch('Hakli_glyphs.JSON');
                         const data = await response.json();
-                        appState.setChart(data);
-                        console.log(`✅ Loaded ${data.glyphs.length} glyphs`);
+                        setChartData(data);
+                        console.log(`📜 Loaded chart with ${data.glyphs.length} glyphs`);
                         
-                        // Load glyph images
                         let loaded = 0;
                         const total = data.glyphs.length;
+                        const newImages = {};
+                        const newThumbnails = {};
                         
                         for (const glyph of data.glyphs) {
                             if (glyph.images?.primary) {
-                                const img = new Image();
-                                img.onload = () => {
-                                    appState.setLoadedGlyphImage(glyph.id, img);
-                                    appState.setGlyphThumbnail(glyph.id, img.src);
-                                    loaded++;
-                                    appState.setImageLoadProgress({ loaded, total });
-                                };
-                                img.onerror = () => {
-                                    loaded++;
-                                    appState.setImageLoadProgress({ loaded, total });
-                                };
-                                img.src = glyph.images.primary;
+                                try {
+                                    const img = new Image();
+                                    await new Promise((resolve, reject) => {
+                                        img.onload = resolve;
+                                        img.onerror = reject;
+                                        img.src = glyph.images.primary;
+                                    });
+                                    newImages[glyph.id] = img;
+                                    newThumbnails[glyph.id] = img.src;
+                                } catch (e) {
+                                    console.warn(`Failed to load glyph ${glyph.id}`);
+                                }
                             }
+                            loaded++;
+                            setChartLoadProgress({ loaded, total });
                         }
+                        
+                        setLoadedGlyphImages(newImages);
+                        setGlyphThumbnails(newThumbnails);
+                        setChartStatus('loaded');
+                        console.log(`✅ Loaded ${Object.keys(newImages).length} glyph images`);
                     } catch (error) {
                         console.error('Failed to load chart:', error);
-                        appState.setChartStatus('error');
+                        setChartStatus('error');
                     }
                 };
                 
                 loadChart();
             }, []);
             
-            // Handle image upload
-            const handleImageUpload = useCallback((event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                
-                appState.setImageLoading(true);
-                
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    appState.setImage(e.target.result);
-                    appState.setImageLoading(false);
-                    
-                    // Reset recognition state
-                    appState.setRecognitionResults([]);
-                    appState.setValidations({});
-                    appState.setIsolatedGlyphs([]);
-                    appState.setReadingOrder([]);
-                    appState.setWordBoundaries([]);
-                    appState.setLineBreaks([]);
-                    appState.setColumnBreaks([]);
-                    history.clearHistory();
-                };
-                reader.onerror = () => {
-                    alert('Failed to read image file');
-                    appState.setImageLoading(false);
-                };
-                reader.readAsDataURL(file);
-            }, [appState, history]);
-            
-            // Copy to clipboard
-            const copyToClipboard = useCallback((text) => {
-                navigator.clipboard.writeText(text).then(() => {
-                    alert('✅ Copied to clipboard!');
-                }).catch(() => {
-                    alert('❌ Failed to copy');
+            // ========== IMAGE HANDLING ==========
+            const loadImageToMat = useCallback((imageSource) => {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = img.naturalWidth;
+                            canvas.height = img.naturalHeight;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+                            const mat = cv.imread(canvas);
+                            resolve(mat);
+                        } catch (error) {
+                            reject(error);
+                        }
+                    };
+                    img.onerror = () => reject(new Error('Failed to load image'));
+                    img.src = imageSource;
                 });
             }, []);
             
-            // Text-to-speech
-            const speak = useCallback((text, lang = 'en') => {
-                if (!('speechSynthesis' in window)) {
-                    alert('Text-to-speech not supported');
+            const matToDataUrl = useCallback((mat) => {
+                const canvas = document.createElement('canvas');
+                cv.imshow(canvas, mat);
+                return canvas.toDataURL('image/png');
+            }, []);
+            
+            const handleImageUpload = useCallback(async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                setIsImageLoading(true);
+                
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const dataUrl = e.target.result;
+                    setOriginalImage(dataUrl);
+                    setDisplayImage(dataUrl);
+                    
+                    if (opencvReady) {
+                        try {
+                            if (originalMatRef.current) {
+                                originalMatRef.current.delete();
+                            }
+                            originalMatRef.current = await loadImageToMat(dataUrl);
+                            console.log('✅ Image loaded into OpenCV:', 
+                                originalMatRef.current.cols, 'x', originalMatRef.current.rows);
+                        } catch (error) {
+                            console.error('Failed to load image to OpenCV:', error);
+                        }
+                    }
+                    
+                    setRecognitionResults([]);
+                    setValidations({});
+                    setReadingOrder([]);
+                    setWordBoundaries(new Set());
+                    setLineBreaks(new Set());
+                    setSelectedRegions(new Set());
+                    setIsImageLoading(false);
+                };
+                reader.onerror = () => {
+                    alert('Failed to read image file');
+                    setIsImageLoading(false);
+                };
+                reader.readAsDataURL(file);
+            }, [opencvReady, loadImageToMat]);
+            
+            // ========== PREPROCESSING ==========
+            const applyPreprocessing = useCallback(async () => {
+                if (!originalMatRef.current || !opencvReady) {
+                    console.warn('No image or OpenCV not ready');
                     return;
                 }
                 
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = lang === 'ar' ? 'ar-SA' : 'en-US';
-                speechSynthesis.speak(utterance);
+                try {
+                    if (preprocessedMatRef.current) {
+                        preprocessedMatRef.current.delete();
+                    }
+                    
+                    let result = originalMatRef.current.clone();
+                    
+                    // 1. Rotation
+                    if (preprocessing.rotation !== 0) {
+                        const center = new cv.Point(result.cols / 2, result.rows / 2);
+                        const rotMatrix = cv.getRotationMatrix2D(center, -preprocessing.rotation, 1.0);
+                        
+                        const cos = Math.abs(rotMatrix.doubleAt(0, 0));
+                        const sin = Math.abs(rotMatrix.doubleAt(0, 1));
+                        const newWidth = Math.floor(result.rows * sin + result.cols * cos);
+                        const newHeight = Math.floor(result.rows * cos + result.cols * sin);
+                        
+                        rotMatrix.doublePtr(0, 2)[0] += (newWidth - result.cols) / 2;
+                        rotMatrix.doublePtr(1, 2)[0] += (newHeight - result.rows) / 2;
+                        
+                        const rotated = new cv.Mat();
+                        cv.warpAffine(result, rotated, rotMatrix, new cv.Size(newWidth, newHeight), 
+                            cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255));
+                        
+                        result.delete();
+                        rotMatrix.delete();
+                        result = rotated;
+                    }
+                    
+                    // 2. Convert to grayscale
+                    let gray = new cv.Mat();
+                    if (result.channels() === 4) {
+                        cv.cvtColor(result, gray, cv.COLOR_RGBA2GRAY);
+                    } else if (result.channels() === 3) {
+                        cv.cvtColor(result, gray, cv.COLOR_RGB2GRAY);
+                    } else {
+                        gray = result.clone();
+                    }
+                    
+                    // 3. Gaussian blur
+                    if (preprocessing.gaussianBlur > 0) {
+                        const ksize = preprocessing.gaussianBlur % 2 === 0 
+                            ? preprocessing.gaussianBlur + 1 
+                            : preprocessing.gaussianBlur;
+                        cv.GaussianBlur(gray, gray, new cv.Size(ksize, ksize), 0);
+                    }
+                    
+                    // 4. Adaptive threshold
+                    if (preprocessing.useAdaptiveThreshold) {
+                        const blockSize = preprocessing.blockSize % 2 === 0 
+                            ? preprocessing.blockSize + 1 
+                            : preprocessing.blockSize;
+                        cv.adaptiveThreshold(gray, gray, 255,
+                            cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY,
+                            blockSize, preprocessing.constantOffset);
+                    }
+                    
+                    // 5. Morphology
+                    if (preprocessing.morphologyOperation !== 'none') {
+                        const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+                        const morphed = new cv.Mat();
+                        
+                        switch (preprocessing.morphologyOperation) {
+                            case 'erode':
+                                cv.erode(gray, morphed, kernel);
+                                break;
+                            case 'dilate':
+                                cv.dilate(gray, morphed, kernel);
+                                break;
+                            case 'open':
+                                cv.morphologyEx(gray, morphed, cv.MORPH_OPEN, kernel);
+                                break;
+                            case 'close':
+                                cv.morphologyEx(gray, morphed, cv.MORPH_CLOSE, kernel);
+                                break;
+                            default:
+                                gray.copyTo(morphed);
+                        }
+                        
+                        gray.delete();
+                        kernel.delete();
+                        gray = morphed;
+                    }
+                    
+                    // 6. Invert
+                    if (preprocessing.invertColors) {
+                        cv.bitwise_not(gray, gray);
+                    }
+                    
+                    result.delete();
+                    preprocessedMatRef.current = gray;
+                    
+                    const dataUrl = matToDataUrl(gray);
+                    setDisplayImage(dataUrl);
+                    
+                    console.log('✅ Preprocessing applied');
+                } catch (error) {
+                    console.error('Preprocessing error:', error);
+                    alert('Preprocessing failed: ' + error.message);
+                }
+            }, [preprocessing, opencvReady, matToDataUrl]);
+            
+            const resetPreprocessing = useCallback(() => {
+                setPreprocessing({
+                    rotation: 0,
+                    useAdaptiveThreshold: false,
+                    blockSize: 11,
+                    constantOffset: 2,
+                    gaussianBlur: 0,
+                    morphologyOperation: 'none',
+                    invertColors: false
+                });
+                if (originalImage) {
+                    setDisplayImage(originalImage);
+                }
+                if (preprocessedMatRef.current) {
+                    preprocessedMatRef.current.delete();
+                    preprocessedMatRef.current = null;
+                }
+            }, [originalImage]);
+            
+            // ========== RECOGNITION ==========
+            const recognizeGlyphs = useCallback(async () => {
+                if (!displayImage || !chartData || Object.keys(loadedGlyphImages).length === 0) {
+                    alert('❌ Please load an image and wait for the glyph chart to load');
+                    return;
+                }
+                
+                if (!opencvReady) {
+                    alert('❌ OpenCV not ready yet');
+                    return;
+                }
+                
+                setIsProcessing(true);
+                setRecognitionResults([]);
+                setValidations({});
+                
+                try {
+                    console.log('🔍 Starting glyph recognition...');
+                    
+                    // Get the mat to use
+                    let inputMat = preprocessedMatRef.current || originalMatRef.current;
+                    if (!inputMat) {
+                        inputMat = await loadImageToMat(displayImage);
+                    }
+                    
+                    // Basic contour detection for isolation
+                    const regions = [];
+                    try {
+                        let gray = new cv.Mat();
+                        if (inputMat.channels() > 1) {
+                            cv.cvtColor(inputMat, gray, cv.COLOR_RGBA2GRAY);
+                        } else {
+                            gray = inputMat.clone();
+                        }
+                        
+                        let binary = new cv.Mat();
+                        cv.threshold(gray, binary, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+                        
+                        let contours = new cv.MatVector();
+                        let hierarchy = new cv.Mat();
+                        cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+                        
+                        for (let i = 0; i < contours.size(); i++) {
+                            const rect = cv.boundingRect(contours.get(i));
+                            if (rect.width > 15 && rect.height > 15 && 
+                                rect.width < inputMat.cols * 0.5 && rect.height < inputMat.rows * 0.5) {
+                                regions.push({
+                                    x: rect.x,
+                                    y: rect.y,
+                                    width: rect.width,
+                                    height: rect.height
+                                });
+                            }
+                        }
+                        
+                        gray.delete();
+                        binary.delete();
+                        contours.delete();
+                        hierarchy.delete();
+                    } catch (e) {
+                        console.error('Isolation error:', e);
+                    }
+                    
+                    console.log(`📦 Isolated ${regions.length} potential glyph regions`);
+                    
+                    if (regions.length === 0) {
+                        alert('⚠️ No glyph regions detected. Try adjusting preprocessing settings.');
+                        setIsProcessing(false);
+                        return;
+                    }
+                    
+                    // Match each region
+                    const allDetections = [];
+                    const totalWork = regions.length * Object.keys(loadedGlyphImages).length;
+                    let completed = 0;
+                    
+                    for (let regionIdx = 0; regionIdx < regions.length; regionIdx++) {
+                        const region = regions[regionIdx];
+                        const regionDetections = [];
+                        
+                        // Extract thumbnail
+                        const thumbnail = await new Promise((resolve) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = region.width;
+                                canvas.height = region.height;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 
+                                    region.x, region.y, region.width, region.height,
+                                    0, 0, region.width, region.height);
+                                resolve(canvas.toDataURL('image/png'));
+                            };
+                            img.src = displayImage;
+                        });
+                        
+                        for (const [glyphId, templateImg] of Object.entries(loadedGlyphImages)) {
+                            const glyph = chartData.glyphs.find(g => g.id === parseInt(glyphId));
+                            if (!glyph) continue;
+                            
+                            // Simple aspect ratio comparison
+                            const regionAspect = region.width / region.height;
+                            const templateAspect = templateImg.naturalWidth / templateImg.naturalHeight;
+                            const aspectDiff = Math.abs(regionAspect - templateAspect);
+                            const confidence = Math.max(0, 1 - aspectDiff * 0.5);
+                            
+                            if (confidence > 0.4) {
+                                regionDetections.push({
+                                    glyph: glyph,
+                                    confidence: confidence,
+                                    position: region,
+                                    regionIndex: regionIdx,
+                                    thumbnail: thumbnail
+                                });
+                            }
+                            
+                            completed++;
+                            if (completed % 100 === 0) {
+                                setProcessingProgress({ current: completed, total: totalWork });
+                            }
+                        }
+                        
+                        if (regionDetections.length > 0) {
+                            regionDetections.sort((a, b) => b.confidence - a.confidence);
+                            const best = regionDetections[0];
+                            best.topMatches = regionDetections.slice(0, 5);
+                            allDetections.push(best);
+                        }
+                    }
+                    
+                    // Apply NMS
+                    const sorted = [...allDetections].sort((a, b) => b.confidence - a.confidence);
+                    const kept = [];
+                    for (const det of sorted) {
+                        let dominated = false;
+                        for (const kept_det of kept) {
+                            const x1 = Math.max(det.position.x, kept_det.position.x);
+                            const y1 = Math.max(det.position.y, kept_det.position.y);
+                            const x2 = Math.min(det.position.x + det.position.width, kept_det.position.x + kept_det.position.width);
+                            const y2 = Math.min(det.position.y + det.position.height, kept_det.position.y + kept_det.position.height);
+                            const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+                            const area1 = det.position.width * det.position.height;
+                            const area2 = kept_det.position.width * kept_det.position.height;
+                            const iou = intersection / (area1 + area2 - intersection);
+                            if (iou > 0.3) {
+                                dominated = true;
+                                break;
+                            }
+                        }
+                        if (!dominated) kept.push(det);
+                    }
+                    
+                    console.log(`✨ Final detections: ${kept.length}`);
+                    setRecognitionResults(kept);
+                    
+                    // Auto-detect reading order
+                    if (kept.length > 0) {
+                        const order = kept
+                            .map((d, i) => ({ i, x: d.position.x, y: d.position.y }))
+                            .sort((a, b) => {
+                                const rowDiff = Math.floor(a.y / 50) - Math.floor(b.y / 50);
+                                if (rowDiff !== 0) return rowDiff;
+                                return readingDirection === 'rtl' ? b.x - a.x : a.x - b.x;
+                            })
+                            .map(d => d.i);
+                        setReadingOrder(order);
+                    }
+                    
+                    alert(`✅ Recognition complete! Found ${kept.length} glyphs`);
+                    
+                } catch (error) {
+                    console.error('Recognition error:', error);
+                    alert('❌ Recognition failed: ' + error.message);
+                } finally {
+                    setIsProcessing(false);
+                    setProcessingProgress({ current: 0, total: 0 });
+                }
+            }, [displayImage, chartData, loadedGlyphImages, opencvReady, loadImageToMat, readingDirection]);
+            
+            // ========== VALIDATION ==========
+            const validateDetection = useCallback((index, isCorrect) => {
+                setValidations(prev => ({
+                    ...prev,
+                    [index]: { isCorrect, timestamp: new Date().toISOString() }
+                }));
+            }, []);
+            
+            const deleteDetection = useCallback((index) => {
+                setRecognitionResults(prev => prev.filter((_, i) => i !== index));
+                setValidations(prev => {
+                    const updated = {};
+                    Object.entries(prev).forEach(([k, v]) => {
+                        const oldIdx = parseInt(k);
+                        if (oldIdx < index) updated[oldIdx] = v;
+                        else if (oldIdx > index) updated[oldIdx - 1] = v;
+                    });
+                    return updated;
+                });
+                setReadingOrder(prev => 
+                    prev.filter(i => i !== index).map(i => i > index ? i - 1 : i)
+                );
             }, []);
 
             // ============================================
             // RENDER
             // ============================================
             return (
-                <div className="min-h-screen bg-gray-100">
+                <div className="min-h-screen bg-gray-100 flex flex-col">
                     {/* Header */}
-                    <header className="bg-ancient-purple text-white shadow-lg">
-                        <div className="max-w-7xl mx-auto px-4 py-4">
+                    <header className="bg-ancient-purple text-white shadow-lg flex-shrink-0">
+                        <div className="max-w-7xl mx-auto px-4 py-2">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <span className="text-3xl">📜</span>
+                                    <span className="text-2xl">📜</span>
                                     <div>
-                                        <h1 className="text-xl font-bold">Hakli Glyph Recognizer</h1>
-                                        <p className="text-sm text-purple-200">{APP_VERSION} - Modular Architecture</p>
+                                        <h1 className="text-base font-bold leading-tight">Hakli Glyph Recognizer</h1>
+                                        <p className="text-xs text-purple-200 leading-tight">
+                                            Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em>
+                                        </p>
+                                        <p className="text-xs text-purple-300 leading-tight">
+                                            beta {APP_VERSION} © hoopoe holdings
+                                        </p>
                                     </div>
                                 </div>
                                 
-                                <div className="flex items-center gap-3">
-                                    {/* Chart status */}
-                                    <div className={`px-3 py-1 rounded-full text-sm ${
-                                        state.chart.loadStatus === 'loaded' 
-                                            ? 'bg-patina' 
-                                            : state.chart.loadStatus === 'loading'
-                                            ? 'bg-ochre'
-                                            : 'bg-rust'
+                                <div className="flex items-center gap-2">
+                                    <div className={`px-2 py-1 rounded-full text-xs ${
+                                        chartStatus === 'loaded' ? 'bg-patina' : chartStatus === 'loading' ? 'bg-ochre' : 'bg-rust'
                                     }`}>
-                                        {state.chart.loadStatus === 'loaded' 
-                                            ? `✅ ${state.chart.data?.glyphs?.length || 0} glyphs`
-                                            : state.chart.loadStatus === 'loading'
-                                            ? `⏳ Loading... ${state.chart.imageLoadProgress.loaded}/${state.chart.imageLoadProgress.total}`
-                                            : '❌ Error'
-                                        }
+                                        {chartStatus === 'loaded' 
+                                            ? `✅ ${chartData?.glyphs?.length || 0} glyphs`
+                                            : chartStatus === 'loading'
+                                            ? `⏳ ${chartLoadProgress.loaded}/${chartLoadProgress.total}`
+                                            : '❌ Error'}
                                     </div>
-                                    
-                                    {/* Undo/Redo */}
-                                    <button
-                                        onClick={history.undo}
-                                        disabled={!history.canUndo}
-                                        className="p-2 rounded hover:bg-white/20 disabled:opacity-50"
-                                        title="Undo"
-                                    >
-                                        ↩️
-                                    </button>
-                                    <button
-                                        onClick={history.redo}
-                                        disabled={!history.canRedo}
-                                        className="p-2 rounded hover:bg-white/20 disabled:opacity-50"
-                                        title="Redo"
-                                    >
-                                        ↪️
-                                    </button>
+                                    <div className={`px-2 py-1 rounded-full text-xs ${opencvReady ? 'bg-patina' : 'bg-ochre'}`}>
+                                        {opencvReady ? '✅ CV' : '⏳ CV'}
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </header>
                     
                     {/* Main Content */}
-                    <main className="max-w-7xl mx-auto px-4 py-6">
-                        <div className="grid grid-cols-12 gap-6">
-                            {/* Left Sidebar - Controls */}
-                            <aside className="col-span-3 space-y-4">
+                    <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4">
+                        <div className="grid grid-cols-12 gap-4 h-full">
+                            {/* Left Sidebar */}
+                            <aside className="col-span-3 space-y-3 overflow-y-auto">
                                 {/* Image Upload */}
-                                <div className="bg-white rounded-lg shadow p-4">
-                                    <h3 className="font-bold text-gray-700 mb-3">📷 Image</h3>
-                                    <input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={handleImageUpload}
-                                        className="hidden"
-                                    />
+                                <div className="bg-white rounded-lg shadow p-3">
+                                    <h3 className="font-bold text-gray-700 mb-2 text-sm">📷 Image</h3>
+                                    <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                                     <button
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="w-full px-4 py-3 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] transition-colors font-medium"
+                                        disabled={isImageLoading}
+                                        className="w-full px-3 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] transition-colors text-sm font-medium disabled:bg-gray-300"
                                     >
-                                        {state.image.original ? '🔄 Change Image' : '📤 Upload Image'}
+                                        {isImageLoading ? '⏳ Loading...' : (originalImage ? '🔄 Change Image' : '📤 Upload Image')}
                                     </button>
                                 </div>
                                 
                                 {/* Preprocessing Panel */}
-                                {state.image.original && (
-                                    <PreprocessingPanel
-                                        preprocessing={state.preprocessing}
-                                        onUpdate={appState.updatePreprocessing}
-                                        onReset={appState.resetPreprocessing}
-                                        onApply={() => {/* Apply preprocessing */}}
-                                        isCollapsed={state.ui.collapsed.preprocessing}
-                                        onToggleCollapse={() => appState.togglePanel('preprocessing')}
-                                        showPreview={state.preprocessing.showPreview}
-                                        onTogglePreview={() => appState.updatePreprocessing('showPreview', !state.preprocessing.showPreview)}
-                                        preprocessCanvasRef={preprocessCanvasRef}
-                                        originalCanvasRef={originalCanvasRef}
-                                    />
-                                )}
-                                
-                                {/* Recognition Controls */}
-                                {state.image.original && (
-                                    <div className="bg-white rounded-lg shadow p-4">
-                                        <h3 className="font-bold text-gray-700 mb-3">🔍 Recognition</h3>
-                                        <button
-                                            onClick={recognition.recognizeGlyphs}
-                                            disabled={state.recognition.isProcessing || state.chart.loadStatus !== 'loaded'}
-                                            className="w-full px-4 py-3 bg-patina text-white rounded-lg hover:bg-[#5a7d6e] transition-colors font-medium disabled:bg-gray-300"
+                                {originalImage && (
+                                    <div className="bg-white rounded-lg shadow overflow-hidden">
+                                        <div 
+                                            className="px-3 py-2 bg-gray-50 flex items-center justify-between cursor-pointer hover:bg-gray-100"
+                                            onClick={() => setIsPreprocessingCollapsed(!isPreprocessingCollapsed)}
                                         >
-                                            {state.recognition.isProcessing 
-                                                ? `⏳ Processing... ${state.recognition.progress.current}/${state.recognition.progress.total}`
-                                                : '🔍 Recognize Glyphs'
-                                            }
-                                        </button>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm">🔧</span>
+                                                <span className="font-semibold text-gray-700 text-sm">Preprocessing</span>
+                                                {preprocessing.useAdaptiveThreshold && (
+                                                    <span className="px-1.5 py-0.5 bg-ancient-purple text-white text-xs rounded">Active</span>
+                                                )}
+                                            </div>
+                                            <svg className={`w-4 h-4 transition-transform ${isPreprocessingCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </div>
                                         
-                                        {state.recognition.results.length > 0 && (
-                                            <div className="mt-3 text-sm text-gray-600">
-                                                Found {state.recognition.results.length} glyphs
+                                        {!isPreprocessingCollapsed && (
+                                            <div className="p-3 space-y-3 text-sm">
+                                                {/* Rotation */}
+                                                <div>
+                                                    <div className="flex justify-between text-gray-600 mb-1">
+                                                        <span>🔄 Rotation</span>
+                                                        <span>{preprocessing.rotation}°</span>
+                                                    </div>
+                                                    <input type="range" min="-180" max="180" value={preprocessing.rotation}
+                                                        onChange={(e) => setPreprocessing(p => ({ ...p, rotation: parseInt(e.target.value) }))}
+                                                        className="w-full" />
+                                                </div>
+                                                
+                                                {/* Gaussian Blur */}
+                                                <div>
+                                                    <div className="flex justify-between text-gray-600 mb-1">
+                                                        <span>🌫️ Gaussian Blur</span>
+                                                        <span>{preprocessing.gaussianBlur}</span>
+                                                    </div>
+                                                    <input type="range" min="0" max="15" step="2" value={preprocessing.gaussianBlur}
+                                                        onChange={(e) => setPreprocessing(p => ({ ...p, gaussianBlur: parseInt(e.target.value) }))}
+                                                        className="w-full" />
+                                                </div>
+                                                
+                                                {/* Adaptive Threshold */}
+                                                <div className="p-2 bg-gray-50 rounded space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-gray-700">📊 Adaptive Threshold</span>
+                                                        <button
+                                                            onClick={() => setPreprocessing(p => ({ ...p, useAdaptiveThreshold: !p.useAdaptiveThreshold }))}
+                                                            className={`w-10 h-5 rounded-full transition-colors ${preprocessing.useAdaptiveThreshold ? 'bg-ancient-purple' : 'bg-gray-300'}`}
+                                                        >
+                                                            <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${preprocessing.useAdaptiveThreshold ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    {preprocessing.useAdaptiveThreshold && (
+                                                        <>
+                                                            <div>
+                                                                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                                                    <span>Block Size</span><span>{preprocessing.blockSize}</span>
+                                                                </div>
+                                                                <input type="range" min="3" max="51" step="2" value={preprocessing.blockSize}
+                                                                    onChange={(e) => setPreprocessing(p => ({ ...p, blockSize: parseInt(e.target.value) }))}
+                                                                    className="w-full" />
+                                                            </div>
+                                                            <div>
+                                                                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                                                    <span>Constant Offset</span><span>{preprocessing.constantOffset}</span>
+                                                                </div>
+                                                                <input type="range" min="-20" max="20" value={preprocessing.constantOffset}
+                                                                    onChange={(e) => setPreprocessing(p => ({ ...p, constantOffset: parseInt(e.target.value) }))}
+                                                                    className="w-full" />
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                                
+                                                {/* Morphology */}
+                                                <div>
+                                                    <span className="text-gray-600 block mb-1">🔲 Morphology</span>
+                                                    <select value={preprocessing.morphologyOperation}
+                                                        onChange={(e) => setPreprocessing(p => ({ ...p, morphologyOperation: e.target.value }))}
+                                                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm">
+                                                        <option value="none">None</option>
+                                                        <option value="erode">Erode</option>
+                                                        <option value="dilate">Dilate</option>
+                                                        <option value="open">Open</option>
+                                                        <option value="close">Close</option>
+                                                    </select>
+                                                </div>
+                                                
+                                                {/* Invert */}
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-gray-700">🔄 Invert Colors</span>
+                                                    <button
+                                                        onClick={() => setPreprocessing(p => ({ ...p, invertColors: !p.invertColors }))}
+                                                        className={`w-10 h-5 rounded-full transition-colors ${preprocessing.invertColors ? 'bg-ancient-purple' : 'bg-gray-300'}`}
+                                                    >
+                                                        <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${preprocessing.invertColors ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                    </button>
+                                                </div>
+                                                
+                                                {/* Buttons */}
+                                                <div className="flex gap-2 pt-2">
+                                                    <button onClick={resetPreprocessing}
+                                                        className="flex-1 px-2 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-sm">
+                                                        🔄 Reset
+                                                    </button>
+                                                    <button onClick={applyPreprocessing} disabled={!opencvReady}
+                                                        className="flex-1 px-2 py-1.5 bg-ancient-purple hover:bg-[#4a3d5a] text-white rounded text-sm disabled:bg-gray-300">
+                                                        ✨ Apply
+                                                    </button>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
                                 )}
-                                
-                                {/* Transcription Panel */}
-                                {state.recognition.results.length > 0 && (
-                                    <TranscriptionPanel
-                                        recognitionResults={filteredResults}
-                                        readingOrder={state.reading.order}
-                                        readingDirection={state.reading.direction}
-                                        wordBoundaries={state.reading.wordBoundaries}
-                                        lineBreaks={state.reading.lineBreaks}
-                                        columnBreaks={state.reading.columnBreaks}
-                                        translationEnglish={state.translation.english}
-                                        translationArabic={state.translation.arabic}
-                                        onDirectionChange={appState.setReadingDirection}
-                                        onTranslationEnglishChange={appState.setTranslationEnglish}
-                                        onTranslationArabicChange={appState.setTranslationArabic}
-                                        onAutoDetectOrder={() => {
-                                            if (typeof ReadingOrder !== 'undefined') {
-                                                const direction = ReadingOrder.detectDirection(filteredResults);
-                                                const order = ReadingOrder.generateOrder(filteredResults, direction);
-                                                appState.setReadingDirection(direction);
-                                                appState.setReadingOrder(order);
-                                            }
-                                        }}
-                                        onCopyToClipboard={copyToClipboard}
-                                        onSpeak={speak}
-                                        isCollapsed={state.ui.collapsed.viewMode}
-                                        onToggleCollapse={() => appState.togglePanel('viewMode')}
-                                    />
-                                )}
                             </aside>
                             
-                            {/* Main Area - Image & Detections */}
-                            <div className="col-span-6">
-                                <div className="bg-white rounded-lg shadow p-4">
-                                    {state.image.original ? (
-                                        <div 
-                                            ref={imageContainerRef}
-                                            className="canvas-container relative"
-                                        >
-                                            <img
-                                                ref={imageRef}
-                                                src={state.image.display || state.image.original}
-                                                alt="Inscription"
-                                                className="max-w-full h-auto"
-                                                style={{
-                                                    transform: `rotate(${state.image.rotation}deg)`
-                                                }}
-                                            />
+                            {/* Main Area - Image */}
+                            <div className="col-span-6 flex flex-col">
+                                <div className="bg-white rounded-lg shadow p-3 flex-1 flex flex-col">
+                                    {displayImage ? (
+                                        <div ref={imageContainerRef} className="relative flex-1 flex items-center justify-center overflow-hidden">
+                                            <img ref={imageRef} src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" />
                                             
                                             {/* Detection boxes */}
-                                            {filteredResults.map((result, index) => (
-                                                <DetectionBox
-                                                    key={index}
-                                                    detection={result}
-                                                    index={index}
-                                                    isSelected={state.interaction.selectedRegions.has(index)}
-                                                    isValidated={!!state.recognition.validations[index]}
-                                                    validationResult={state.recognition.validations[index]?.isCorrect}
-                                                    isUncertain={result.confidence < 0.6}
-                                                    showLabel={true}
-                                                    showArabicLabel={state.ui.showArabicLabels}
-                                                    viewMode={state.reading.viewMode}
-                                                    readingOrderIndex={
-                                                        state.reading.viewMode === 'reading' 
-                                                            ? state.reading.order.indexOf(index)
-                                                            : null
-                                                    }
-                                                    scale={{ x: 1, y: 1 }}
-                                                    onClick={(idx) => appState.toggleRegionSelection(idx)}
-                                                    onDoubleClick={(idx) => appState.setCorrectionMode(idx)}
-                                                />
-                                            ))}
+                                            {recognitionResults.map((result, index) => {
+                                                const validation = validations[index];
+                                                const isSelected = selectedRegions.has(index);
+                                                
+                                                let boxClass = 'detection-box unvalidated';
+                                                let labelBg = 'bg-stone';
+                                                
+                                                if (isSelected) { boxClass = 'detection-box selected'; labelBg = 'bg-ochre'; }
+                                                else if (validation?.isCorrect) { boxClass = 'detection-box validated-correct'; labelBg = 'bg-patina'; }
+                                                else if (validation && !validation.isCorrect) { boxClass = 'detection-box validated-incorrect'; labelBg = 'bg-rust'; }
+                                                if (result.confidence < 0.6) boxClass += ' uncertain';
+                                                
+                                                const img = imageRef.current;
+                                                if (!img) return null;
+                                                
+                                                const containerRect = imageContainerRef.current?.getBoundingClientRect();
+                                                const imgRect = img.getBoundingClientRect();
+                                                const scaleX = imgRect.width / img.naturalWidth;
+                                                const scaleY = imgRect.height / img.naturalHeight;
+                                                const offsetX = (containerRect?.width - imgRect.width) / 2 || 0;
+                                                const offsetY = (containerRect?.height - imgRect.height) / 2 || 0;
+                                                
+                                                return (
+                                                    <div key={index} className={boxClass}
+                                                        style={{
+                                                            left: offsetX + result.position.x * scaleX,
+                                                            top: offsetY + result.position.y * scaleY,
+                                                            width: result.position.width * scaleX,
+                                                            height: result.position.height * scaleY
+                                                        }}
+                                                        onClick={() => setSelectedRegions(prev => {
+                                                            const next = new Set(prev);
+                                                            next.has(index) ? next.delete(index) : next.add(index);
+                                                            return next;
+                                                        })}
+                                                        title={`${result.glyph.name} (${Math.round(result.confidence * 100)}%)`}>
+                                                        <div className={`detection-label ${labelBg}`}>
+                                                            {showArabicLabels ? result.glyph.arabic : result.glyph.transliteration}
+                                                        </div>
+                                                        {viewMode === 'reading' && (
+                                                            <div className="reading-order-badge">{readingOrder.indexOf(index) + 1}</div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     ) : (
-                                        <div className="flex flex-col items-center justify-center h-96 text-gray-400">
-                                            <span className="text-6xl mb-4">📷</span>
-                                            <p className="text-lg">Upload an inscription image to begin</p>
-                                            <p className="text-sm mt-2">Supports JPG, PNG, WebP</p>
+                                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                                            <span className="text-5xl mb-3">📷</span>
+                                            <p>Upload an inscription image to begin</p>
                                         </div>
                                     )}
                                 </div>
                             </div>
                             
-                            {/* Right Sidebar - Detection List */}
-                            <aside className="col-span-3">
-                                {filteredResults.length > 0 ? (
-                                    <div className="bg-white rounded-lg shadow p-4">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <h3 className="font-bold text-gray-700">🔍 Detections</h3>
-                                            <span className="text-sm text-gray-500">
-                                                {filteredResults.length} found
-                                            </span>
-                                        </div>
-                                        
-                                        {/* View mode toggle */}
-                                        <div className="flex gap-2 mb-4">
-                                            <button
-                                                onClick={() => appState.setViewMode('detection')}
-                                                className={`flex-1 px-3 py-2 rounded text-sm ${
-                                                    state.reading.viewMode === 'detection'
-                                                        ? 'bg-ancient-purple text-white'
-                                                        : 'bg-gray-100 text-gray-700'
-                                                }`}
-                                            >
-                                                🔍 Detection
+                            {/* Right Sidebar */}
+                            <aside className="col-span-3 flex flex-col gap-3">
+                                {/* Recognition Button */}
+                                <div className="bg-white rounded-lg shadow p-3">
+                                    <button onClick={recognizeGlyphs}
+                                        disabled={isProcessing || chartStatus !== 'loaded' || !displayImage}
+                                        className="w-full px-3 py-2.5 bg-patina text-white rounded-lg hover:bg-[#5a7d6e] text-sm font-medium disabled:bg-gray-300 disabled:cursor-not-allowed">
+                                        {isProcessing 
+                                            ? `⏳ Processing... ${processingProgress.current}/${processingProgress.total}`
+                                            : '🔍 Recognize Glyphs'}
+                                    </button>
+                                </div>
+                                
+                                {/* Detection List */}
+                                <div className="bg-white rounded-lg shadow p-3 flex-1 overflow-hidden flex flex-col">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h3 className="font-bold text-gray-700 text-sm">
+                                            {recognitionResults.length > 0 ? `🔍 ${recognitionResults.length} Detections` : '🔍 No detections yet'}
+                                        </h3>
+                                        {recognitionResults.length > 0 && (
+                                            <button onClick={() => setShowArabicLabels(!showArabicLabels)}
+                                                className={`px-2 py-1 rounded text-xs ${showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-200'}`}>
+                                                {showArabicLabels ? 'عربي' : 'ABC'}
                                             </button>
-                                            <button
-                                                onClick={() => appState.setViewMode('reading')}
-                                                className={`flex-1 px-3 py-2 rounded text-sm ${
-                                                    state.reading.viewMode === 'reading'
-                                                        ? 'bg-ancient-purple text-white'
-                                                        : 'bg-gray-100 text-gray-700'
-                                                }`}
-                                            >
-                                                📖 Reading
-                                            </button>
-                                        </div>
-                                        
-                                        {/* Detection list */}
-                                        <div className="max-h-[60vh] overflow-y-auto space-y-2">
-                                            <DetectionList
-                                                detections={filteredResults}
-                                                validations={state.recognition.validations}
-                                                selectedRegions={state.interaction.selectedRegions}
-                                                viewMode={state.reading.viewMode}
-                                                readingOrder={state.reading.order}
-                                                wordBoundaries={state.reading.wordBoundaries}
-                                                lineBreaks={state.reading.lineBreaks}
-                                                columnBreaks={state.reading.columnBreaks}
-                                                layout="list"
-                                                onSelect={(idx) => appState.toggleRegionSelection(idx)}
-                                                onValidate={recognition.validateDetection}
-                                                onCorrect={(idx, glyph) => {
-                                                    if (glyph) {
-                                                        recognition.correctDetection(idx, glyph);
-                                                    } else {
-                                                        appState.setCorrectionMode(idx);
-                                                    }
-                                                }}
-                                                onDelete={(idx) => {
-                                                    history.takeSnapshot();
-                                                    recognition.deleteDetection(idx);
-                                                }}
-                                                onToggleWordBoundary={appState.toggleWordBoundary}
-                                            />
-                                        </div>
+                                        )}
                                     </div>
-                                ) : (
-                                    <div className="bg-white rounded-lg shadow p-6 text-center text-gray-400">
-                                        <span className="text-4xl">🔍</span>
-                                        <p className="mt-2">No detections yet</p>
-                                        <p className="text-sm mt-1">Run recognition to detect glyphs</p>
-                                    </div>
-                                )}
+                                    
+                                    {recognitionResults.length === 0 ? (
+                                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 text-sm">
+                                            <span className="text-3xl mb-2">🔍</span>
+                                            <p>Run recognition to detect glyphs</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex gap-1 mb-2">
+                                                <button onClick={() => setViewMode('detection')}
+                                                    className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'detection' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}>
+                                                    🔍 Detection
+                                                </button>
+                                                <button onClick={() => setViewMode('reading')}
+                                                    className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'reading' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}>
+                                                    📖 Reading
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="flex-1 overflow-y-auto space-y-2">
+                                                {(viewMode === 'reading' ? readingOrder : recognitionResults.map((_, i) => i)).map((originalIdx, displayIdx) => {
+                                                    const result = recognitionResults[originalIdx];
+                                                    if (!result) return null;
+                                                    
+                                                    const validation = validations[originalIdx];
+                                                    const isSelected = selectedRegions.has(originalIdx);
+                                                    const confidence = Math.round(result.confidence * 100);
+                                                    
+                                                    let borderColor = 'border-gray-200';
+                                                    if (isSelected) borderColor = 'border-ochre';
+                                                    else if (validation?.isCorrect) borderColor = 'border-patina';
+                                                    else if (validation && !validation.isCorrect) borderColor = 'border-rust';
+                                                    
+                                                    return (
+                                                        <div key={originalIdx}
+                                                            className={`border-2 ${borderColor} rounded-lg p-2 cursor-pointer hover:shadow ${isSelected ? 'bg-yellow-50' : ''}`}
+                                                            onClick={() => setSelectedRegions(prev => {
+                                                                const next = new Set(prev);
+                                                                next.has(originalIdx) ? next.delete(originalIdx) : next.add(originalIdx);
+                                                                return next;
+                                                            })}>
+                                                            <div className="flex gap-2">
+                                                                {result.thumbnail && (
+                                                                    <div className="w-10 h-10 bg-gray-100 rounded overflow-hidden flex-shrink-0">
+                                                                        <img src={result.thumbnail} alt="" className="w-full h-full object-contain" />
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-1">
+                                                                        <span className="font-bold text-xs text-gray-500">
+                                                                            #{viewMode === 'reading' ? displayIdx + 1 : originalIdx + 1}
+                                                                        </span>
+                                                                        <span className={`text-xs font-medium ${
+                                                                            confidence >= 80 ? 'text-patina' : confidence >= 60 ? 'text-ochre' : 'text-rust'
+                                                                        }`}>{confidence}%</span>
+                                                                    </div>
+                                                                    <div className="font-medium text-gray-900 text-sm truncate">{result.glyph.name}</div>
+                                                                    <div className="text-lg text-ancient-purple leading-tight">
+                                                                        {result.glyph.arabic || result.glyph.transliteration}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-col gap-1">
+                                                                    {!validation && (
+                                                                        <>
+                                                                            <button onClick={(e) => { e.stopPropagation(); validateDetection(originalIdx, true); }}
+                                                                                className="w-6 h-6 bg-patina text-white rounded text-xs hover:bg-[#5a7d6e]">✓</button>
+                                                                            <button onClick={(e) => { e.stopPropagation(); validateDetection(originalIdx, false); }}
+                                                                                className="w-6 h-6 bg-rust text-white rounded text-xs hover:bg-[#8a574a]">✗</button>
+                                                                        </>
+                                                                    )}
+                                                                    <button onClick={(e) => { e.stopPropagation(); if (confirm('Delete?')) deleteDetection(originalIdx); }}
+                                                                        className="w-6 h-6 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300">🗑</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
                             </aside>
                         </div>
                     </main>
-                    
-                    {/* Modals */}
-                    {state.ui.modals.glyphEditor && (
-                        <GlyphEditorModal
-                            mode={state.ui.modals.glyphEditor.mode}
-                            glyph={state.ui.modals.glyphEditor.glyph}
-                            equivalenceChart={state.chart.data}
-                            setEquivalenceChart={appState.setChart}
-                            loadedGlyphImages={state.chart.loadedImages}
-                            setLoadedGlyphImages={(images) => {
-                                Object.entries(images).forEach(([id, img]) => {
-                                    appState.setLoadedGlyphImage(id, img);
-                                });
-                            }}
-                            glyphThumbnails={state.chart.thumbnails}
-                            setGlyphThumbnails={(thumbs) => {
-                                Object.entries(thumbs).forEach(([id, thumb]) => {
-                                    appState.setGlyphThumbnail(id, thumb);
-                                });
-                            }}
-                            onClose={() => appState.setModal('glyphEditor', null)}
-                        />
-                    )}
                 </div>
             );
         }
 
-        // Mount the app
         ReactDOM.createRoot(document.getElementById('root')).render(<HakliGlyphRecognizer />);
     </script>
 
-    <!-- Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
