@@ -901,6 +901,8 @@
                                                     className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'detection' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}>🔍 Detection</button>
                                                 <button onClick={() => setViewMode('reading')}
                                                     className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'reading' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}>📖 Reading</button>
+                                                <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); }}}
+                                                    className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200" title="Clear all detections">🗑</button>
                                             </div>
                                             
                                             <div className="flex-1 overflow-y-auto space-y-2">
@@ -933,16 +935,19 @@
                                                                     <div className="text-lg text-ancient-purple leading-tight">{result.glyph.arabic || result.glyph.transliteration}</div>
                                                                 </div>
                                                                 <div className="flex flex-col gap-1">
-                                                                    {!validation && (
+                                                                    {!validation ? (
                                                                         <>
                                                                             <button onClick={(e) => { e.stopPropagation(); validateDetection(idx, true); }}
-                                                                                className="w-6 h-6 bg-patina text-white rounded text-xs hover:bg-[#5a7d6e]">✓</button>
+                                                                                className="w-6 h-6 bg-patina text-white rounded text-xs hover:bg-[#5a7d6e]" title="Mark correct">✓</button>
                                                                             <button onClick={(e) => { e.stopPropagation(); validateDetection(idx, false); }}
-                                                                                className="w-6 h-6 bg-rust text-white rounded text-xs hover:bg-[#8a574a]">✗</button>
+                                                                                className="w-6 h-6 bg-rust text-white rounded text-xs hover:bg-[#8a574a]" title="Mark incorrect">✗</button>
                                                                         </>
+                                                                    ) : (
+                                                                        <button onClick={(e) => { e.stopPropagation(); setValidations(prev => { const n = {...prev}; delete n[idx]; return n; }); }}
+                                                                            className="w-6 h-6 bg-gray-400 text-white rounded text-xs hover:bg-gray-500" title="Clear validation">↩</button>
                                                                     )}
-                                                                    <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) deleteDetection(idx); }}
-                                                                        className="w-6 h-6 bg-gray-200 text-gray-600 rounded text-xs hover:bg-gray-300">🗑</button>
+                                                                    <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete this detection?')) deleteDetection(idx); }}
+                                                                        className="w-6 h-6 bg-red-500 text-white rounded text-xs hover:bg-red-600" title="Delete detection">🗑</button>
                                                                 </div>
                                                             </div>
                                                         </div>

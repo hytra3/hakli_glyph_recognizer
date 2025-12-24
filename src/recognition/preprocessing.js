@@ -128,8 +128,10 @@ const Preprocessing = {
         const newHeight = Math.round(image.cols * sin + image.rows * cos);
         
         // Adjust rotation matrix for new dimensions
-        rotationMatrix.doubleAt(0, 2) += (newWidth / 2) - center.x;
-        rotationMatrix.doubleAt(1, 2) += (newHeight / 2) - center.y;
+        const ptr02 = rotationMatrix.doublePtr(0, 2);
+        ptr02[0] = ptr02[0] + (newWidth / 2) - center.x;
+        const ptr12 = rotationMatrix.doublePtr(1, 2);
+        ptr12[0] = ptr12[0] + (newHeight / 2) - center.y;
         
         const rotated = new cv.Mat();
         cv.warpAffine(
