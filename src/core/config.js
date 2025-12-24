@@ -1,85 +1,113 @@
 // ============================================
-// CORE CONFIGURATION
-// Constants and settings for Hakli Glyph Recognizer
+// APPLICATION CONFIGURATION
+// Central configuration for the Hakli Glyph Recognizer
 // ============================================
 
 const CONFIG = {
-    // Application Info
+    // App info
+    APP_VERSION: 'v2.0.0-modular',
     APP_NAME: 'Hakli Glyph Recognizer',
-    APP_VERSION: 'v251126',
-    APP_AUTHOR: '©marty heaton',
+    APP_AUTHOR: 'Marty Heyman',
     
-    // GitHub Repository
-    GITHUB_BASE_URL: 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/',
-    GLYPH_CHART_URL: 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/Hakli_glyphs.JSON',
+    // GitHub repository
+    REPO: {
+        OWNER: 'hytra3',
+        NAME: 'hakli_glyph_recognizer',
+        BRANCH: 'main',
+        CHART_PATH: 'Hakli_glyphs.JSON'
+    },
     
-    // OpenCV
-    OPENCV_URL: 'https://docs.opencv.org/4.5.0/opencv.js',
+    // Storage keys
+    STORAGE: {
+        INSCRIPTION_KEY: 'hakli_inscriptions',
+        CORRECTIONS_KEY: 'hakli_corrections',
+        RECENT_EXPORTS_KEY: 'hakli_recent_exports',
+        SETTINGS_KEY: 'hakli_settings',
+        DISMISSED_TIPS_KEY: 'hakli_dismissed_tips',
+        MAX_RECENT_EXPORTS: 20
+    },
     
-    // Recognition Settings
+    // Recognition settings
     RECOGNITION: {
-        MIN_CONFIDENCE: 0.30,
-        IOU_THRESHOLD: 0.3,
-        SCALES: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 1.1, 1.2],
-        ROTATIONS: [-10, -5, 0, 5, 10],
-        CONFIDENCE_WEIGHTS: {
-            PRIMARY: 1.0,
-            VARIANT: 0.95,
-            EXAMPLE: 0.90
-        },
-        SHAPE_WEIGHTS: {
-            SHAPE: 0.70,
-            ASPECT: 0.15,
-            TEMPLATE: 0.15
+        MIN_CONFIDENCE: 0.3,
+        NMS_THRESHOLD: 0.3,
+        MIN_REGION_SIZE: 10,
+        MAX_REGION_SIZE: 500,
+        DEFAULT_PREPROCESSING: {
+            rotation: 0,
+            useAdaptiveThreshold: false,
+            blockSize: 11,
+            constantOffset: 2,
+            gaussianBlur: 0,
+            morphologyOperation: 'none',
+            invertColors: false
         }
     },
     
-    // Isolation Settings
-    ISOLATION: {
-        MIN_AREA_RATIO: 0.002,
-        MAX_AREA_RATIO: 0.05,
-        MIN_ASPECT_RATIO: 0.2,
-        MAX_ASPECT_RATIO: 5.0,
-        MIN_SOLIDITY: 0.3,
-        PADDING: 5
+    // Template matching weights
+    MATCHING: {
+        SHAPE_WEIGHT: 0.4,
+        CONTOUR_WEIGHT: 0.3,
+        ASPECT_WEIGHT: 0.2,
+        SIZE_WEIGHT: 0.1
     },
     
-    // Preprocessing Defaults
-    PREPROCESSING: {
-        ROTATION: 0,
-        USE_ADAPTIVE_THRESHOLD: false,
-        BLOCK_SIZE: 11,
-        CONSTANT_OFFSET: 2,
-        GAUSSIAN_BLUR: 0,
-        MORPHOLOGY_OPERATION: 'none',
-        INVERT_COLORS: false
-    },
-    
-    // Storage Settings
-    STORAGE: {
-        INSCRIPTION_KEY: 'hakliInscriptions',
-        CORRECTIONS_KEY: 'hakliCorrections',
-        RECENT_EXPORTS_KEY: 'hakliRecentExports',
-        MAX_RECENT_EXPORTS: 10,
-        CACHE_HISTORY_LIMIT: 50,
-        STATE_HISTORY_LIMIT: 50
-    },
-    
-    // Inscription ID Format
+    // Inscription ID format
     ID_FORMAT: {
-        PREFIX: 'DH',
-        YEAR_DIGITS: 4,
-        SEQUENCE_DIGITS: 3,
-        SEPARATOR: '-'
+        PREFIX: 'HKI',
+        SEPARATOR: '-',
+        SEQUENCE_DIGITS: 4
     },
     
-    // UI Settings
+    // UI settings
     UI: {
-        MAX_PROGRESS_UPDATES: 20,
-        INITIAL_EXAMPLES_TO_LOAD: 3,
-        TOTAL_GLYPHS_TO_SHOW: 8
+        DEFAULT_VIEW_MODE: 'detection',
+        DEFAULT_READING_DIRECTION: 'detection',
+        TOAST_DURATION: 3000,
+        DEBOUNCE_DELAY: 300
+    },
+    
+    // Export settings
+    EXPORT: {
+        IMAGE_FORMAT: 'image/png',
+        IMAGE_QUALITY: 0.92,
+        JSON_INDENT: 2
+    },
+    
+    // Google Drive settings
+    DRIVE: {
+        CLIENT_ID: '894554328044-5ocv2t6g8h9ssj80sscniuqgl2t3021m.apps.googleusercontent.com',
+        SCOPES: 'https://www.googleapis.com/auth/drive.file',
+        FOLDER_NAME: 'Hakli_Inscriptions'
+    },
+    
+    // Glyph chart settings
+    CHART: {
+        DEFAULT_URL: 'Hakli_glyphs.JSON',
+        GITHUB_RAW_BASE: 'https://raw.githubusercontent.com/hytra3/hakli_glyph_recognizer/main/'
+    },
+    
+    // Debug settings
+    DEBUG: {
+        ENABLED: true,
+        LOG_LEVEL: 'info', // 'debug' | 'info' | 'warn' | 'error'
+        SHOW_REGION_BOUNDARIES: false,
+        SHOW_MATCHING_SCORES: false
     }
 };
+
+// Freeze to prevent accidental modification
+Object.freeze(CONFIG);
+Object.freeze(CONFIG.REPO);
+Object.freeze(CONFIG.STORAGE);
+Object.freeze(CONFIG.RECOGNITION);
+Object.freeze(CONFIG.MATCHING);
+Object.freeze(CONFIG.ID_FORMAT);
+Object.freeze(CONFIG.UI);
+Object.freeze(CONFIG.EXPORT);
+Object.freeze(CONFIG.DRIVE);
+Object.freeze(CONFIG.CHART);
+Object.freeze(CONFIG.DEBUG);
 
 // Make globally available
 window.CONFIG = CONFIG;
