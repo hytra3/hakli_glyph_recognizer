@@ -145,6 +145,12 @@
             const [showArabicLabels, setShowArabicLabels] = useState(false);
             const [isPreprocessingCollapsed, setIsPreprocessingCollapsed] = useState(false);
             
+            // Chart Manager state
+            const [showChartManager, setShowChartManager] = useState(false);
+            const [showGlyphEditor, setShowGlyphEditor] = useState(false);
+            const [editingGlyph, setEditingGlyph] = useState(null);
+            const [glyphEditorMode, setGlyphEditorMode] = useState('add');
+            
             const [preprocessing, setPreprocessing] = useState({
                 rotation: 0,
                 useAdaptiveThreshold: false,
@@ -660,7 +666,7 @@
                         <div className="max-w-7xl mx-auto px-4 py-2">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <span className="text-2xl">📜</span>
+                                    <img src="hh-logo.png" alt="Hoopoe Holdings" className="w-10 h-10 rounded-full object-cover" />
                                     <div>
                                         <h1 className="text-base font-bold leading-tight">Hakli Glyph Recognizer</h1>
                                         <p className="text-xs text-purple-200 leading-tight">
@@ -673,6 +679,14 @@
                                 </div>
                                 
                                 <div className="flex items-center gap-2">
+                                    {/* Manage Chart Button */}
+                                    <button
+                                        onClick={() => setShowChartManager(true)}
+                                        disabled={chartStatus !== 'loaded'}
+                                        className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-medium disabled:opacity-50"
+                                    >
+                                        📊 Manage Chart
+                                    </button>
                                     <div className={`px-2 py-1 rounded-full text-xs ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-ochre'}`}>
                                         {chartStatus === 'loaded' ? `✅ ${chartData?.glyphs?.length || 0} glyphs` : `⏳ Loading...`}
                                     </div>
@@ -941,7 +955,256 @@
                             </aside>
                         </div>
                     </main>
+                    
+                    {/* ===== CHART MANAGER MODAL ===== */}
+                    {showChartManager && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+                                {/* Header */}
+                                <div className="flex items-center justify-between p-4 border-b">
+                                    <div>
+                                        <h3 className="text-xl font-bold text-gray-900">📊 Glyph Chart Manager</h3>
+                                        <p className="text-sm text-gray-500">{chartData?.glyphs?.length || 0} glyphs in chart</p>
+                                    </div>
+                                    <button onClick={() => setShowChartManager(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+                                </div>
+                                
+                                {/* Toolbar */}
+                                <div className="p-4 border-b flex flex-wrap gap-3 items-center">
+                                    <button
+                                        onClick={() => {
+                                            setGlyphEditorMode('add');
+                                            setEditingGlyph(null);
+                                            setShowGlyphEditor(true);
+                                        }}
+                                        className="px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5a7d6e]"
+                                    >
+                                        ➕ Add New Glyph
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const blob = new Blob([JSON.stringify(chartData, null, 2)], { type: 'application/json' });
+                                            const url = URL.createObjectURL(blob);
+                                            const a = document.createElement('a');
+                                            a.href = url;
+                                            a.download = `Hakli_glyphs_${new Date().toISOString().slice(0,10)}.JSON`;
+                                            a.click();
+                                            URL.revokeObjectURL(url);
+                                            alert('✅ Chart exported!');
+                                        }}
+                                        className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a]"
+                                    >
+                                        📥 Export Chart
+                                    </button>
+                                </div>
+                                
+                                {/* Glyph Grid */}
+                                <div className="flex-1 overflow-y-auto p-4">
+                                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+                                        {chartData?.glyphs?.map((glyph) => (
+                                            <div
+                                                key={glyph.id}
+                                                className="border border-gray-200 rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all"
+                                                onClick={() => {
+                                                    setGlyphEditorMode('edit');
+                                                    setEditingGlyph(glyph);
+                                                    setShowGlyphEditor(true);
+                                                }}
+                                            >
+                                                <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden">
+                                                    {glyphThumbnails[glyph.id] ? (
+                                                        <img src={glyphThumbnails[glyph.id]} alt={glyph.name} className="max-w-full max-h-full object-contain" />
+                                                    ) : (
+                                                        <span className="text-gray-400 text-xs">?</span>
+                                                    )}
+                                                </div>
+                                                <div className="text-center">
+                                                    <div className="text-xs font-medium text-gray-700 truncate">{glyph.name}</div>
+                                                    <div className="text-lg text-ancient-purple leading-tight">{glyph.arabic || glyph.transliteration}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* ===== GLYPH EDITOR MODAL ===== */}
+                    {showGlyphEditor && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+                                <div className="flex items-center justify-between p-4 border-b">
+                                    <h3 className="text-xl font-bold">{glyphEditorMode === 'add' ? '➕ Add New Glyph' : '✏️ Edit Glyph'}</h3>
+                                    <button onClick={() => setShowGlyphEditor(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+                                </div>
+                                
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                    {/* Form fields */}
+                                    <GlyphEditorForm
+                                        mode={glyphEditorMode}
+                                        glyph={editingGlyph}
+                                        chartData={chartData}
+                                        setChartData={setChartData}
+                                        loadedGlyphImages={loadedGlyphImages}
+                                        setLoadedGlyphImages={setLoadedGlyphImages}
+                                        glyphThumbnails={glyphThumbnails}
+                                        setGlyphThumbnails={setGlyphThumbnails}
+                                        onClose={() => setShowGlyphEditor(false)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
+            );
+        }
+        
+        // ===== GLYPH EDITOR FORM COMPONENT =====
+        function GlyphEditorForm({ mode, glyph, chartData, setChartData, loadedGlyphImages, setLoadedGlyphImages, glyphThumbnails, setGlyphThumbnails, onClose }) {
+            const { useState, useRef } = React;
+            
+            const [formData, setFormData] = useState({
+                name: glyph?.name || '',
+                arabic: glyph?.arabic || '',
+                transliteration: glyph?.transliteration || '',
+                description: glyph?.description || ''
+            });
+            const [primaryImage, setPrimaryImage] = useState(null);
+            const [primaryImagePreview, setPrimaryImagePreview] = useState(glyph?.images?.primary || null);
+            const [isSaving, setIsSaving] = useState(false);
+            const fileInputRef = useRef(null);
+            
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    setPrimaryImage(event.target.result);
+                    setPrimaryImagePreview(event.target.result);
+                };
+                reader.readAsDataURL(file);
+            };
+            
+            const handleSave = () => {
+                if (!formData.name.trim()) {
+                    alert('Name is required');
+                    return;
+                }
+                
+                setIsSaving(true);
+                const updatedChart = { ...chartData };
+                
+                if (mode === 'add') {
+                    const maxId = Math.max(...updatedChart.glyphs.map(g => g.id), 0);
+                    const newGlyph = {
+                        id: maxId + 1,
+                        name: formData.name.trim(),
+                        arabic: formData.arabic.trim() || 'x',
+                        transliteration: formData.transliteration.trim() || formData.name.trim(),
+                        description: formData.description.trim() || '',
+                        images: { primary: primaryImage || '', variants: [], examples: [] }
+                    };
+                    updatedChart.glyphs.push(newGlyph);
+                    
+                    if (primaryImage) {
+                        const img = new Image();
+                        img.onload = () => {
+                            setLoadedGlyphImages(prev => ({ ...prev, [newGlyph.id]: img }));
+                            setGlyphThumbnails(prev => ({ ...prev, [newGlyph.id]: img.src }));
+                        };
+                        img.src = primaryImage;
+                    }
+                    alert(`✅ Added glyph "${newGlyph.name}"`);
+                } else {
+                    const idx = updatedChart.glyphs.findIndex(g => g.id === glyph.id);
+                    if (idx !== -1) {
+                        updatedChart.glyphs[idx] = {
+                            ...updatedChart.glyphs[idx],
+                            name: formData.name.trim(),
+                            arabic: formData.arabic.trim() || 'x',
+                            transliteration: formData.transliteration.trim() || formData.name.trim(),
+                            description: formData.description.trim() || ''
+                        };
+                        if (primaryImage) {
+                            updatedChart.glyphs[idx].images.primary = primaryImage;
+                            const img = new Image();
+                            img.onload = () => {
+                                setLoadedGlyphImages(prev => ({ ...prev, [glyph.id]: img }));
+                                setGlyphThumbnails(prev => ({ ...prev, [glyph.id]: img.src }));
+                            };
+                            img.src = primaryImage;
+                        }
+                        alert(`✅ Updated glyph "${formData.name}"`);
+                    }
+                }
+                
+                setChartData(updatedChart);
+                setIsSaving(false);
+                onClose();
+            };
+            
+            const handleDelete = () => {
+                if (!glyph || !confirm(`Delete glyph "${glyph.name}"?`)) return;
+                const updatedChart = { ...chartData };
+                updatedChart.glyphs = updatedChart.glyphs.filter(g => g.id !== glyph.id);
+                setChartData(updatedChart);
+                alert(`🗑️ Deleted glyph "${glyph.name}"`);
+                onClose();
+            };
+            
+            return (
+                <>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                        <input type="text" value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g., aleph" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Arabic</label>
+                        <input type="text" value={formData.arabic} onChange={(e) => setFormData(p => ({ ...p, arabic: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-2xl text-center" dir="rtl" placeholder="ا" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Transliteration</label>
+                        <input type="text" value={formData.transliteration} onChange={(e) => setFormData(p => ({ ...p, transliteration: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="ʾ" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea value={formData.description} onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg" rows={2} />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Template Image {mode === 'add' && '*'}</label>
+                        <div className="flex gap-3 items-start">
+                            {primaryImagePreview && (
+                                <div className="w-20 h-20 border rounded bg-gray-100 flex items-center justify-center overflow-hidden">
+                                    <img src={primaryImagePreview} alt="Preview" className="max-w-full max-h-full object-contain" />
+                                </div>
+                            )}
+                            <div>
+                                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                                <button onClick={() => fileInputRef.current?.click()} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm">
+                                    📷 {primaryImagePreview ? 'Change' : 'Upload'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="flex justify-between pt-4 border-t">
+                        {mode === 'edit' && (
+                            <button onClick={handleDelete} className="px-4 py-2 bg-rust text-white rounded-lg hover:bg-[#8a574a]">🗑️ Delete</button>
+                        )}
+                        {mode === 'add' && <div />}
+                        <div className="flex gap-2">
+                            <button onClick={onClose} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg">Cancel</button>
+                            <button onClick={handleSave} disabled={isSaving} className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] disabled:bg-gray-300">
+                                {isSaving ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
+                </>
             );
         }
 
