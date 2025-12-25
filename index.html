@@ -145,6 +145,10 @@
             const [showArabicLabels, setShowArabicLabels] = useState(false);
             const [isPreprocessingCollapsed, setIsPreprocessingCollapsed] = useState(false);
             
+            // Force re-render of detection boxes when layout changes
+            const [boxLayoutKey, setBoxLayoutKey] = useState(0);
+            const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+            
             // Enhanced detection card state
             const [expandedCards, setExpandedCards] = useState(new Set()); // Cards showing alternatives
             const [excludedDetections, setExcludedDetections] = useState(new Set()); // Excluded from reading
@@ -155,6 +159,12 @@
             const [eraserSize, setEraserSize] = useState(15);
             const eraserCanvasRef = useRef(null);
             const isDrawingRef = useRef(false);
+            
+            // Region editor state (per-detection eraser)
+            const [regionEditorIdx, setRegionEditorIdx] = useState(null);
+            const [regionEditorSize, setRegionEditorSize] = useState(10);
+            const regionEditorCanvasRef = useRef(null);
+            const regionEditorDrawingRef = useRef(false);
             
             // Chart Manager state
             const [showChartManager, setShowChartManager] = useState(false);
@@ -250,6 +260,40 @@
                 };
                 loadChart();
             }, []);
+            
+            // ========== TRACK IMAGE DIMENSIONS FOR BOX ALIGNMENT ==========
+            useEffect(() => {
+                const img = imageRef.current;
+                const container = imageContainerRef.current;
+                if (!img || !container) return;
+                
+                // Update dimensions when image loads
+                const handleImageLoad = () => {
+                    setImageDimensions({ 
+                        width: img.naturalWidth, 
+                        height: img.naturalHeight 
+                    });
+                    setBoxLayoutKey(k => k + 1);
+                };
+                
+                img.addEventListener('load', handleImageLoad);
+                
+                // Also observe container resize
+                const resizeObserver = new ResizeObserver(() => {
+                    setBoxLayoutKey(k => k + 1);
+                });
+                resizeObserver.observe(container);
+                
+                // If image is already loaded, trigger immediately
+                if (img.complete) {
+                    handleImageLoad();
+                }
+                
+                return () => {
+                    img.removeEventListener('load', handleImageLoad);
+                    resizeObserver.disconnect();
+                };
+            }, [displayImage]);
             
             // ========== IMAGE HANDLING ==========
             const loadImageToMat = useCallback((imageSource) => {
@@ -424,6 +468,18 @@
             }, [preprocessing, opencvReady, matToDataUrl]);
             
             const resetPreprocessing = useCallback(() => {
+                // If there are active detections, warn user
+                if (recognitionResults.length > 0) {
+                    const confirmed = confirm(
+                        '⚠️ Resetting will misalign detection boxes since they were positioned on the preprocessed image.\n\n' +
+                        'Options:\n' +
+                        '• OK - Reset anyway (boxes may not align)\n' +
+                        '• Cancel - Keep current preprocessing\n\n' +
+                        'Tip: Clear detections first, or re-run recognition after reset.'
+                    );
+                    if (!confirmed) return;
+                }
+                
                 setPreprocessing({
                     rotation: 0,
                     useAdaptiveThreshold: false,
@@ -438,9 +494,13 @@
                     preprocessedMatRef.current.delete();
                     preprocessedMatRef.current = null;
                 }
-                // Reset recognition source dims to original
-                setRecognitionSourceDims(null);
-            }, [originalImage]);
+                
+                // Only reset recognitionSourceDims if no detections
+                // Otherwise keep it so boxes at least scale consistently
+                if (recognitionResults.length === 0) {
+                    setRecognitionSourceDims(null);
+                }
+            }, [originalImage, recognitionResults.length]);
             
             // ========== REAL-TIME PREPROCESSING ==========
             // Auto-apply preprocessing when settings change (with debounce)
@@ -453,10 +513,10 @@
                     clearTimeout(preprocessDebounceRef.current);
                 }
                 
-                // Debounce: wait 150ms after last change before applying
+                // Debounce: wait 50ms after last change before applying (fluid feel)
                 preprocessDebounceRef.current = setTimeout(() => {
                     applyPreprocessing();
-                }, 150);
+                }, 50);
                 
                 return () => {
                     if (preprocessDebounceRef.current) {
@@ -594,6 +654,142 @@
                     return updated;
                 });
             }, []);
+            
+            // ========== REGION EDITOR (Per-Detection Eraser) ==========
+            const openRegionEditor = useCallback((detectionIdx) => {
+                setRegionEditorIdx(detectionIdx);
+            }, []);
+            
+            const initRegionEditorCanvas = useCallback(() => {
+                if (regionEditorIdx === null || !regionEditorCanvasRef.current || !displayImage) return;
+                
+                const detection = recognitionResults[regionEditorIdx];
+                if (!detection) return;
+                
+                const canvas = regionEditorCanvasRef.current;
+                const pos = detection.position;
+                
+                // Add padding around the region
+                const padding = 20;
+                const regionX = Math.max(0, pos.x - padding);
+                const regionY = Math.max(0, pos.y - padding);
+                const regionW = pos.width + padding * 2;
+                const regionH = pos.height + padding * 2;
+                
+                // Set canvas size to region size (scaled up for easier editing)
+                const scale = Math.min(400 / regionW, 400 / regionH, 3);
+                canvas.width = regionW * scale;
+                canvas.height = regionH * scale;
+                
+                // Store region info on canvas for later
+                canvas.dataset.regionX = regionX;
+                canvas.dataset.regionY = regionY;
+                canvas.dataset.regionW = regionW;
+                canvas.dataset.regionH = regionH;
+                canvas.dataset.scale = scale;
+                
+                // Draw the region from the display image
+                const img = new Image();
+                img.onload = () => {
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(
+                        img,
+                        regionX, regionY, regionW, regionH,  // Source
+                        0, 0, canvas.width, canvas.height     // Destination
+                    );
+                };
+                img.src = displayImage;
+            }, [regionEditorIdx, recognitionResults, displayImage]);
+            
+            const handleRegionEditorStart = useCallback((e) => {
+                if (regionEditorIdx === null || !regionEditorCanvasRef.current) return;
+                regionEditorDrawingRef.current = true;
+                handleRegionEditorDraw(e);
+            }, [regionEditorIdx]);
+            
+            const handleRegionEditorDraw = useCallback((e) => {
+                if (!regionEditorDrawingRef.current || regionEditorIdx === null || !regionEditorCanvasRef.current) return;
+                
+                const canvas = regionEditorCanvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const rect = canvas.getBoundingClientRect();
+                
+                const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                
+                // Draw white circle (erase)
+                ctx.beginPath();
+                ctx.arc(x, y, regionEditorSize * parseFloat(canvas.dataset.scale || 1), 0, Math.PI * 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fill();
+            }, [regionEditorIdx, regionEditorSize]);
+            
+            const handleRegionEditorEnd = useCallback(() => {
+                regionEditorDrawingRef.current = false;
+            }, []);
+            
+            const applyRegionEdit = useCallback(async () => {
+                if (regionEditorIdx === null || !regionEditorCanvasRef.current || !displayImage) return;
+                
+                try {
+                    const canvas = regionEditorCanvasRef.current;
+                    const regionX = parseFloat(canvas.dataset.regionX);
+                    const regionY = parseFloat(canvas.dataset.regionY);
+                    const regionW = parseFloat(canvas.dataset.regionW);
+                    const regionH = parseFloat(canvas.dataset.regionH);
+                    
+                    // Create a new canvas with the full image
+                    const fullCanvas = document.createElement('canvas');
+                    const img = new Image();
+                    img.src = displayImage;
+                    await new Promise(resolve => { img.onload = resolve; });
+                    
+                    fullCanvas.width = img.naturalWidth;
+                    fullCanvas.height = img.naturalHeight;
+                    const fullCtx = fullCanvas.getContext('2d');
+                    fullCtx.drawImage(img, 0, 0);
+                    
+                    // Draw the edited region back onto the full image
+                    fullCtx.drawImage(
+                        canvas,
+                        0, 0, canvas.width, canvas.height,      // Source (edited region)
+                        regionX, regionY, regionW, regionH       // Destination
+                    );
+                    
+                    // Update display image
+                    const newDataUrl = fullCanvas.toDataURL('image/png');
+                    setDisplayImage(newDataUrl);
+                    
+                    // Update preprocessed mat if it exists
+                    if (preprocessedMatRef.current) {
+                        preprocessedMatRef.current.delete();
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = fullCanvas.width;
+                        tempCanvas.height = fullCanvas.height;
+                        tempCanvas.getContext('2d').drawImage(fullCanvas, 0, 0);
+                        preprocessedMatRef.current = cv.imread(tempCanvas);
+                    }
+                    
+                    setRegionEditorIdx(null);
+                    console.log('✅ Region edit applied');
+                } catch (error) {
+                    console.error('Region edit error:', error);
+                    alert('Failed to apply region edit');
+                }
+            }, [regionEditorIdx, displayImage]);
+            
+            const cancelRegionEdit = useCallback(() => {
+                setRegionEditorIdx(null);
+            }, []);
+            
+            // Initialize region editor canvas when opened
+            useEffect(() => {
+                if (regionEditorIdx !== null) {
+                    // Small delay to ensure canvas is mounted
+                    setTimeout(initRegionEditorCanvas, 50);
+                }
+            }, [regionEditorIdx, initRegionEditorCanvas]);
             
             // ========== RECOGNITION ==========
             const recognizeGlyphs = useCallback(async () => {
@@ -1098,9 +1294,14 @@
                                                 
                                                 {/* Buttons */}
                                                 <div className="flex gap-2 pt-2">
-                                                    <button onClick={resetPreprocessing} className="flex-1 px-2 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-sm">🔄 Reset</button>
+                                                    <button onClick={resetPreprocessing} 
+                                                        className="flex-1 px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-sm border border-gray-300">
+                                                        ↩️ Reset
+                                                    </button>
                                                     <button onClick={applyPreprocessing} disabled={!opencvReady}
-                                                        className="flex-1 px-2 py-1.5 bg-ancient-purple hover:bg-[#4a3d5a] text-white rounded text-sm disabled:bg-gray-300">✨ Apply</button>
+                                                        className="flex-1 px-2 py-1.5 bg-patina hover:bg-[#5a7d6e] text-white rounded text-sm font-medium disabled:bg-gray-300">
+                                                        ✅ Apply
+                                                    </button>
                                                 </div>
                                                 
                                                 {/* Eraser Tool */}
@@ -1179,9 +1380,13 @@
                                                 if (result.confidence < 0.5) boxClass += ' uncertain';
                                                 
                                                 const img = imageRef.current;
-                                                if (!img) return null;
+                                                const container = imageContainerRef.current;
+                                                if (!img || !container) return null;
                                                 
-                                                const containerRect = imageContainerRef.current?.getBoundingClientRect();
+                                                // Force recalculation by using boxLayoutKey (referenced but not directly used)
+                                                const _ = boxLayoutKey;
+                                                
+                                                const containerRect = container.getBoundingClientRect();
                                                 const imgRect = img.getBoundingClientRect();
                                                 
                                                 // Use tracked recognition source dimensions if available
@@ -1191,8 +1396,11 @@
                                                 
                                                 const scaleX = imgRect.width / sourceWidth;
                                                 const scaleY = imgRect.height / sourceHeight;
-                                                const offsetX = (containerRect?.width - imgRect.width) / 2 || 0;
-                                                const offsetY = (containerRect?.height - imgRect.height) / 2 || 0;
+                                                const offsetX = containerRect && imgRect ? (containerRect.width - imgRect.width) / 2 : 0;
+                                                const offsetY = containerRect && imgRect ? (containerRect.height - imgRect.height) / 2 : 0;
+                                                
+                                                // Skip rendering if dimensions aren't ready
+                                                if (!imgRect.width || !imgRect.height) return null;
                                                 
                                                 return (
                                                     <div key={index} className={boxClass}
@@ -1354,6 +1562,11 @@
                                                                     title="Expand detection box">
                                                                     ⊞ Expand
                                                                 </button>
+                                                                <button onClick={(e) => { e.stopPropagation(); openRegionEditor(idx); }}
+                                                                    className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-600 hover:bg-blue-200"
+                                                                    title="Edit region - erase stray marks">
+                                                                    ✏️ Edit
+                                                                </button>
                                                             </div>
                                                             
                                                             {/* Expanded: Alternative matches */}
@@ -1483,6 +1696,66 @@
                                         setGlyphThumbnails={setGlyphThumbnails}
                                         onClose={() => setShowGlyphEditor(false)}
                                     />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* ===== REGION EDITOR MODAL ===== */}
+                    {regionEditorIdx !== null && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+                                <div className="flex items-center justify-between p-4 border-b">
+                                    <div>
+                                        <h3 className="text-xl font-bold">✏️ Edit Region #{regionEditorIdx + 1}</h3>
+                                        <p className="text-sm text-gray-500">Erase stray marks from this detection</p>
+                                    </div>
+                                    <button onClick={() => setRegionEditorIdx(null)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+                                </div>
+                                
+                                <div className="flex-1 overflow-auto p-4">
+                                    {/* Brush size control */}
+                                    <div className="mb-4">
+                                        <div className="flex justify-between text-sm text-gray-600 mb-1">
+                                            <span>🖌️ Eraser Size</span>
+                                            <span>{regionEditorSize}px</span>
+                                        </div>
+                                        <input type="range" min="3" max="30" value={regionEditorSize}
+                                            onChange={(e) => setRegionEditorSize(parseInt(e.target.value))}
+                                            className="w-full" />
+                                    </div>
+                                    
+                                    {/* Canvas for editing */}
+                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-2 bg-gray-50 flex items-center justify-center">
+                                        <canvas 
+                                            ref={regionEditorCanvasRef}
+                                            className="max-w-full border border-gray-200 cursor-crosshair bg-white"
+                                            style={{ imageRendering: 'pixelated' }}
+                                            onMouseDown={handleRegionEditorStart}
+                                            onMouseMove={handleRegionEditorDraw}
+                                            onMouseUp={handleRegionEditorEnd}
+                                            onMouseLeave={handleRegionEditorEnd}
+                                        />
+                                    </div>
+                                    
+                                    <p className="text-xs text-gray-400 mt-2 text-center">
+                                        Draw to erase (white out) unwanted marks. Changes apply only to this region.
+                                    </p>
+                                </div>
+                                
+                                <div className="flex justify-end gap-2 p-4 border-t">
+                                    <button onClick={() => setRegionEditorIdx(null)}
+                                        className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg">
+                                        Cancel
+                                    </button>
+                                    <button onClick={() => { initRegionEditorCanvas(); }}
+                                        className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg">
+                                        🔄 Reset
+                                    </button>
+                                    <button onClick={applyRegionEdit}
+                                        className="px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5a7d6e]">
+                                        ✅ Apply Changes
+                                    </button>
                                 </div>
                             </div>
                         </div>
