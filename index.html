@@ -162,6 +162,10 @@
             const [selectedRegions, setSelectedRegions] = useState(new Set());
             const [showArabicLabels, setShowArabicLabels] = useState(false);
             const [isPreprocessingCollapsed, setIsPreprocessingCollapsed] = useState(false);
+            const [isToolsCollapsed, setIsToolsCollapsed] = useState(true);
+            
+            // Mobile responsive state
+            const [mobilePanel, setMobilePanel] = useState(null); // null, 'preprocessing', or 'detections'
             
             // Force re-render of detection boxes when layout changes
             const [boxLayoutKey, setBoxLayoutKey] = useState(0);
@@ -197,7 +201,7 @@
             const [transcriptionFormat, setTranscriptionFormat] = useState('horizontal-ltr');
             
             // Storage state
-            const [showStorageSection, setShowStorageSection] = useState(false);
+            const [showStorageSection, setShowStorageSection] = useState(true);
             const [currentInscriptionId, setCurrentInscriptionId] = useState(null);
             const [columnBreaks, setColumnBreaks] = useState(new Set());
             const [actionHistory, setActionHistory] = useState([]);
@@ -1575,9 +1579,157 @@
                         </div>
                     </header>
                     
+                    {/* Mobile Navigation Bar - Only visible on small screens */}
+                    <div className="lg:hidden flex items-center justify-between px-4 py-2 bg-white border-b shadow-sm">
+                        <button 
+                            onClick={() => setMobilePanel(mobilePanel === 'preprocessing' ? null : 'preprocessing')}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium ${mobilePanel === 'preprocessing' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}
+                        >
+                            ☰ Preprocess
+                        </button>
+                        <button 
+                            onClick={() => fileInputRef.current?.click()} 
+                            disabled={isImageLoading}
+                            className="px-3 py-2 bg-ancient-purple text-white rounded-lg text-sm font-medium"
+                        >
+                            {originalImage ? '🔄' : '📤'} Image
+                        </button>
+                        <button 
+                            onClick={() => setMobilePanel(mobilePanel === 'detections' ? null : 'detections')}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium ${mobilePanel === 'detections' ? 'bg-patina text-white' : 'bg-gray-100'}`}
+                        >
+                            Detections {recognitionResults.length > 0 ? `(${recognitionResults.length})` : ''} ☰
+                        </button>
+                    </div>
+                    
+                    {/* Mobile Slide-out Panels */}
+                    {/* Preprocessing Panel - Mobile */}
+                    {mobilePanel === 'preprocessing' && (
+                        <div className="lg:hidden fixed inset-0 z-50 flex">
+                            <div className="w-80 max-w-[85vw] bg-white shadow-xl overflow-y-auto">
+                                <div className="p-3 bg-ancient-purple text-white flex justify-between items-center">
+                                    <span className="font-semibold">⚙️ Preprocessing</span>
+                                    <button onClick={() => setMobilePanel(null)} className="text-xl px-2">✕</button>
+                                </div>
+                                <div className="p-3 space-y-3">
+                                    {/* Image Upload */}
+                                    <div className="bg-gray-50 rounded-lg p-3">
+                                        <h3 className="font-bold text-gray-700 mb-2 text-sm">📷 Image</h3>
+                                        <button onClick={() => { fileInputRef.current?.click(); setMobilePanel(null); }} disabled={isImageLoading}
+                                            className="w-full px-3 py-2 bg-ancient-purple text-white rounded-lg text-sm font-medium disabled:bg-gray-300">
+                                            {isImageLoading ? '⏳ Loading...' : (originalImage ? '🔄 Change Image' : '📤 Upload Image')}
+                                        </button>
+                                    </div>
+                                    
+                                    {/* Preprocessing Controls */}
+                                    {originalImage && (
+                                        <div className="bg-gray-50 rounded-lg p-3 space-y-3">
+                                            <h3 className="font-bold text-gray-700 text-sm">🎨 Adjustments</h3>
+                                            <div>
+                                                <label className="text-xs text-gray-600">Rotation: {rotation}°</label>
+                                                <input type="range" min="-180" max="180" value={rotation} onChange={e => setRotation(Number(e.target.value))}
+                                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-gray-600">Blur: {blur}</label>
+                                                <input type="range" min="0" max="10" value={blur} onChange={e => setBlur(Number(e.target.value))}
+                                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs text-gray-600">Adaptive Threshold</span>
+                                                <button onClick={() => setUseAdaptiveThreshold(!useAdaptiveThreshold)}
+                                                    className={`w-10 h-5 rounded-full transition-colors ${useAdaptiveThreshold ? 'bg-patina' : 'bg-gray-300'}`}>
+                                                    <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${useAdaptiveThreshold ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                </button>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs text-gray-600">Invert</span>
+                                                <button onClick={() => setInvertColors(!invertColors)}
+                                                    className={`w-10 h-5 rounded-full transition-colors ${invertColors ? 'bg-patina' : 'bg-gray-300'}`}>
+                                                    <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${invertColors ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                </button>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={resetPreprocessing} className="flex-1 px-2 py-1.5 bg-gray-200 rounded text-sm">Reset</button>
+                                                <button onClick={applyPreprocessing} className="flex-1 px-2 py-1.5 bg-patina text-white rounded text-sm">Apply</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex-1 bg-black/50" onClick={() => setMobilePanel(null)} />
+                        </div>
+                    )}
+                    
+                    {/* Detections Panel - Mobile */}
+                    {mobilePanel === 'detections' && (
+                        <div className="lg:hidden fixed inset-0 z-50 flex flex-row-reverse">
+                            <div className="w-80 max-w-[85vw] bg-white shadow-xl overflow-y-auto flex flex-col">
+                                <div className="p-3 bg-patina text-white flex justify-between items-center">
+                                    <span className="font-semibold">🔍 Detections ({recognitionResults.length})</span>
+                                    <button onClick={() => setMobilePanel(null)} className="text-xl px-2">✕</button>
+                                </div>
+                                <div className="p-3 space-y-2 flex-1 overflow-y-auto">
+                                    {/* Recognize button */}
+                                    <button onClick={() => { recognizeGlyphs(); }} disabled={isProcessing || chartStatus !== 'loaded' || !displayImage}
+                                        className="w-full px-3 py-2.5 bg-patina text-white rounded-lg text-sm font-medium disabled:bg-gray-300">
+                                        {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : '🔍 Recognize Glyphs'}
+                                    </button>
+                                    
+                                    {/* Detection/Reading toggle */}
+                                    {recognitionResults.length > 0 && (
+                                        <div className="flex gap-1 bg-gray-100 p-1 rounded">
+                                            <button onClick={() => setViewMode('detection')}
+                                                className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'detection' ? 'bg-ancient-purple text-white' : ''}`}>🔍 Detection</button>
+                                            <button onClick={() => setViewMode('reading')}
+                                                className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'reading' ? 'bg-ancient-purple text-white' : ''}`}>📖 Reading</button>
+                                        </div>
+                                    )}
+                                    
+                                    {/* Detection cards - simplified for mobile */}
+                                    {recognitionResults.length === 0 ? (
+                                        <div className="text-center text-gray-400 py-8">
+                                            <span className="text-3xl">🔍</span>
+                                            <p className="text-sm mt-2">Run recognition to detect glyphs</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {(viewMode === 'reading' 
+                                                ? readingOrder.filter(i => !excludedDetections.has(i))
+                                                : recognitionResults.map((_, i) => i)
+                                            ).map((idx) => {
+                                                const result = recognitionResults[idx];
+                                                if (!result) return null;
+                                                const conf = Math.round(result.confidence * 100);
+                                                return (
+                                                    <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded border">
+                                                        {result.thumbnail && (
+                                                            <img src={result.thumbnail} alt="" className="w-10 h-10 object-contain bg-white rounded" />
+                                                        )}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="font-semibold text-sm truncate">{result.glyph.name}</div>
+                                                            <div className="text-xs text-gray-500">{result.glyph.transliteration || result.glyph.name} · {conf}%</div>
+                                                        </div>
+                                                        <button onClick={() => setSelectedRegions(prev => {
+                                                            const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n;
+                                                        })} className={`px-2 py-1 rounded text-xs ${selectedRegions.has(idx) ? 'bg-ochre text-white' : 'bg-gray-200'}`}>
+                                                            {selectedRegions.has(idx) ? '✓' : 'Select'}
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex-1 bg-black/50" onClick={() => setMobilePanel(null)} />
+                        </div>
+                    )}
+                    
                     {/* Main Content */}
                     <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4 overflow-hidden">
-                        <div className="grid grid-cols-12 gap-4 h-[calc(100vh-140px)]">
+                        {/* Desktop: 3-column grid */}
+                        <div className="hidden lg:grid grid-cols-12 gap-4 h-[calc(100vh-140px)]">
                             {/* Left Sidebar - Independent Scroll */}
                             <aside className="col-span-3 overflow-y-auto space-y-3 pr-1">
                                 {/* Image Upload */}
@@ -1827,7 +1979,7 @@
                                                         })}
                                                         title={`${result.glyph.name} (${Math.round(result.confidence * 100)}%)`}>
                                                         <div className={`detection-label ${labelBg}`}>
-                                                            {showArabicLabels ? result.glyph.arabic : result.glyph.transliteration}
+                                                            {showArabicLabels ? (result.glyph.arabic || result.glyph.name) : (result.glyph.transliteration || result.glyph.name)}
                                                         </div>
                                                         {viewMode === 'reading' && <div className="reading-order-badge">{readingOrder.indexOf(index) + 1}</div>}
                                                     </div>
@@ -1845,55 +1997,67 @@
                             
                             {/* Right Sidebar - Independent Scroll */}
                             <aside className="col-span-3 flex flex-col gap-3 overflow-y-auto pl-1">
-                                {/* Recognition Button */}
+                                {/* Recognition Section - Collapsible */}
                                 <div className="bg-white rounded-lg shadow p-3">
-                                    <button onClick={recognizeGlyphs} disabled={isProcessing || chartStatus !== 'loaded' || !displayImage}
-                                        className="w-full px-3 py-2.5 bg-patina text-white rounded-lg hover:bg-[#5a7d6e] text-sm font-medium disabled:bg-gray-300">
-                                        {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : '🔍 Recognize Glyphs'}
-                                    </button>
-                                    
-                                    {/* Manual Box Mode */}
-                                    <button 
-                                        onClick={() => {
-                                            setManualBoxMode(!manualBoxMode);
-                                            if (eraserMode) setEraserMode(false);
-                                        }}
-                                        disabled={!displayImage}
-                                        className={`w-full mt-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                            manualBoxMode 
-                                                ? 'bg-ochre text-white' 
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                        } disabled:bg-gray-100 disabled:text-gray-400`}
-                                    >
-                                        {manualBoxMode ? '✋ Click to Exit Manual Mode' : '➕ Add Manual Box'}
-                                    </button>
-                                    
-                                    {manualBoxMode && (
-                                        <div className="mt-2 p-2 bg-ochre/10 rounded text-xs text-ochre">
-                                            🖱️ Click and drag on the image to draw a box around a glyph
-                                        </div>
-                                    )}
-                                    
-                                    {/* Template Training Mode */}
-                                    {recognitionResults.length > 0 && (
-                                        <button 
-                                            onClick={() => {
-                                                setTemplateTrainingMode(!templateTrainingMode);
-                                                setSelectedForTemplate(null);
-                                            }}
-                                            className={`w-full mt-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                                templateTrainingMode 
-                                                    ? 'bg-ancient-purple text-white' 
-                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                            }`}
-                                        >
-                                            {templateTrainingMode ? '🎓 Exit Training Mode' : '🎓 Template Training'}
+                                    <div className="flex gap-2 items-center">
+                                        <button onClick={recognizeGlyphs} disabled={isProcessing || chartStatus !== 'loaded' || !displayImage}
+                                            className="flex-1 px-3 py-2.5 bg-patina text-white rounded-lg hover:bg-[#5a7d6e] text-sm font-medium disabled:bg-gray-300">
+                                            {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : '🔍 Recognize Glyphs'}
                                         </button>
-                                    )}
+                                        <button 
+                                            onClick={() => setIsToolsCollapsed(!isToolsCollapsed)}
+                                            className="px-2 py-2.5 bg-gray-100 rounded-lg hover:bg-gray-200 text-gray-500 text-xs"
+                                            title={isToolsCollapsed ? 'Show tools' : 'Hide tools'}
+                                        >
+                                            {isToolsCollapsed ? '▼' : '▲'}
+                                        </button>
+                                    </div>
                                     
-                                    {templateTrainingMode && (
-                                        <div className="mt-2 p-2 bg-ancient-purple/10 rounded text-xs text-ancient-purple">
-                                            Click a detection to save it as Primary, Variant, or Example template
+                                    {/* Expanded: Manual Box & Template Training */}
+                                    {!isToolsCollapsed && (
+                                        <div className="mt-2 pt-2 border-t border-gray-100 space-y-2">
+                                            <button 
+                                                onClick={() => {
+                                                    setManualBoxMode(!manualBoxMode);
+                                                    if (eraserMode) setEraserMode(false);
+                                                }}
+                                                disabled={!displayImage}
+                                                className={`w-full px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                                                    manualBoxMode 
+                                                        ? 'bg-ochre text-white' 
+                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                } disabled:bg-gray-100 disabled:text-gray-400`}
+                                            >
+                                                {manualBoxMode ? '✋ Exit Manual Mode' : '➕ Add Manual Box'}
+                                            </button>
+                                            
+                                            {manualBoxMode && (
+                                                <div className="p-2 bg-ochre/10 rounded text-xs text-ochre">
+                                                    🖱️ Click and drag on image to draw a box
+                                                </div>
+                                            )}
+                                            
+                                            {recognitionResults.length > 0 && (
+                                                <button 
+                                                    onClick={() => {
+                                                        setTemplateTrainingMode(!templateTrainingMode);
+                                                        setSelectedForTemplate(null);
+                                                    }}
+                                                    className={`w-full px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                                                        templateTrainingMode 
+                                                            ? 'bg-ancient-purple text-white' 
+                                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                    }`}
+                                                >
+                                                    {templateTrainingMode ? '🎓 Exit Training Mode' : '🎓 Template Training'}
+                                                </button>
+                                            )}
+                                            
+                                            {templateTrainingMode && (
+                                                <div className="p-2 bg-ancient-purple/10 rounded text-xs text-ancient-purple">
+                                                    Save detections as Primary, Variant, or Example
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -2019,7 +2183,7 @@
                                                                             {lineBreaks.has(idx) && <span className="text-xs font-bold text-ancient-purple px-1 bg-ancient-purple/20 rounded">⏎</span>}
                                                                         </div>
                                                                         <div className="font-medium text-gray-900 text-sm truncate">{result.glyph.name}</div>
-                                                                        <div className="text-lg text-ancient-purple leading-tight">{result.glyph.arabic || result.glyph.transliteration}</div>
+                                                                        <div className="text-lg text-ancient-purple leading-tight">{result.glyph.arabic || result.glyph.transliteration || result.glyph.name}</div>
                                                                     </div>
                                                                     <div className="flex flex-col gap-1">
                                                                         {!validation ? (
@@ -2129,7 +2293,7 @@
                                                                                 {glyphThumbnails[alt.glyph.id] && (
                                                                                     <img src={glyphThumbnails[alt.glyph.id]} alt="" className="w-5 h-5 object-contain" />
                                                                                 )}
-                                                                                <span className="text-xs font-medium">{alt.glyph.transliteration}</span>
+                                                                                <span className="text-xs font-medium">{alt.glyph.transliteration || alt.glyph.name}</span>
                                                                                 <span className="text-xs text-gray-400">{Math.round(alt.confidence * 100)}%</span>
                                                                             </button>
                                                                         ))}
@@ -2138,33 +2302,54 @@
                                                             )}
                                                             
                                                             {/* Template Training Mode - Save as template options */}
-                                                            {templateTrainingMode && (
-                                                                <div className="px-2 pb-2 border-t-2 border-ancient-purple bg-ancient-purple/5">
-                                                                    <div className="text-xs font-semibold text-ancient-purple mb-2 pt-2">
-                                                                        🎓 Save "{result.glyph.name}" as:
+                                                            {templateTrainingMode && (() => {
+                                                                // Get current chart status for this glyph
+                                                                const chartGlyph = chartData?.glyphs?.find(g => g.id === result.glyph.id);
+                                                                const hasPrimary = !!(chartGlyph?.images?.primary);
+                                                                const variantCount = chartGlyph?.images?.variants?.length || 0;
+                                                                const exampleCount = chartGlyph?.images?.examples?.length || 0;
+                                                                
+                                                                return (
+                                                                    <div className="px-2 pb-2 border-t-2 border-ancient-purple bg-ancient-purple/5">
+                                                                        {/* Current chart status */}
+                                                                        <div className="text-xs text-gray-600 pt-2 mb-1 flex gap-3">
+                                                                            <span className={hasPrimary ? 'text-patina font-semibold' : 'text-gray-400'}>
+                                                                                🎯 {hasPrimary ? '✓' : '—'}
+                                                                            </span>
+                                                                            <span className={variantCount > 0 ? 'text-patina font-semibold' : 'text-gray-400'}>
+                                                                                ⭐ {variantCount}
+                                                                            </span>
+                                                                            <span className={exampleCount > 0 ? 'text-patina font-semibold' : 'text-gray-400'}>
+                                                                                📚 {exampleCount}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="text-xs font-semibold text-ancient-purple mb-2">
+                                                                            Save "{result.glyph.name}" as:
+                                                                        </div>
+                                                                        <div className="flex gap-1 flex-wrap">
+                                                                            <button
+                                                                                onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'primary'); }}
+                                                                                className={`px-2 py-1 text-white text-xs rounded ${hasPrimary ? 'bg-stone/70 hover:bg-stone' : 'bg-stone hover:bg-stone-dark ring-2 ring-ochre'}`}
+                                                                                title={hasPrimary ? 'Replace existing primary' : 'No primary yet - recommended!'}
+                                                                            >
+                                                                                🎯 Primary {!hasPrimary && '⚠️'}
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'variant'); }}
+                                                                                className="px-2 py-1 bg-patina text-white text-xs rounded hover:bg-[#5d7a6d]"
+                                                                            >
+                                                                                ⭐ Variant
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'example'); }}
+                                                                                className="px-2 py-1 bg-ochre text-white text-xs rounded hover:bg-[#a18259]"
+                                                                            >
+                                                                                📚 Example
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="flex gap-1 flex-wrap">
-                                                                        <button
-                                                                            onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'primary'); }}
-                                                                            className="px-2 py-1 bg-stone text-white text-xs rounded hover:bg-stone-dark"
-                                                                        >
-                                                                            🎯 Primary
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'variant'); }}
-                                                                            className="px-2 py-1 bg-patina text-white text-xs rounded hover:bg-[#5d7a6d]"
-                                                                        >
-                                                                            ⭐ Variant
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'example'); }}
-                                                                            className="px-2 py-1 bg-ochre text-white text-xs rounded hover:bg-[#a18259]"
-                                                                        >
-                                                                            📚 Example
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            )}
+                                                                );
+                                                            })()}
                                                         </div>
                                                     );
                                                 })}
@@ -2173,6 +2358,84 @@
                                     )}
                                 </div>
                             </aside>
+                        </div>
+                        
+                        {/* Mobile: Canvas Only View */}
+                        <div className="lg:hidden h-[calc(100vh-180px)] flex flex-col">
+                            <div className="bg-white rounded-lg shadow p-2 flex-1 flex flex-col min-h-0">
+                                {/* Mobile Recognize Button */}
+                                <div className="mb-2 flex gap-2">
+                                    <button onClick={recognizeGlyphs} disabled={isProcessing || chartStatus !== 'loaded' || !displayImage}
+                                        className="flex-1 px-3 py-2 bg-patina text-white rounded-lg text-sm font-medium disabled:bg-gray-300">
+                                        {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : '🔍 Recognize'}
+                                    </button>
+                                    {recognitionResults.length > 0 && (
+                                        <button onClick={() => setMobilePanel('detections')}
+                                            className="px-3 py-2 bg-gray-100 rounded-lg text-sm font-medium">
+                                            📋 {recognitionResults.length}
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {displayImage ? (
+                                    <div ref={imageContainerRef} 
+                                        className="relative flex-1 flex items-center justify-center overflow-hidden"
+                                        style={{ cursor: manualBoxMode ? 'crosshair' : 'default' }}
+                                        onMouseDown={manualBoxMode ? handleManualBoxStart : undefined}
+                                        onMouseMove={manualBoxMode ? handleManualBoxMove : undefined}
+                                        onMouseUp={manualBoxMode ? handleManualBoxEnd : undefined}
+                                        onTouchStart={manualBoxMode ? (e) => handleManualBoxStart(e.touches[0]) : undefined}
+                                        onTouchMove={manualBoxMode ? (e) => handleManualBoxMove(e.touches[0]) : undefined}
+                                        onTouchEnd={manualBoxMode ? handleManualBoxEnd : undefined}
+                                    >
+                                        <img src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" />
+                                        
+                                        {/* Detection boxes overlay - mobile */}
+                                        {recognitionResults.length > 0 && imageRef.current && (
+                                            <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
+                                                {(() => {
+                                                    const img = imageRef.current;
+                                                    const container = imageContainerRef.current;
+                                                    if (!img || !container) return null;
+                                                    const scaleX = img.clientWidth / img.naturalWidth;
+                                                    const scaleY = img.clientHeight / img.naturalHeight;
+                                                    const offsetX = (container.clientWidth - img.clientWidth) / 2;
+                                                    const offsetY = (container.clientHeight - img.clientHeight) / 2;
+                                                    
+                                                    return recognitionResults.map((result, index) => {
+                                                        if (excludedDetections.has(index)) return null;
+                                                        const isSelected = selectedRegions.has(index);
+                                                        return (
+                                                            <div key={index}
+                                                                className={`absolute border-2 rounded ${isSelected ? 'border-ochre bg-ochre/20' : 'border-patina bg-patina/20'}`}
+                                                                style={{
+                                                                    left: offsetX + result.position.x * scaleX,
+                                                                    top: offsetY + result.position.y * scaleY,
+                                                                    width: result.position.width * scaleX,
+                                                                    height: result.position.height * scaleY,
+                                                                    pointerEvents: 'auto'
+                                                                }}
+                                                                onClick={() => setSelectedRegions(prev => {
+                                                                    const n = new Set(prev); n.has(index) ? n.delete(index) : n.add(index); return n;
+                                                                })}
+                                                            >
+                                                                <span className="absolute top-0.5 left-0.5 text-[10px] bg-white/80 px-1 rounded">
+                                                                    {result.glyph.transliteration || result.glyph.name}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    });
+                                                })()}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                                        <span className="text-5xl mb-3">📷</span>
+                                        <p>Tap "Image" to upload</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         
                         {/* ===== TRANSCRIPTION DISPLAY ===== */}
@@ -2405,9 +2668,8 @@
                         )}
                         
                         {/* ===== EXPORT PANEL (Save & Export) ===== */}
-                        {recognitionResults.length > 0 && (
-                            <div className="mt-6">
-                                <ExportPanel
+                        <div className="mt-6">
+                            <ExportPanel
                                     recognitionResults={recognitionResults}
                                     validations={validations}
                                     image={originalImage}
@@ -2508,8 +2770,7 @@
                                     imageRef={imageRef}
                                     className="bg-[#f7f3ed] border-2 border-ochre"
                                 />
-                            </div>
-                        )}
+                        </div>
                     </main>
                     
                     {/* ===== GLYPH SELECTOR MODAL (for manual box or changing glyph) ===== */}
