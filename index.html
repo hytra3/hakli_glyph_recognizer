@@ -224,6 +224,7 @@
             
             // Chart Manager state
             const [showChartManager, setShowChartManager] = useState(false);
+            const [chartViewMode, setChartViewMode] = useState('glyphs'); // 'glyphs', 'primary', 'variants', 'examples'
             const [showGlyphEditor, setShowGlyphEditor] = useState(false);
             const [editingGlyph, setEditingGlyph] = useState(null);
             const [glyphEditorMode, setGlyphEditorMode] = useState('add');
@@ -867,16 +868,15 @@
                 const container = imageContainerRef.current;
                 const img = imageRef.current;
                 const containerRect = container.getBoundingClientRect();
-                const imgRect = img.getBoundingClientRect();
                 
-                // Calculate click position relative to image
-                const offsetX = (containerRect.width - imgRect.width) / 2;
-                const offsetY = (containerRect.height - imgRect.height) / 2;
+                // Calculate click position relative to image (using clientWidth for consistency)
+                const offsetX = (container.clientWidth - img.clientWidth) / 2;
+                const offsetY = (container.clientHeight - img.clientHeight) / 2;
                 const x = e.clientX - containerRect.left - offsetX;
                 const y = e.clientY - containerRect.top - offsetY;
                 
                 // Only start if click is within image bounds
-                if (x >= 0 && x <= imgRect.width && y >= 0 && y <= imgRect.height) {
+                if (x >= 0 && x <= img.clientWidth && y >= 0 && y <= img.clientHeight) {
                     setDrawingBox({ startX: x, startY: y, currentX: x, currentY: y });
                 }
             }, [manualBoxMode]);
@@ -887,10 +887,9 @@
                 const container = imageContainerRef.current;
                 const img = imageRef.current;
                 const containerRect = container.getBoundingClientRect();
-                const imgRect = img.getBoundingClientRect();
                 
-                const offsetX = (containerRect.width - imgRect.width) / 2;
-                const offsetY = (containerRect.height - imgRect.height) / 2;
+                const offsetX = (container.clientWidth - img.clientWidth) / 2;
+                const offsetY = (container.clientHeight - img.clientHeight) / 2;
                 const x = e.clientX - containerRect.left - offsetX;
                 const y = e.clientY - containerRect.top - offsetY;
                 
@@ -901,13 +900,12 @@
                 if (!drawingBox || !imageRef.current) return;
                 
                 const img = imageRef.current;
-                const imgRect = img.getBoundingClientRect();
                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                 const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                 
-                // Convert screen coords to image coords
-                const scaleX = sourceWidth / imgRect.width;
-                const scaleY = sourceHeight / imgRect.height;
+                // Convert screen coords to image coords (using clientWidth for consistency)
+                const scaleX = sourceWidth / img.clientWidth;
+                const scaleY = sourceHeight / img.clientHeight;
                 
                 const x = Math.min(drawingBox.startX, drawingBox.currentX) * scaleX;
                 const y = Math.min(drawingBox.startY, drawingBox.currentY) * scaleY;
@@ -1898,11 +1896,9 @@
                                                 const container = imageContainerRef.current;
                                                 if (!img || !container) return null;
                                                 
-                                                const containerRect = container.getBoundingClientRect();
-                                                const imgRect = img.getBoundingClientRect();
-                                                // Use actual image position relative to container
-                                                const offsetX = imgRect.left - containerRect.left;
-                                                const offsetY = imgRect.top - containerRect.top;
+                                                // Calculate offset based on flexbox centering
+                                                const offsetX = (container.clientWidth - img.clientWidth) / 2;
+                                                const offsetY = (container.clientHeight - img.clientHeight) / 2;
                                                 
                                                 const left = offsetX + Math.min(drawingBox.startX, drawingBox.currentX);
                                                 const top = offsetY + Math.min(drawingBox.startY, drawingBox.currentY);
@@ -1949,22 +1945,20 @@
                                                 // Force recalculation by using boxLayoutKey (referenced but not directly used)
                                                 const _ = boxLayoutKey;
                                                 
-                                                const containerRect = container.getBoundingClientRect();
-                                                const imgRect = img.getBoundingClientRect();
-                                                
                                                 // Use tracked recognition source dimensions if available
                                                 // This ensures boxes align correctly even if the display image changed
                                                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                                                 const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                                                 
-                                                const scaleX = imgRect.width / sourceWidth;
-                                                const scaleY = imgRect.height / sourceHeight;
-                                                // Use actual image position relative to container (not assumed centering)
-                                                const offsetX = imgRect.left - containerRect.left;
-                                                const offsetY = imgRect.top - containerRect.top;
+                                                // Use clientWidth/Height for consistent calculations
+                                                const scaleX = img.clientWidth / sourceWidth;
+                                                const scaleY = img.clientHeight / sourceHeight;
+                                                // Calculate offset based on flexbox centering (container centers the image)
+                                                const offsetX = (container.clientWidth - img.clientWidth) / 2;
+                                                const offsetY = (container.clientHeight - img.clientHeight) / 2;
                                                 
                                                 // Skip rendering if dimensions aren't ready
-                                                if (!imgRect.width || !imgRect.height) return null;
+                                                if (!img.clientWidth || !img.clientHeight) return null;
                                                 
                                                 return (
                                                     <div key={index} className={boxClass}
@@ -2795,7 +2789,14 @@
                                 <div className="flex items-center justify-between p-4 border-b">
                                     <div>
                                         <h3 className="text-xl font-bold text-gray-900">📊 Glyph Chart Manager</h3>
-                                        <p className="text-sm text-gray-500">{chartData?.glyphs?.length || 0} glyphs in chart</p>
+                                        <p className="text-sm text-gray-500">
+                                            {chartData?.glyphs?.length || 0} glyphs · {(() => {
+                                                const total = chartData?.glyphs?.reduce((sum, g) => {
+                                                    return sum + (g.images?.primary ? 1 : 0) + (g.images?.variants?.length || 0) + (g.images?.examples?.length || 0);
+                                                }, 0) || 0;
+                                                return total;
+                                            })()} templates
+                                        </p>
                                     </div>
                                     <button onClick={() => setShowChartManager(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
                                 </div>
@@ -2920,33 +2921,150 @@
                                     </div>
                                 )}
                                 
-                                {/* Glyph Grid */}
-                                <div className="flex-1 overflow-y-auto p-4">
-                                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
-                                        {chartData?.glyphs?.map((glyph) => (
-                                            <div
-                                                key={glyph.id}
-                                                className="border border-gray-200 rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all"
-                                                onClick={() => {
-                                                    setGlyphEditorMode('edit');
-                                                    setEditingGlyph(glyph);
-                                                    setShowGlyphEditor(true);
-                                                }}
+                                {/* View Tabs */}
+                                <div className="px-4 pt-4 border-b">
+                                    <div className="flex gap-1 mb-3">
+                                        {[
+                                            { id: 'glyphs', label: 'By Glyph', count: chartData?.glyphs?.length || 0 },
+                                            { id: 'primary', label: '🎯 Primary', count: chartData?.glyphs?.filter(g => g.images?.primary).length || 0 },
+                                            { id: 'variants', label: '⭐ Variants', count: chartData?.glyphs?.reduce((sum, g) => sum + (g.images?.variants?.length || 0), 0) || 0 },
+                                            { id: 'examples', label: '📚 Examples', count: chartData?.glyphs?.reduce((sum, g) => sum + (g.images?.examples?.length || 0), 0) || 0 },
+                                        ].map(tab => (
+                                            <button
+                                                key={tab.id}
+                                                onClick={() => setChartViewMode(tab.id)}
+                                                className={`px-3 py-1.5 rounded-t text-sm font-medium transition-colors ${
+                                                    chartViewMode === tab.id
+                                                        ? 'bg-ancient-purple text-white'
+                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                }`}
                                             >
-                                                <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden">
-                                                    {glyphThumbnails[glyph.id] ? (
-                                                        <img src={glyphThumbnails[glyph.id]} alt={glyph.name} className="max-w-full max-h-full object-contain" />
-                                                    ) : (
-                                                        <span className="text-gray-400 text-xs">?</span>
-                                                    )}
-                                                </div>
-                                                <div className="text-center">
-                                                    <div className="text-xs font-medium text-gray-700 truncate">{glyph.name}</div>
-                                                    <div className="text-lg text-ancient-purple leading-tight">{glyph.arabic || glyph.transliteration}</div>
-                                                </div>
-                                            </div>
+                                                {tab.label} ({tab.count})
+                                            </button>
                                         ))}
                                     </div>
+                                </div>
+                                
+                                {/* Glyph Grid - By Glyph View */}
+                                <div className="flex-1 overflow-y-auto p-4">
+                                    {chartViewMode === 'glyphs' && (
+                                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+                                            {chartData?.glyphs?.map((glyph) => {
+                                                const primaryCount = glyph.images?.primary ? 1 : 0;
+                                                const variantCount = glyph.images?.variants?.length || 0;
+                                                const exampleCount = glyph.images?.examples?.length || 0;
+                                                const totalImages = primaryCount + variantCount + exampleCount;
+                                                
+                                                return (
+                                                    <div
+                                                        key={glyph.id}
+                                                        className="border border-gray-200 rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all"
+                                                        onClick={() => {
+                                                            setGlyphEditorMode('edit');
+                                                            setEditingGlyph(glyph);
+                                                            setShowGlyphEditor(true);
+                                                        }}
+                                                    >
+                                                        <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden">
+                                                            {glyphThumbnails[glyph.id] ? (
+                                                                <img src={glyphThumbnails[glyph.id]} alt={glyph.name} className="max-w-full max-h-full object-contain" />
+                                                            ) : (
+                                                                <span className="text-gray-400 text-xs">?</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <div className="text-xs font-medium text-gray-700 truncate">{glyph.name}</div>
+                                                            <div className="text-lg text-ancient-purple leading-tight">{glyph.arabic || glyph.transliteration}</div>
+                                                            <div className="text-[10px] text-gray-400">
+                                                                {totalImages} template{totalImages !== 1 ? 's' : ''}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    
+                                    {/* Primary Templates View */}
+                                    {chartViewMode === 'primary' && (
+                                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+                                            {chartData?.glyphs?.filter(g => g.images?.primary).map((glyph) => (
+                                                <div
+                                                    key={glyph.id}
+                                                    className="border border-stone rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all bg-stone/5"
+                                                    onClick={() => {
+                                                        setGlyphEditorMode('edit');
+                                                        setEditingGlyph(glyph);
+                                                        setShowGlyphEditor(true);
+                                                    }}
+                                                >
+                                                    <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden">
+                                                        <img src={glyph.images.primary} alt={glyph.name} className="max-w-full max-h-full object-contain" />
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <div className="text-xs font-medium text-gray-700 truncate">{glyph.name}</div>
+                                                        <div className="text-sm text-ancient-purple">{glyph.arabic}</div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    
+                                    {/* Variants View */}
+                                    {chartViewMode === 'variants' && (
+                                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+                                            {chartData?.glyphs?.flatMap((glyph) => 
+                                                (glyph.images?.variants || []).map((variant, idx) => (
+                                                    <div
+                                                        key={`${glyph.id}-var-${idx}`}
+                                                        className="border border-patina rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all bg-patina/5"
+                                                        onClick={() => {
+                                                            setGlyphEditorMode('edit');
+                                                            setEditingGlyph(glyph);
+                                                            setShowGlyphEditor(true);
+                                                        }}
+                                                    >
+                                                        <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden">
+                                                            <img src={variant} alt={`${glyph.name} variant ${idx + 1}`} className="max-w-full max-h-full object-contain" />
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <div className="text-xs font-medium text-gray-700 truncate">{glyph.name}</div>
+                                                            <div className="text-sm text-ancient-purple">{glyph.arabic}</div>
+                                                            <div className="text-[10px] text-patina">var #{idx + 1}</div>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    )}
+                                    
+                                    {/* Examples View */}
+                                    {chartViewMode === 'examples' && (
+                                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+                                            {chartData?.glyphs?.flatMap((glyph) => 
+                                                (glyph.images?.examples || []).map((example, idx) => (
+                                                    <div
+                                                        key={`${glyph.id}-ex-${idx}`}
+                                                        className="border border-ochre rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all bg-ochre/5"
+                                                        onClick={() => {
+                                                            setGlyphEditorMode('edit');
+                                                            setEditingGlyph(glyph);
+                                                            setShowGlyphEditor(true);
+                                                        }}
+                                                    >
+                                                        <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden">
+                                                            <img src={example} alt={`${glyph.name} example ${idx + 1}`} className="max-w-full max-h-full object-contain" />
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <div className="text-xs font-medium text-gray-700 truncate">{glyph.name}</div>
+                                                            <div className="text-sm text-ancient-purple">{glyph.arabic}</div>
+                                                            <div className="text-[10px] text-ochre">ex #{idx + 1}</div>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
