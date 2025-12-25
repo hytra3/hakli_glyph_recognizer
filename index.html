@@ -150,6 +150,12 @@
             const [excludedDetections, setExcludedDetections] = useState(new Set()); // Excluded from reading
             const [editingBoxIdx, setEditingBoxIdx] = useState(null); // Index of detection being edited
             
+            // Eraser tool state
+            const [eraserMode, setEraserMode] = useState(false);
+            const [eraserSize, setEraserSize] = useState(15);
+            const eraserCanvasRef = useRef(null);
+            const isDrawingRef = useRef(false);
+            
             // Chart Manager state
             const [showChartManager, setShowChartManager] = useState(false);
             const [showGlyphEditor, setShowGlyphEditor] = useState(false);
@@ -458,6 +464,136 @@
                     }
                 };
             }, [preprocessing, opencvReady, applyPreprocessing]);
+            
+            // ========== ERASER TOOL ==========
+            const initEraserCanvas = useCallback(() => {
+                if (!eraserCanvasRef.current || !imageRef.current) return;
+                const canvas = eraserCanvasRef.current;
+                const img = imageRef.current;
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                
+                // Draw current display image onto canvas
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+            }, []);
+            
+            const handleEraserStart = useCallback((e) => {
+                if (!eraserMode || !eraserCanvasRef.current) return;
+                isDrawingRef.current = true;
+                handleEraserDraw(e);
+            }, [eraserMode]);
+            
+            const handleEraserDraw = useCallback((e) => {
+                if (!isDrawingRef.current || !eraserMode || !eraserCanvasRef.current || !imageRef.current) return;
+                
+                const canvas = eraserCanvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const rect = canvas.getBoundingClientRect();
+                const img = imageRef.current;
+                
+                // Calculate position relative to canvas (accounting for scaling)
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const x = (e.clientX - rect.left) * scaleX;
+                const y = (e.clientY - rect.top) * scaleY;
+                
+                // Draw white circle (erase)
+                ctx.beginPath();
+                ctx.arc(x, y, eraserSize * scaleX, 0, Math.PI * 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fill();
+            }, [eraserMode, eraserSize]);
+            
+            const handleEraserEnd = useCallback(() => {
+                isDrawingRef.current = false;
+            }, []);
+            
+            const applyEraser = useCallback(async () => {
+                if (!eraserCanvasRef.current || !opencvReady) return;
+                
+                try {
+                    // Get erased canvas data
+                    const canvas = eraserCanvasRef.current;
+                    const dataUrl = canvas.toDataURL('image/png');
+                    
+                    // Update display image
+                    setDisplayImage(dataUrl);
+                    
+                    // Update the preprocessed mat
+                    if (preprocessedMatRef.current) preprocessedMatRef.current.delete();
+                    const img = new Image();
+                    img.src = dataUrl;
+                    await new Promise(resolve => { img.onload = resolve; });
+                    
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = img.naturalWidth;
+                    tempCanvas.height = img.naturalHeight;
+                    tempCanvas.getContext('2d').drawImage(img, 0, 0);
+                    preprocessedMatRef.current = cv.imread(tempCanvas);
+                    
+                    // Track dimensions
+                    setRecognitionSourceDims({
+                        width: preprocessedMatRef.current.cols,
+                        height: preprocessedMatRef.current.rows
+                    });
+                    
+                    setEraserMode(false);
+                    console.log('✅ Eraser applied');
+                } catch (error) {
+                    console.error('Eraser apply error:', error);
+                }
+            }, [opencvReady]);
+            
+            const cancelEraser = useCallback(() => {
+                setEraserMode(false);
+            }, []);
+            
+            // Initialize eraser canvas when mode is enabled
+            useEffect(() => {
+                if (eraserMode) {
+                    initEraserCanvas();
+                }
+            }, [eraserMode, initEraserCanvas]);
+            
+            // ========== BOX ADJUSTMENT ==========
+            const shrinkBox = useCallback((index, amount = 5) => {
+                setRecognitionResults(prev => {
+                    const updated = [...prev];
+                    if (updated[index]) {
+                        const pos = updated[index].position;
+                        updated[index] = {
+                            ...updated[index],
+                            position: {
+                                x: pos.x + amount,
+                                y: pos.y + amount,
+                                width: Math.max(10, pos.width - amount * 2),
+                                height: Math.max(10, pos.height - amount * 2)
+                            }
+                        };
+                    }
+                    return updated;
+                });
+            }, []);
+            
+            const expandBox = useCallback((index, amount = 5) => {
+                setRecognitionResults(prev => {
+                    const updated = [...prev];
+                    if (updated[index]) {
+                        const pos = updated[index].position;
+                        updated[index] = {
+                            ...updated[index],
+                            position: {
+                                x: Math.max(0, pos.x - amount),
+                                y: Math.max(0, pos.y - amount),
+                                width: pos.width + amount * 2,
+                                height: pos.height + amount * 2
+                            }
+                        };
+                    }
+                    return updated;
+                });
+            }, []);
             
             // ========== RECOGNITION ==========
             const recognizeGlyphs = useCallback(async () => {
@@ -966,6 +1102,35 @@
                                                     <button onClick={applyPreprocessing} disabled={!opencvReady}
                                                         className="flex-1 px-2 py-1.5 bg-ancient-purple hover:bg-[#4a3d5a] text-white rounded text-sm disabled:bg-gray-300">✨ Apply</button>
                                                 </div>
+                                                
+                                                {/* Eraser Tool */}
+                                                <div className="pt-2 border-t border-gray-200">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-gray-700">🧹 Eraser Tool</span>
+                                                        <button onClick={() => setEraserMode(!eraserMode)}
+                                                            className={`px-2 py-1 rounded text-xs ${eraserMode ? 'bg-ochre text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>
+                                                            {eraserMode ? 'Active' : 'Enable'}
+                                                        </button>
+                                                    </div>
+                                                    {eraserMode && (
+                                                        <div className="space-y-2">
+                                                            <div>
+                                                                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                                                    <span>Brush Size</span><span>{eraserSize}px</span>
+                                                                </div>
+                                                                <input type="range" min="5" max="50" value={eraserSize}
+                                                                    onChange={(e) => setEraserSize(parseInt(e.target.value))} className="w-full" />
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={cancelEraser}
+                                                                    className="flex-1 px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-xs">Cancel</button>
+                                                                <button onClick={applyEraser}
+                                                                    className="flex-1 px-2 py-1 bg-patina hover:bg-[#5a7d6e] text-white rounded text-xs">Apply Eraser</button>
+                                                            </div>
+                                                            <p className="text-xs text-gray-400">Draw on image to erase unwanted marks</p>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -975,12 +1140,33 @@
                             {/* Center - Image */}
                             <div className="col-span-6">
                                 <div className="bg-white rounded-lg shadow p-3 h-full flex flex-col">
+                                    {/* Eraser mode indicator */}
+                                    {eraserMode && (
+                                        <div className="mb-2 px-2 py-1 bg-ochre/20 border border-ochre rounded text-xs text-center">
+                                            🧹 Eraser Mode Active - Draw to erase, then click "Apply Eraser"
+                                        </div>
+                                    )}
+                                    
                                     {displayImage ? (
                                         <div ref={imageContainerRef} className="relative flex-1 flex items-center justify-center overflow-hidden">
-                                            <img ref={imageRef} src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" />
+                                            {/* Regular image display (hidden when eraser active) */}
+                                            <img ref={imageRef} src={displayImage} alt="Inscription" 
+                                                className={`max-w-full max-h-full object-contain ${eraserMode ? 'hidden' : ''}`} />
                                             
-                                            {/* Detection boxes */}
-                                            {recognitionResults.map((result, index) => {
+                                            {/* Eraser canvas (shown when eraser active) */}
+                                            {eraserMode && (
+                                                <canvas ref={eraserCanvasRef}
+                                                    className="max-w-full max-h-full object-contain cursor-crosshair"
+                                                    style={{ cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${eraserSize * 2}" height="${eraserSize * 2}" viewBox="0 0 ${eraserSize * 2} ${eraserSize * 2}"><circle cx="${eraserSize}" cy="${eraserSize}" r="${eraserSize - 1}" fill="none" stroke="black" stroke-width="1"/></svg>') ${eraserSize} ${eraserSize}, crosshair` }}
+                                                    onMouseDown={handleEraserStart}
+                                                    onMouseMove={handleEraserDraw}
+                                                    onMouseUp={handleEraserEnd}
+                                                    onMouseLeave={handleEraserEnd}
+                                                />
+                                            )}
+                                            
+                                            {/* Detection boxes (hidden during eraser mode) */}
+                                            {!eraserMode && recognitionResults.map((result, index) => {
                                                 const validation = validations[index];
                                                 const isSelected = selectedRegions.has(index);
                                                 
@@ -1157,6 +1343,16 @@
                                                                     className={`px-2 py-0.5 rounded text-xs ${isExcluded ? 'bg-gray-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                                                                     title={isExcluded ? 'Include in reading' : 'Exclude from reading'}>
                                                                     {isExcluded ? '👁 Include' : '🚫 Exclude'}
+                                                                </button>
+                                                                <button onClick={(e) => { e.stopPropagation(); shrinkBox(idx, 3); }}
+                                                                    className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                                                    title="Shrink detection box">
+                                                                    ⊟ Shrink
+                                                                </button>
+                                                                <button onClick={(e) => { e.stopPropagation(); expandBox(idx, 3); }}
+                                                                    className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                                                    title="Expand detection box">
+                                                                    ⊞ Expand
                                                                 </button>
                                                             </div>
                                                             
