@@ -202,6 +202,10 @@
             const [columnBreaks, setColumnBreaks] = useState(new Set());
             const [actionHistory, setActionHistory] = useState([]);
             
+            // Template training state
+            const [templateTrainingMode, setTemplateTrainingMode] = useState(false);
+            const [selectedForTemplate, setSelectedForTemplate] = useState(null);
+            
             // Eraser tool state
             const [eraserMode, setEraserMode] = useState(false);
             const [eraserSize, setEraserSize] = useState(15);
@@ -1057,6 +1061,72 @@
                 URL.revokeObjectURL(url);
             }, [getReadingOrderedResults, wordBoundaries, lineBreaks, inscriptionTitle, translationEnglish, translationArabic]);
             
+            // ========== TEMPLATE TRAINING ==========
+            const saveAsTemplate = useCallback((detectionIndex, templateType) => {
+                const detection = recognitionResults[detectionIndex];
+                if (!detection || !detection.thumbnail) {
+                    alert('No detection thumbnail available');
+                    return;
+                }
+
+                const imageDataUrl = detection.thumbnail;
+                const updatedChart = { ...chartData };
+                const glyphIndex = updatedChart.glyphs.findIndex(g => g.id === detection.glyph.id);
+
+                if (glyphIndex === -1) {
+                    alert('Glyph not found in chart!');
+                    return;
+                }
+
+                const glyph = updatedChart.glyphs[glyphIndex];
+
+                // Initialize images object if it doesn't exist
+                if (!glyph.images) {
+                    glyph.images = { primary: null, variants: [], examples: [] };
+                }
+
+                // Add based on template type
+                if (templateType === 'primary') {
+                    glyph.images.primary = imageDataUrl;
+                    alert(`✅ Saved as PRIMARY template for "${glyph.name}"\n\nNote: This replaces the existing primary image.`);
+                } else if (templateType === 'variant') {
+                    if (!glyph.images.variants) glyph.images.variants = [];
+                    glyph.images.variants.push(imageDataUrl);
+                    alert(`✅ Saved as VARIANT template for "${glyph.name}"\n\nVariants: ${glyph.images.variants.length}`);
+                } else if (templateType === 'example') {
+                    if (!glyph.images.examples) glyph.images.examples = [];
+                    glyph.images.examples.push(imageDataUrl);
+                    alert(`✅ Saved as EXAMPLE template for "${glyph.name}"\n\nExamples: ${glyph.images.examples.length}`);
+                }
+
+                setChartData(updatedChart);
+
+                // Reload the image in the cache
+                const img = new Image();
+                img.onload = () => {
+                    const newCache = { ...loadedGlyphImages };
+                    const newThumbnails = { ...glyphThumbnails };
+                    if (templateType === 'primary') {
+                        newCache[glyph.id] = img;
+                        newThumbnails[glyph.id] = img.src;
+                    } else if (templateType === 'variant') {
+                        const key = `${glyph.id}_variant_${glyph.images.variants.length - 1}`;
+                        newCache[key] = img;
+                        newThumbnails[key] = img.src;
+                    } else if (templateType === 'example') {
+                        const key = `${glyph.id}_example_${glyph.images.examples.length - 1}`;
+                        newCache[key] = img;
+                        newThumbnails[key] = img.src;
+                    }
+                    setLoadedGlyphImages(newCache);
+                    setGlyphThumbnails(newThumbnails);
+                };
+                img.src = imageDataUrl;
+
+                setSelectedForTemplate(null);
+                console.log(`✅ Saved ${templateType} template for ${glyph.name}`);
+            }, [recognitionResults, chartData, loadedGlyphImages, glyphThumbnails]);
+            
             // ========== RECOGNITION ==========
             const recognizeGlyphs = useCallback(async () => {
                 if (!displayImage || !chartData || Object.keys(loadedGlyphImages).length === 0) {
@@ -1803,6 +1873,29 @@
                                             🖱️ Click and drag on the image to draw a box around a glyph
                                         </div>
                                     )}
+                                    
+                                    {/* Template Training Mode */}
+                                    {recognitionResults.length > 0 && (
+                                        <button 
+                                            onClick={() => {
+                                                setTemplateTrainingMode(!templateTrainingMode);
+                                                setSelectedForTemplate(null);
+                                            }}
+                                            className={`w-full mt-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                                templateTrainingMode 
+                                                    ? 'bg-ancient-purple text-white' 
+                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            {templateTrainingMode ? '🎓 Exit Training Mode' : '🎓 Template Training'}
+                                        </button>
+                                    )}
+                                    
+                                    {templateTrainingMode && (
+                                        <div className="mt-2 p-2 bg-ancient-purple/10 rounded text-xs text-ancient-purple">
+                                            Click a detection to save it as Primary, Variant, or Example template
+                                        </div>
+                                    )}
                                 </div>
                                 
                                 {/* Detection List */}
@@ -2043,6 +2136,35 @@
                                                                     </div>
                                                                 </div>
                                                             )}
+                                                            
+                                                            {/* Template Training Mode - Save as template options */}
+                                                            {templateTrainingMode && (
+                                                                <div className="px-2 pb-2 border-t-2 border-ancient-purple bg-ancient-purple/5">
+                                                                    <div className="text-xs font-semibold text-ancient-purple mb-2 pt-2">
+                                                                        🎓 Save "{result.glyph.name}" as:
+                                                                    </div>
+                                                                    <div className="flex gap-1 flex-wrap">
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'primary'); }}
+                                                                            className="px-2 py-1 bg-stone text-white text-xs rounded hover:bg-stone-dark"
+                                                                        >
+                                                                            🎯 Primary
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'variant'); }}
+                                                                            className="px-2 py-1 bg-patina text-white text-xs rounded hover:bg-[#5d7a6d]"
+                                                                        >
+                                                                            ⭐ Variant
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'example'); }}
+                                                                            className="px-2 py-1 bg-ochre text-white text-xs rounded hover:bg-[#a18259]"
+                                                                        >
+                                                                            📚 Example
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     );
                                                 })}
@@ -2161,19 +2283,22 @@
                                     {transcriptionFormat.startsWith('vertical') ? (
                                         /* Vertical layout - columns */
                                         <div 
-                                            className="flex gap-4"
+                                            className="flex gap-6"
                                             style={{
                                                 flexDirection: transcriptionFormat === 'vertical-rtl' ? 'row-reverse' : 'row',
                                                 justifyContent: transcriptionFormat === 'vertical-rtl' ? 'flex-end' : 'flex-start'
                                             }}
                                         >
                                             {(() => {
-                                                // Split into columns based on line breaks
+                                                // Split into columns based on line breaks OR column breaks
                                                 const columns = [];
                                                 let currentColumn = [];
-                                                getReadingOrderedResults().forEach((result, index) => {
-                                                    currentColumn.push({ result, index });
-                                                    if (lineBreaks.has(readingOrder[index] ?? index)) {
+                                                const results = getReadingOrderedResults();
+                                                results.forEach((result, index) => {
+                                                    const actualIdx = readingOrder[index] ?? index;
+                                                    currentColumn.push({ result, index, actualIdx });
+                                                    // Split column on LINE break or COLUMN break
+                                                    if (lineBreaks.has(actualIdx) || columnBreaks.has(actualIdx)) {
                                                         columns.push(currentColumn);
                                                         currentColumn = [];
                                                     }
@@ -2183,28 +2308,30 @@
                                                 return columns.map((column, colIdx) => (
                                                     <div 
                                                         key={colIdx}
-                                                        className="flex flex-col items-center"
+                                                        className="flex flex-col items-center border-l-2 border-stone/20 pl-4 first:border-l-0 first:pl-0"
                                                         style={{
                                                             fontFamily: transcriptionScript === 'arabic'
                                                                 ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
                                                                 : '"Courier New", monospace',
-                                                            fontSize: '18px',
-                                                            lineHeight: '1.8'
+                                                            fontSize: '20px',
+                                                            lineHeight: '2'
                                                         }}
                                                     >
-                                                        {column.map(({ result, index }) => (
+                                                        {column.map(({ result, index, actualIdx }) => (
                                                             <span key={index} className="text-gray-900">
                                                                 {transcriptionScript === 'arabic'
                                                                     ? (result.glyph.arabic || result.glyph.name)
                                                                     : (result.glyph.transliteration || result.glyph.name)
                                                                 }
-                                                                {wordBoundaries.has(readingOrder[index] ?? index) && (
-                                                                    <span className="text-stone-dark font-bold"> —</span>
+                                                                {wordBoundaries.has(actualIdx) && (
+                                                                    <span className="text-stone font-bold"> —</span>
                                                                 )}
                                                             </span>
                                                         ))}
                                                     </div>
                                                 ));
+                                            })()}
+                                        </div>
                                             })()}
                                         </div>
                                     ) : (
@@ -2242,6 +2369,9 @@
                                     <span className="text-stone-dark font-bold">‖</span> = column break · 
                                     <span className="text-stone-dark font-bold">|</span> = word boundary · 
                                     <span className="text-gray-400">·</span> = glyph separator
+                                    {transcriptionFormat.startsWith('vertical') && (
+                                        <span className="ml-2 text-stone">(Vertical: line/column breaks split into columns)</span>
+                                    )}
                                 </div>
                             </div>
                         )}
