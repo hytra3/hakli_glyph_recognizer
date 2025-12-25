@@ -225,6 +225,7 @@
             // Chart Manager state
             const [showChartManager, setShowChartManager] = useState(false);
             const [chartViewMode, setChartViewMode] = useState('glyphs'); // 'glyphs', 'primary', 'variants', 'examples'
+            const [focusedGlyphId, setFocusedGlyphId] = useState(null); // For training mode - focus on one glyph
             const [showGlyphEditor, setShowGlyphEditor] = useState(false);
             const [editingGlyph, setEditingGlyph] = useState(null);
             const [glyphEditorMode, setGlyphEditorMode] = useState('add');
@@ -869,9 +870,9 @@
                 const img = imageRef.current;
                 const containerRect = container.getBoundingClientRect();
                 
-                // Calculate click position relative to image (using clientWidth for consistency)
-                const offsetX = (container.clientWidth - img.clientWidth) / 2;
-                const offsetY = (container.clientHeight - img.clientHeight) / 2;
+                // Use offsetLeft/Top for actual image position within container
+                const offsetX = img.offsetLeft;
+                const offsetY = img.offsetTop;
                 const x = e.clientX - containerRect.left - offsetX;
                 const y = e.clientY - containerRect.top - offsetY;
                 
@@ -888,8 +889,9 @@
                 const img = imageRef.current;
                 const containerRect = container.getBoundingClientRect();
                 
-                const offsetX = (container.clientWidth - img.clientWidth) / 2;
-                const offsetY = (container.clientHeight - img.clientHeight) / 2;
+                // Use offsetLeft/Top for actual image position
+                const offsetX = img.offsetLeft;
+                const offsetY = img.offsetTop;
                 const x = e.clientX - containerRect.left - offsetX;
                 const y = e.clientY - containerRect.top - offsetY;
                 
@@ -1896,9 +1898,9 @@
                                                 const container = imageContainerRef.current;
                                                 if (!img || !container) return null;
                                                 
-                                                // Calculate offset based on flexbox centering
-                                                const offsetX = (container.clientWidth - img.clientWidth) / 2;
-                                                const offsetY = (container.clientHeight - img.clientHeight) / 2;
+                                                // Use offsetLeft/Top for actual image position
+                                                const offsetX = img.offsetLeft;
+                                                const offsetY = img.offsetTop;
                                                 
                                                 const left = offsetX + Math.min(drawingBox.startX, drawingBox.currentX);
                                                 const top = offsetY + Math.min(drawingBox.startY, drawingBox.currentY);
@@ -1953,9 +1955,9 @@
                                                 // Use clientWidth/Height for consistent calculations
                                                 const scaleX = img.clientWidth / sourceWidth;
                                                 const scaleY = img.clientHeight / sourceHeight;
-                                                // Calculate offset based on flexbox centering (container centers the image)
-                                                const offsetX = (container.clientWidth - img.clientWidth) / 2;
-                                                const offsetY = (container.clientHeight - img.clientHeight) / 2;
+                                                // Use offsetLeft/Top for actual position within container
+                                                const offsetX = img.offsetLeft;
+                                                const offsetY = img.offsetTop;
                                                 
                                                 // Skip rendering if dimensions aren't ready
                                                 if (!img.clientWidth || !img.clientHeight) return null;
@@ -2830,7 +2832,12 @@
                                     </button>
                                     {recognitionResults.length > 0 && (
                                         <button
-                                            onClick={() => setTemplateTrainingMode(!templateTrainingMode)}
+                                            onClick={() => {
+                                                if (templateTrainingMode) {
+                                                    setFocusedGlyphId(null);
+                                                }
+                                                setTemplateTrainingMode(!templateTrainingMode);
+                                            }}
                                             className={`px-4 py-2 rounded-lg font-medium ${
                                                 templateTrainingMode 
                                                     ? 'bg-ochre text-white' 
@@ -2842,82 +2849,145 @@
                                     )}
                                 </div>
                                 
-                                {/* Training Mode Panel - Shows current detections for saving */}
-                                {templateTrainingMode && recognitionResults.length > 0 && (
+                                {/* Training Mode Panel - Focus on one glyph at a time */}
+                                {templateTrainingMode && (
                                     <div className="border-b bg-ancient-purple/5 p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">🎓 Save Detections to Chart</h4>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-64 overflow-y-auto">
-                                            {recognitionResults.map((result, idx) => {
-                                                const chartGlyph = chartData?.glyphs?.find(g => g.id === result.glyph.id);
-                                                const hasPrimary = !!(chartGlyph?.images?.primary);
-                                                const variantCount = chartGlyph?.images?.variants?.length || 0;
-                                                const exampleCount = chartGlyph?.images?.examples?.length || 0;
-                                                
-                                                return (
-                                                    <div key={idx} className="bg-white border rounded-lg p-2 shadow-sm">
-                                                        {/* Detection thumbnail and chart thumbnail side by side */}
-                                                        <div className="flex gap-2 mb-2">
-                                                            {/* Detection thumbnail */}
-                                                            <div className="flex-1">
-                                                                <div className="text-[10px] text-gray-500 mb-1">Detection</div>
-                                                                <div className="aspect-square bg-gray-100 rounded overflow-hidden">
-                                                                    {result.thumbnail ? (
-                                                                        <img src={result.thumbnail} alt="" className="w-full h-full object-contain" />
-                                                                    ) : (
-                                                                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">?</div>
-                                                                    )}
-                                                                </div>
+                                        {!focusedGlyphId ? (
+                                            <div className="text-center text-gray-600">
+                                                <p className="font-semibold mb-1">🎓 Training Mode Active</p>
+                                                <p className="text-sm">Click a glyph below to focus on it and add templates</p>
+                                                {recognitionResults.length > 0 && (
+                                                    <p className="text-xs text-ancient-purple mt-2">
+                                                        {recognitionResults.length} detection{recognitionResults.length !== 1 ? 's' : ''} available to add
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ) : (() => {
+                                            const glyph = chartData?.glyphs?.find(g => g.id === focusedGlyphId);
+                                            if (!glyph) return null;
+                                            
+                                            const matchingDetections = recognitionResults
+                                                .map((r, idx) => ({ ...r, detectionIdx: idx }))
+                                                .filter(r => r.glyph.id === focusedGlyphId);
+                                            
+                                            const hasPrimary = !!(glyph.images?.primary);
+                                            const variants = glyph.images?.variants || [];
+                                            const examples = glyph.images?.examples || [];
+                                            
+                                            return (
+                                                <div>
+                                                    {/* Focused glyph header */}
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center overflow-hidden">
+                                                                {glyphThumbnails[glyph.id] ? (
+                                                                    <img src={glyphThumbnails[glyph.id]} alt="" className="max-w-full max-h-full object-contain" />
+                                                                ) : (
+                                                                    <span className="text-2xl text-ancient-purple">{glyph.arabic}</span>
+                                                                )}
                                                             </div>
-                                                            {/* Chart thumbnail */}
-                                                            <div className="flex-1">
-                                                                <div className="text-[10px] text-gray-500 mb-1">In Chart</div>
-                                                                <div className="aspect-square bg-gray-100 rounded overflow-hidden">
-                                                                    {glyphThumbnails[result.glyph.id] ? (
-                                                                        <img src={glyphThumbnails[result.glyph.id]} alt="" className="w-full h-full object-contain" />
-                                                                    ) : (
-                                                                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">—</div>
-                                                                    )}
+                                                            <div>
+                                                                <div className="font-bold text-lg">{glyph.name} <span className="text-ancient-purple">{glyph.arabic}</span></div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    🎯{hasPrimary ? '✓' : '—'} ⭐{variants.length} 📚{examples.length}
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        
-                                                        {/* Glyph name and stats */}
-                                                        <div className="text-center mb-2">
-                                                            <div className="font-medium text-sm">{result.glyph.name}</div>
-                                                            <div className="text-xs text-gray-500">
-                                                                {result.glyph.arabic} · {Math.round(result.confidence * 100)}%
-                                                            </div>
-                                                            <div className="text-[10px] text-gray-400 mt-1">
-                                                                🎯{hasPrimary ? '✓' : '—'} ⭐{variantCount} 📚{exampleCount}
+                                                        <button 
+                                                            onClick={() => setFocusedGlyphId(null)}
+                                                            className="px-3 py-1 bg-gray-200 rounded text-sm hover:bg-gray-300"
+                                                        >
+                                                            ← Back to Chart
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        {/* Current Templates */}
+                                                        <div>
+                                                            <h5 className="font-semibold text-sm mb-2 text-gray-700">Current Templates ({(hasPrimary ? 1 : 0) + variants.length + examples.length})</h5>
+                                                            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                                                                {hasPrimary && (
+                                                                    <div className="w-14 h-14 border-2 border-stone rounded overflow-hidden bg-gray-50 relative" title="Primary">
+                                                                        <img src={glyph.images.primary} alt="Primary" className="w-full h-full object-contain" />
+                                                                        <span className="absolute bottom-0 left-0 right-0 text-[8px] bg-stone text-white text-center">🎯</span>
+                                                                    </div>
+                                                                )}
+                                                                {variants.map((v, i) => (
+                                                                    <div key={`v-${i}`} className="w-14 h-14 border-2 border-patina rounded overflow-hidden bg-gray-50 relative" title={`Variant ${i+1}`}>
+                                                                        <img src={v} alt={`Variant ${i+1}`} className="w-full h-full object-contain" />
+                                                                        <span className="absolute bottom-0 left-0 right-0 text-[8px] bg-patina text-white text-center">⭐{i+1}</span>
+                                                                    </div>
+                                                                ))}
+                                                                {examples.map((e, i) => (
+                                                                    <div key={`e-${i}`} className="w-14 h-14 border-2 border-ochre rounded overflow-hidden bg-gray-50 relative" title={`Example ${i+1}`}>
+                                                                        <img src={e} alt={`Example ${i+1}`} className="w-full h-full object-contain" />
+                                                                        <span className="absolute bottom-0 left-0 right-0 text-[8px] bg-ochre text-white text-center">📚{i+1}</span>
+                                                                    </div>
+                                                                ))}
+                                                                {!hasPrimary && variants.length === 0 && examples.length === 0 && (
+                                                                    <div className="text-gray-400 text-xs">No templates yet</div>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         
-                                                        {/* Save buttons */}
-                                                        <div className="flex gap-1 flex-wrap justify-center">
-                                                            <button
-                                                                onClick={() => saveAsTemplate(idx, 'primary')}
-                                                                className={`px-1.5 py-0.5 text-white text-[10px] rounded ${hasPrimary ? 'bg-stone/70 hover:bg-stone' : 'bg-stone hover:bg-stone-dark ring-1 ring-ochre'}`}
-                                                                title={hasPrimary ? 'Replace primary' : 'No primary yet!'}
-                                                            >
-                                                                🎯 {!hasPrimary && '⚠️'}
-                                                            </button>
-                                                            <button
-                                                                onClick={() => saveAsTemplate(idx, 'variant')}
-                                                                className="px-1.5 py-0.5 bg-patina text-white text-[10px] rounded hover:bg-[#5d7a6d]"
-                                                            >
-                                                                ⭐
-                                                            </button>
-                                                            <button
-                                                                onClick={() => saveAsTemplate(idx, 'example')}
-                                                                className="px-1.5 py-0.5 bg-ochre text-white text-[10px] rounded hover:bg-[#a18259]"
-                                                            >
-                                                                📚
-                                                            </button>
+                                                        {/* Matching Detections */}
+                                                        <div>
+                                                            <h5 className="font-semibold text-sm mb-2 text-gray-700">
+                                                                Matching Detections ({matchingDetections.length})
+                                                                {recognitionResults.length > 0 && matchingDetections.length === 0 && (
+                                                                    <span className="font-normal text-gray-400 ml-1">- none match this glyph</span>
+                                                                )}
+                                                            </h5>
+                                                            {matchingDetections.length > 0 ? (
+                                                                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                                                                    {matchingDetections.map((det) => (
+                                                                        <div key={det.detectionIdx} className="bg-white border rounded p-2 shadow-sm">
+                                                                            <div className="w-16 h-16 bg-gray-100 rounded overflow-hidden mb-1">
+                                                                                {det.thumbnail ? (
+                                                                                    <img src={det.thumbnail} alt="" className="w-full h-full object-contain" />
+                                                                                ) : (
+                                                                                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">?</div>
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="text-[10px] text-gray-500 text-center mb-1">
+                                                                                #{det.detectionIdx + 1} · {Math.round(det.confidence * 100)}%
+                                                                            </div>
+                                                                            <div className="flex gap-0.5 justify-center">
+                                                                                <button
+                                                                                    onClick={() => saveAsTemplate(det.detectionIdx, 'primary')}
+                                                                                    className={`px-1 py-0.5 text-white text-[9px] rounded ${hasPrimary ? 'bg-stone/70' : 'bg-stone ring-1 ring-ochre'}`}
+                                                                                    title={hasPrimary ? 'Replace primary' : 'Set as primary'}
+                                                                                >
+                                                                                    🎯
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => saveAsTemplate(det.detectionIdx, 'variant')}
+                                                                                    className="px-1 py-0.5 bg-patina text-white text-[9px] rounded"
+                                                                                >
+                                                                                    ⭐
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => saveAsTemplate(det.detectionIdx, 'example')}
+                                                                                    className="px-1 py-0.5 bg-ochre text-white text-[9px] rounded"
+                                                                                >
+                                                                                    📚
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-gray-400 text-xs">
+                                                                    {recognitionResults.length === 0 
+                                                                        ? 'Run detection first to find templates to add' 
+                                                                        : 'No detections match this glyph'}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 )}
                                 
@@ -2958,19 +3028,38 @@
                                                 return (
                                                     <div
                                                         key={glyph.id}
-                                                        className="border border-gray-200 rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all"
+                                                        className={`border rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all ${
+                                                            templateTrainingMode && focusedGlyphId === glyph.id 
+                                                                ? 'border-ancient-purple ring-2 ring-ancient-purple bg-ancient-purple/10' 
+                                                                : templateTrainingMode && recognitionResults.some(r => r.glyph.id === glyph.id)
+                                                                    ? 'border-ochre bg-ochre/10'
+                                                                    : 'border-gray-200'
+                                                        }`}
                                                         onClick={() => {
-                                                            setGlyphEditorMode('edit');
-                                                            setEditingGlyph(glyph);
-                                                            setShowGlyphEditor(true);
+                                                            if (templateTrainingMode) {
+                                                                setFocusedGlyphId(glyph.id);
+                                                            } else {
+                                                                setGlyphEditorMode('edit');
+                                                                setEditingGlyph(glyph);
+                                                                setShowGlyphEditor(true);
+                                                            }
                                                         }}
                                                     >
-                                                        <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden">
+                                                        <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden relative">
                                                             {glyphThumbnails[glyph.id] ? (
                                                                 <img src={glyphThumbnails[glyph.id]} alt={glyph.name} className="max-w-full max-h-full object-contain" />
                                                             ) : (
                                                                 <span className="text-gray-400 text-xs">?</span>
                                                             )}
+                                                            {/* Show detection count badge in training mode */}
+                                                            {templateTrainingMode && (() => {
+                                                                const count = recognitionResults.filter(r => r.glyph.id === glyph.id).length;
+                                                                return count > 0 ? (
+                                                                    <span className="absolute top-0 right-0 bg-ochre text-white text-[10px] px-1 rounded-bl font-bold">
+                                                                        +{count}
+                                                                    </span>
+                                                                ) : null;
+                                                            })()}
                                                         </div>
                                                         <div className="text-center">
                                                             <div className="text-xs font-medium text-gray-700 truncate">{glyph.name}</div>
@@ -2991,11 +3080,19 @@
                                             {chartData?.glyphs?.filter(g => g.images?.primary).map((glyph) => (
                                                 <div
                                                     key={glyph.id}
-                                                    className="border border-stone rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all bg-stone/5"
+                                                    className={`border rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all bg-stone/5 ${
+                                                        templateTrainingMode && focusedGlyphId === glyph.id 
+                                                            ? 'border-ancient-purple ring-2 ring-ancient-purple' 
+                                                            : 'border-stone'
+                                                    }`}
                                                     onClick={() => {
-                                                        setGlyphEditorMode('edit');
-                                                        setEditingGlyph(glyph);
-                                                        setShowGlyphEditor(true);
+                                                        if (templateTrainingMode) {
+                                                            setFocusedGlyphId(glyph.id);
+                                                        } else {
+                                                            setGlyphEditorMode('edit');
+                                                            setEditingGlyph(glyph);
+                                                            setShowGlyphEditor(true);
+                                                        }
                                                     }}
                                                 >
                                                     <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden">
@@ -3017,11 +3114,19 @@
                                                 (glyph.images?.variants || []).map((variant, idx) => (
                                                     <div
                                                         key={`${glyph.id}-var-${idx}`}
-                                                        className="border border-patina rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all bg-patina/5"
+                                                        className={`border rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all bg-patina/5 ${
+                                                            templateTrainingMode && focusedGlyphId === glyph.id 
+                                                                ? 'border-ancient-purple ring-2 ring-ancient-purple' 
+                                                                : 'border-patina'
+                                                        }`}
                                                         onClick={() => {
-                                                            setGlyphEditorMode('edit');
-                                                            setEditingGlyph(glyph);
-                                                            setShowGlyphEditor(true);
+                                                            if (templateTrainingMode) {
+                                                                setFocusedGlyphId(glyph.id);
+                                                            } else {
+                                                                setGlyphEditorMode('edit');
+                                                                setEditingGlyph(glyph);
+                                                                setShowGlyphEditor(true);
+                                                            }
                                                         }}
                                                     >
                                                         <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden">
@@ -3045,11 +3150,19 @@
                                                 (glyph.images?.examples || []).map((example, idx) => (
                                                     <div
                                                         key={`${glyph.id}-ex-${idx}`}
-                                                        className="border border-ochre rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all bg-ochre/5"
+                                                        className={`border rounded-lg p-2 hover:border-ancient-purple hover:shadow cursor-pointer transition-all bg-ochre/5 ${
+                                                            templateTrainingMode && focusedGlyphId === glyph.id 
+                                                                ? 'border-ancient-purple ring-2 ring-ancient-purple' 
+                                                                : 'border-ochre'
+                                                        }`}
                                                         onClick={() => {
-                                                            setGlyphEditorMode('edit');
-                                                            setEditingGlyph(glyph);
-                                                            setShowGlyphEditor(true);
+                                                            if (templateTrainingMode) {
+                                                                setFocusedGlyphId(glyph.id);
+                                                            } else {
+                                                                setGlyphEditorMode('edit');
+                                                                setEditingGlyph(glyph);
+                                                                setShowGlyphEditor(true);
+                                                            }
                                                         }}
                                                     >
                                                         <div className="aspect-square bg-gray-100 rounded flex items-center justify-center mb-1 overflow-hidden">
