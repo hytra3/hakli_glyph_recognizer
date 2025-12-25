@@ -20,11 +20,12 @@ const CollapsibleSection = ({
 }) => {
     return (
         <div className={`border border-gray-200 rounded-lg overflow-hidden ${className}`}>
-            <button
-                onClick={onToggle}
-                className={`w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors ${headerClassName}`}
-            >
-                <div className="flex items-center gap-2">
+            <div className={`w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors ${headerClassName}`}>
+                {/* Clickable area for collapse/expand */}
+                <div 
+                    className="flex items-center gap-2 flex-1 cursor-pointer"
+                    onClick={onToggle}
+                >
                     {icon && <span className="text-lg">{icon}</span>}
                     <span className="font-semibold text-gray-700">{title}</span>
                     {badge && (
@@ -34,21 +35,25 @@ const CollapsibleSection = ({
                     )}
                 </div>
                 <div className="flex items-center gap-2">
+                    {/* Actions area - separate from toggle */}
                     {actions && (
                         <div onClick={e => e.stopPropagation()}>
                             {actions}
                         </div>
                     )}
-                    <svg 
-                        className={`w-5 h-5 text-gray-500 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
-                        fill="none" 
-                        stroke="currentColor" 
-                        viewBox="0 0 24 24"
-                    >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                    {/* Collapse indicator */}
+                    <div onClick={onToggle} className="cursor-pointer p-1">
+                        <svg 
+                            className={`w-5 h-5 text-gray-500 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </div>
                 </div>
-            </button>
+            </div>
             
             {!isCollapsed && (
                 <div className={`p-4 ${contentClassName}`}>

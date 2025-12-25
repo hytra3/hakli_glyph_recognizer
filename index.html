@@ -118,6 +118,11 @@
     <!-- Reading modules -->
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
+    
+    <!-- UI Components (loaded as Babel) -->
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
@@ -161,6 +166,26 @@
             const [expandedCards, setExpandedCards] = useState(new Set()); // Cards showing alternatives
             const [excludedDetections, setExcludedDetections] = useState(new Set()); // Excluded from reading
             const [editingBoxIdx, setEditingBoxIdx] = useState(null); // Index of detection being edited
+            
+            // Manual box drawing state
+            const [manualBoxMode, setManualBoxMode] = useState(false);
+            const [drawingBox, setDrawingBox] = useState(null); // {startX, startY, currentX, currentY}
+            const [showGlyphSelector, setShowGlyphSelector] = useState(null); // Position for new manual box
+            
+            // Translation & inscription state
+            const [translationEnglish, setTranslationEnglish] = useState('');
+            const [translationArabic, setTranslationArabic] = useState('');
+            const [showTranslationSection, setShowTranslationSection] = useState(false);
+            const [inscriptionNotes, setInscriptionNotes] = useState('');
+            const [inscriptionTitle, setInscriptionTitle] = useState('');
+            const [inscriptionComplete, setInscriptionComplete] = useState(false);
+            const [transcriptionScript, setTranscriptionScript] = useState('english');
+            
+            // Storage state
+            const [showStorageSection, setShowStorageSection] = useState(false);
+            const [currentInscriptionId, setCurrentInscriptionId] = useState(null);
+            const [columnBreaks, setColumnBreaks] = useState(new Set());
+            const [actionHistory, setActionHistory] = useState([]);
             
             // Eraser tool state
             const [eraserMode, setEraserMode] = useState(false);
@@ -735,9 +760,13 @@
                 const x = (e.clientX - rect.left) * (canvas.width / rect.width);
                 const y = (e.clientY - rect.top) * (canvas.height / rect.height);
                 
-                // Draw white circle (erase) - size matches cursor exactly
+                // Scale the brush size to match cursor (cursor is in screen pixels, canvas is in canvas coords)
+                const scale = canvas.width / rect.width;
+                const scaledSize = regionEditorSize * scale;
+                
+                // Draw white circle (erase) - scaled to match cursor appearance
                 ctx.beginPath();
-                ctx.arc(x, y, regionEditorSize, 0, Math.PI * 2);
+                ctx.arc(x, y, scaledSize, 0, Math.PI * 2);
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fill();
             }, [regionEditorIdx, regionEditorSize]);
@@ -806,6 +835,112 @@
             const cancelRegionEdit = useCallback(() => {
                 setRegionEditorIdx(null);
             }, []);
+            
+            // ========== MANUAL BOX DRAWING ==========
+            const handleManualBoxStart = useCallback((e) => {
+                if (!manualBoxMode || !imageRef.current || !imageContainerRef.current) return;
+                
+                const container = imageContainerRef.current;
+                const img = imageRef.current;
+                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
+                
+                // Calculate click position relative to image
+                const offsetX = (containerRect.width - imgRect.width) / 2;
+                const offsetY = (containerRect.height - imgRect.height) / 2;
+                const x = e.clientX - containerRect.left - offsetX;
+                const y = e.clientY - containerRect.top - offsetY;
+                
+                // Only start if click is within image bounds
+                if (x >= 0 && x <= imgRect.width && y >= 0 && y <= imgRect.height) {
+                    setDrawingBox({ startX: x, startY: y, currentX: x, currentY: y });
+                }
+            }, [manualBoxMode]);
+            
+            const handleManualBoxMove = useCallback((e) => {
+                if (!drawingBox || !imageContainerRef.current) return;
+                
+                const container = imageContainerRef.current;
+                const img = imageRef.current;
+                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
+                
+                const offsetX = (containerRect.width - imgRect.width) / 2;
+                const offsetY = (containerRect.height - imgRect.height) / 2;
+                const x = e.clientX - containerRect.left - offsetX;
+                const y = e.clientY - containerRect.top - offsetY;
+                
+                setDrawingBox(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
+            }, [drawingBox]);
+            
+            const handleManualBoxEnd = useCallback((e) => {
+                if (!drawingBox || !imageRef.current) return;
+                
+                const img = imageRef.current;
+                const imgRect = img.getBoundingClientRect();
+                const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
+                const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
+                
+                // Convert screen coords to image coords
+                const scaleX = sourceWidth / imgRect.width;
+                const scaleY = sourceHeight / imgRect.height;
+                
+                const x = Math.min(drawingBox.startX, drawingBox.currentX) * scaleX;
+                const y = Math.min(drawingBox.startY, drawingBox.currentY) * scaleY;
+                const width = Math.abs(drawingBox.currentX - drawingBox.startX) * scaleX;
+                const height = Math.abs(drawingBox.currentY - drawingBox.startY) * scaleY;
+                
+                // Only create box if it has reasonable size
+                if (width > 5 && height > 5) {
+                    setShowGlyphSelector({ x, y, width, height });
+                }
+                
+                setDrawingBox(null);
+            }, [drawingBox, recognitionSourceDims]);
+            
+            const addManualDetection = useCallback((glyph, position) => {
+                if (!glyph || !position) return;
+                
+                // Create thumbnail from image
+                let thumbnail = null;
+                if (imageRef.current) {
+                    try {
+                        const img = imageRef.current;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = position.width;
+                        canvas.height = position.height;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Draw from the source image
+                        const tempImg = new Image();
+                        tempImg.crossOrigin = 'anonymous';
+                        tempImg.src = displayImage;
+                        ctx.drawImage(tempImg, 
+                            position.x, position.y, position.width, position.height,
+                            0, 0, position.width, position.height
+                        );
+                        thumbnail = canvas.toDataURL('image/png');
+                    } catch (e) {
+                        console.warn('Could not create thumbnail:', e);
+                    }
+                }
+                
+                const newDetection = {
+                    glyph: glyph,
+                    confidence: 1.0, // Manual = high confidence
+                    position: position,
+                    thumbnail: thumbnail,
+                    matchType: 'manual',
+                    isManual: true,
+                    regionIndex: recognitionResults.length
+                };
+                
+                setRecognitionResults(prev => [...prev, newDetection]);
+                setShowGlyphSelector(null);
+                setManualBoxMode(false);
+                
+                console.log('✅ Added manual detection:', glyph.name);
+            }, [displayImage, recognitionResults.length]);
             
             // Initialize region editor canvas when opened
             useEffect(() => {
@@ -1373,10 +1508,43 @@
                                     )}
                                     
                                     {displayImage ? (
-                                        <div ref={imageContainerRef} className="relative flex-1 flex items-center justify-center overflow-hidden">
+                                        <div ref={imageContainerRef} 
+                                            className="relative flex-1 flex items-center justify-center overflow-hidden"
+                                            style={{ cursor: manualBoxMode ? 'crosshair' : 'default' }}
+                                            onMouseDown={manualBoxMode ? handleManualBoxStart : undefined}
+                                            onMouseMove={manualBoxMode ? handleManualBoxMove : undefined}
+                                            onMouseUp={manualBoxMode ? handleManualBoxEnd : undefined}
+                                            onMouseLeave={manualBoxMode ? () => setDrawingBox(null) : undefined}
+                                        >
                                             {/* Regular image display (hidden when eraser active) */}
                                             <img ref={imageRef} src={displayImage} alt="Inscription" 
-                                                className={`max-w-full max-h-full object-contain ${eraserMode ? 'hidden' : ''}`} />
+                                                className={`max-w-full max-h-full object-contain ${eraserMode ? 'hidden' : ''}`}
+                                                style={{ pointerEvents: manualBoxMode ? 'none' : 'auto' }}
+                                            />
+                                            
+                                            {/* Manual Box Drawing Overlay */}
+                                            {manualBoxMode && drawingBox && (() => {
+                                                const img = imageRef.current;
+                                                const container = imageContainerRef.current;
+                                                if (!img || !container) return null;
+                                                
+                                                const containerRect = container.getBoundingClientRect();
+                                                const imgRect = img.getBoundingClientRect();
+                                                const offsetX = (containerRect.width - imgRect.width) / 2;
+                                                const offsetY = (containerRect.height - imgRect.height) / 2;
+                                                
+                                                const left = offsetX + Math.min(drawingBox.startX, drawingBox.currentX);
+                                                const top = offsetY + Math.min(drawingBox.startY, drawingBox.currentY);
+                                                const width = Math.abs(drawingBox.currentX - drawingBox.startX);
+                                                const height = Math.abs(drawingBox.currentY - drawingBox.startY);
+                                                
+                                                return (
+                                                    <div 
+                                                        className="absolute border-2 border-dashed border-ochre bg-ochre/20 pointer-events-none"
+                                                        style={{ left, top, width, height }}
+                                                    />
+                                                );
+                                            })()}
                                             
                                             {/* Eraser canvas (shown when eraser active) */}
                                             {eraserMode && (
@@ -1465,6 +1633,28 @@
                                         className="w-full px-3 py-2.5 bg-patina text-white rounded-lg hover:bg-[#5a7d6e] text-sm font-medium disabled:bg-gray-300">
                                         {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : '🔍 Recognize Glyphs'}
                                     </button>
+                                    
+                                    {/* Manual Box Mode */}
+                                    <button 
+                                        onClick={() => {
+                                            setManualBoxMode(!manualBoxMode);
+                                            if (eraserMode) setEraserMode(false);
+                                        }}
+                                        disabled={!displayImage}
+                                        className={`w-full mt-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                            manualBoxMode 
+                                                ? 'bg-ochre text-white' 
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        } disabled:bg-gray-100 disabled:text-gray-400`}
+                                    >
+                                        {manualBoxMode ? '✋ Click to Exit Manual Mode' : '➕ Add Manual Box'}
+                                    </button>
+                                    
+                                    {manualBoxMode && (
+                                        <div className="mt-2 p-2 bg-ochre/10 rounded text-xs text-ochre">
+                                            🖱️ Click and drag on the image to draw a box around a glyph
+                                        </div>
+                                    )}
                                 </div>
                                 
                                 {/* Detection List */}
@@ -1640,7 +1830,210 @@
                                 </div>
                             </aside>
                         </div>
+                        
+                        {/* ===== INSCRIPTION PANEL (Translation & Notes) ===== */}
+                        {viewMode === 'reading' && recognitionResults.length > 0 && (
+                            <div className="mt-6">
+                                <InscriptionPanel
+                                    inscriptionTitle={inscriptionTitle}
+                                    inscriptionNotes={inscriptionNotes}
+                                    inscriptionComplete={inscriptionComplete}
+                                    translationEnglish={translationEnglish}
+                                    translationArabic={translationArabic}
+                                    onTitleChange={setInscriptionTitle}
+                                    onNotesChange={setInscriptionNotes}
+                                    onCompleteChange={setInscriptionComplete}
+                                    onTranslationEnglishChange={setTranslationEnglish}
+                                    onTranslationArabicChange={setTranslationArabic}
+                                    isCollapsed={!showTranslationSection}
+                                    onToggleCollapse={() => setShowTranslationSection(!showTranslationSection)}
+                                />
+                            </div>
+                        )}
+                        
+                        {/* ===== EXPORT PANEL (Save & Export) ===== */}
+                        {recognitionResults.length > 0 && (
+                            <div className="mt-6">
+                                <ExportPanel
+                                    recognitionResults={recognitionResults}
+                                    validations={validations}
+                                    image={originalImage}
+                                    displayImage={displayImage}
+                                    preprocessing={preprocessing}
+                                    readingDirection={readingDirection}
+                                    readingOrder={readingOrder}
+                                    wordBoundaries={wordBoundaries}
+                                    lineBreaks={lineBreaks}
+                                    columnBreaks={columnBreaks}
+                                    translationEnglish={translationEnglish}
+                                    translationArabic={translationArabic}
+                                    currentInscriptionId={currentInscriptionId}
+                                    inscriptionTitle={inscriptionTitle}
+                                    inscriptionNotes={inscriptionNotes}
+                                    inscriptionComplete={inscriptionComplete}
+                                    isCollapsed={!showStorageSection}
+                                    onToggleCollapse={() => setShowStorageSection(!showStorageSection)}
+                                    onSaveHki={() => {
+                                        if (typeof HKIStorage !== 'undefined') {
+                                            HKIStorage.saveAsHkiFile({
+                                                recognitionResults, validations,
+                                                image: originalImage, displayImage,
+                                                preprocessing, viewMode, readingDirection, readingOrder,
+                                                wordBoundaries, columnBreaks, lineBreaks,
+                                                translationEnglish, translationArabic,
+                                                actionHistory, currentInscriptionId,
+                                                inscriptionComplete, inscriptionTitle
+                                            });
+                                        } else {
+                                            const hkiData = {
+                                                version: '1.0',
+                                                created: new Date().toISOString(),
+                                                inscriptionTitle: inscriptionTitle || 'Untitled',
+                                                inscriptionNotes,
+                                                image: originalImage,
+                                                displayImage,
+                                                preprocessing,
+                                                recognitionResults,
+                                                readingOrder: Array.from(readingOrder),
+                                                readingDirection,
+                                                wordBoundaries: Array.from(wordBoundaries),
+                                                lineBreaks: Array.from(lineBreaks),
+                                                validations,
+                                                translationEnglish,
+                                                translationArabic
+                                            };
+                                            const blob = new Blob([JSON.stringify(hkiData, null, 2)], { type: 'application/json' });
+                                            const url = URL.createObjectURL(blob);
+                                            const a = document.createElement('a');
+                                            a.href = url;
+                                            a.download = `${inscriptionTitle || 'inscription'}_${new Date().toISOString().slice(0,10)}.hki`;
+                                            a.click();
+                                            URL.revokeObjectURL(url);
+                                            alert('✅ HKI file saved!');
+                                        }
+                                    }}
+                                    onLoadHki={(e) => {
+                                        const file = e.target.files[0];
+                                        if (!file) return;
+                                        const reader = new FileReader();
+                                        reader.onload = (ev) => {
+                                            try {
+                                                const data = JSON.parse(ev.target.result);
+                                                if (data.image) setOriginalImage(data.image);
+                                                if (data.displayImage) setDisplayImage(data.displayImage);
+                                                if (data.images?.original) setOriginalImage(data.images.original);
+                                                if (data.images?.preprocessed) setDisplayImage(data.images.preprocessed);
+                                                if (data.preprocessing || data.images?.preprocessingSettings) 
+                                                    setPreprocessing(data.preprocessing || data.images.preprocessingSettings);
+                                                if (data.recognitionResults) setRecognitionResults(data.recognitionResults);
+                                                if (data.detections) setRecognitionResults(data.detections.map(d => ({
+                                                    glyph: d.glyph, confidence: d.confidence, position: d.position,
+                                                    thumbnail: d.thumbnail, matchType: d.matchType
+                                                })));
+                                                if (data.validations) setValidations(data.validations);
+                                                if (data.readingOrder) setReadingOrder(data.readingOrder);
+                                                if (data.readingData?.readingOrder) setReadingOrder(data.readingData.readingOrder);
+                                                if (data.wordBoundaries) setWordBoundaries(new Set(data.wordBoundaries));
+                                                if (data.readingData?.wordBoundaries) setWordBoundaries(new Set(data.readingData.wordBoundaries));
+                                                if (data.lineBreaks) setLineBreaks(new Set(data.lineBreaks));
+                                                if (data.readingData?.lineBreaks) setLineBreaks(new Set(data.readingData.lineBreaks));
+                                                if (data.translationEnglish || data.translations?.english)
+                                                    setTranslationEnglish(data.translationEnglish || data.translations?.english || '');
+                                                if (data.translationArabic || data.translations?.arabic)
+                                                    setTranslationArabic(data.translationArabic || data.translations?.arabic || '');
+                                                if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
+                                                if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                if (data.inscriptionComplete || data.complete) setInscriptionComplete(data.inscriptionComplete || data.complete);
+                                                if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
+                                                alert('✅ Loaded successfully!\n\n📊 ' + (data.recognitionResults?.length || data.detections?.length || 0) + ' detections');
+                                            } catch (err) {
+                                                alert('❌ Failed to load: ' + err.message);
+                                            }
+                                        };
+                                        reader.readAsText(file);
+                                    }}
+                                    imageRef={imageRef}
+                                    className="bg-[#f7f3ed] border-2 border-ochre"
+                                />
+                            </div>
+                        )}
                     </main>
+                    
+                    {/* ===== GLYPH SELECTOR MODAL (for manual box) ===== */}
+                    {showGlyphSelector && chartData && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+                                <div className="flex items-center justify-between p-4 border-b">
+                                    <div>
+                                        <h3 className="text-xl font-bold text-gray-900">📋 Select Glyph</h3>
+                                        <p className="text-sm text-gray-500">Choose which glyph this box represents</p>
+                                    </div>
+                                    <button onClick={() => { setShowGlyphSelector(null); setManualBoxMode(false); }} 
+                                        className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+                                </div>
+                                
+                                {/* Search */}
+                                <div className="p-4 border-b">
+                                    <input
+                                        type="text"
+                                        placeholder="Search glyphs by name or transliteration..."
+                                        className="w-full px-3 py-2 border rounded-lg"
+                                        onChange={(e) => {
+                                            const searchInput = e.target;
+                                            // Store search value in dataset for filtering
+                                            searchInput.dataset.search = e.target.value.toLowerCase();
+                                            // Force re-render by updating a dummy state
+                                            setShowGlyphSelector(prev => ({ ...prev }));
+                                        }}
+                                        autoFocus
+                                    />
+                                </div>
+                                
+                                {/* Glyph Grid */}
+                                <div className="flex-1 overflow-y-auto p-4">
+                                    <div className="grid grid-cols-6 gap-2">
+                                        {chartData.glyphs
+                                            .filter(g => {
+                                                const searchEl = document.querySelector('[data-search]');
+                                                const search = searchEl?.dataset?.search || '';
+                                                if (!search) return true;
+                                                return (g.name?.toLowerCase().includes(search) || 
+                                                        g.transliteration?.toLowerCase().includes(search) ||
+                                                        g.arabic?.includes(search));
+                                            })
+                                            .map(glyph => (
+                                                <button
+                                                    key={glyph.id}
+                                                    onClick={() => addManualDetection(glyph, showGlyphSelector)}
+                                                    className="p-2 border rounded-lg hover:border-ochre hover:bg-ochre/10 flex flex-col items-center gap-1 transition-colors"
+                                                >
+                                                    {glyphThumbnails[glyph.id] ? (
+                                                        <img src={glyphThumbnails[glyph.id]} alt={glyph.name} 
+                                                            className="w-10 h-10 object-contain" />
+                                                    ) : (
+                                                        <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400">?</div>
+                                                    )}
+                                                    <span className="text-xs font-medium truncate w-full text-center">
+                                                        {glyph.transliteration || glyph.name}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                    </div>
+                                </div>
+                                
+                                {/* Footer */}
+                                <div className="p-4 border-t bg-gray-50 flex justify-between items-center">
+                                    <span className="text-sm text-gray-500">
+                                        Box: {Math.round(showGlyphSelector.width)}×{Math.round(showGlyphSelector.height)}px
+                                    </span>
+                                    <button onClick={() => { setShowGlyphSelector(null); setManualBoxMode(false); }}
+                                        className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     
                     {/* ===== CHART MANAGER MODAL ===== */}
                     {showChartManager && (

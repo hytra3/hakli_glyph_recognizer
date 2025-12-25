@@ -18,17 +18,20 @@ const ExportPanel = ({
     translationArabic,
     currentInscriptionId,
     inscriptionTitle,
+    inscriptionNotes,
     inscriptionComplete,
     isCollapsed,
     onToggleCollapse,
     onSaveHki,
+    onLoadHki,
     onSaveToCloud,
     imageRef,
     className = ''
 }) => {
-    const { useState } = React;
+    const { useState, useRef } = React;
     
     const [isExporting, setIsExporting] = useState(false);
+    const fileInputRef = useRef(null);
     
     const hasData = recognitionResults && recognitionResults.length > 0;
     
@@ -348,7 +351,7 @@ const ExportPanel = ({
                         <span className="font-medium text-gray-700">📦 HKI Package</span>
                         <span className="text-xs text-gray-500">Complete inscription data</span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 mb-2">
                         <button
                             onClick={() => onSaveHki && onSaveHki()}
                             disabled={!hasData}
@@ -356,14 +359,34 @@ const ExportPanel = ({
                         >
                             💾 Save .hki
                         </button>
-                        <button
-                            onClick={() => onSaveToCloud && onSaveToCloud()}
-                            disabled={!hasData}
-                            className="flex-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-sm"
-                        >
-                            ☁️ Save to Drive
-                        </button>
+                        <label className="flex-1 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 cursor-pointer transition-colors text-sm text-center">
+                            📂 Load .hki
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".hki,.json"
+                                className="hidden"
+                                onChange={(e) => {
+                                    if (onLoadHki && e.target.files[0]) {
+                                        onLoadHki(e);
+                                        e.target.value = '';
+                                    }
+                                }}
+                            />
+                        </label>
                     </div>
+                    <button
+                        onClick={() => onSaveToCloud && onSaveToCloud()}
+                        disabled={!hasData}
+                        className="w-full px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-sm"
+                    >
+                        ☁️ Save to Drive
+                    </button>
+                    {currentInscriptionId && (
+                        <div className="mt-2 text-xs text-gray-500 text-center">
+                            📦 ID: {currentInscriptionId}
+                        </div>
+                    )}
                 </div>
                 
                 {/* Individual Exports */}
