@@ -60,13 +60,15 @@
         .detection-box.uncertain { border-style: dashed; }
         .detection-label {
             position: absolute;
-            top: -22px;
+            top: -26px;
             left: 0;
-            padding: 2px 6px;
-            font-size: 11px;
+            padding: 3px 8px;
+            font-size: 14px;
             font-weight: bold;
             color: white;
-            border-radius: 3px;
+            border-radius: 4px;
+            white-space: nowrap;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
         }
         .reading-order-badge {
             position: absolute;
@@ -580,8 +582,7 @@
                     // Update display image
                     setDisplayImage(dataUrl);
                     
-                    // Update the preprocessed mat
-                    if (preprocessedMatRef.current) preprocessedMatRef.current.delete();
+                    // Create mat from erased image
                     const img = new Image();
                     img.src = dataUrl;
                     await new Promise(resolve => { img.onload = resolve; });
@@ -590,16 +591,27 @@
                     tempCanvas.width = img.naturalWidth;
                     tempCanvas.height = img.naturalHeight;
                     tempCanvas.getContext('2d').drawImage(img, 0, 0);
-                    preprocessedMatRef.current = cv.imread(tempCanvas);
+                    const newMat = cv.imread(tempCanvas);
+                    
+                    // Update BOTH originalMatRef AND preprocessedMatRef
+                    // This ensures subsequent preprocessing works on the erased image
+                    if (originalMatRef.current) originalMatRef.current.delete();
+                    originalMatRef.current = newMat.clone();
+                    
+                    if (preprocessedMatRef.current) preprocessedMatRef.current.delete();
+                    preprocessedMatRef.current = newMat;
+                    
+                    // Also update originalImage so Reset goes back to erased version
+                    setOriginalImage(dataUrl);
                     
                     // Track dimensions
                     setRecognitionSourceDims({
-                        width: preprocessedMatRef.current.cols,
-                        height: preprocessedMatRef.current.rows
+                        width: newMat.cols,
+                        height: newMat.rows
                     });
                     
                     setEraserMode(false);
-                    console.log('✅ Eraser applied');
+                    console.log('✅ Eraser applied (original updated)');
                 } catch (error) {
                     console.error('Eraser apply error:', error);
                 }
@@ -761,23 +773,58 @@
                     const newDataUrl = fullCanvas.toDataURL('image/png');
                     setDisplayImage(newDataUrl);
                     
-                    // Update preprocessed mat if it exists
-                    if (preprocessedMatRef.current) {
-                        preprocessedMatRef.current.delete();
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = fullCanvas.width;
-                        tempCanvas.height = fullCanvas.height;
-                        tempCanvas.getContext('2d').drawImage(fullCanvas, 0, 0);
-                        preprocessedMatRef.current = cv.imread(tempCanvas);
+                    // Update preprocessed mat AND original mat
+                    // This ensures changes persist through subsequent preprocessing
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = fullCanvas.width;
+                    tempCanvas.height = fullCanvas.height;
+                    tempCanvas.getContext('2d').drawImage(fullCanvas, 0, 0);
+                    const newMat = cv.imread(tempCanvas);
+                    
+                    if (originalMatRef.current) originalMatRef.current.delete();
+                    originalMatRef.current = newMat.clone();
+                    
+                    if (preprocessedMatRef.current) preprocessedMatRef.current.delete();
+                    preprocessedMatRef.current = newMat;
+                    
+                    // Also update originalImage so Reset goes back to edited version
+                    setOriginalImage(newDataUrl);
+                    
+                    // Update the thumbnail for this detection card
+                    const detection = recognitionResults[regionEditorIdx];
+                    if (detection) {
+                        const pos = detection.position;
+                        const thumbCanvas = document.createElement('canvas');
+                        thumbCanvas.width = pos.width;
+                        thumbCanvas.height = pos.height;
+                        thumbCanvas.getContext('2d').drawImage(
+                            fullCanvas,
+                            pos.x, pos.y, pos.width, pos.height,
+                            0, 0, pos.width, pos.height
+                        );
+                        const newThumbnail = thumbCanvas.toDataURL();
+                        
+                        // Update recognition results with new thumbnail
+                        setRecognitionResults(prev => {
+                            const updated = [...prev];
+                            if (updated[regionEditorIdx]) {
+                                updated[regionEditorIdx] = {
+                                    ...updated[regionEditorIdx],
+                                    thumbnail: newThumbnail
+                                };
+                            }
+                            return updated;
+                        });
                     }
                     
+                    const closedIdx = regionEditorIdx;
                     setRegionEditorIdx(null);
-                    console.log('✅ Region edit applied');
+                    console.log(`✅ Region edit applied for detection #${closedIdx + 1}`);
                 } catch (error) {
                     console.error('Region edit error:', error);
                     alert('Failed to apply region edit');
                 }
-            }, [regionEditorIdx, displayImage]);
+            }, [regionEditorIdx, displayImage, recognitionResults]);
             
             const cancelRegionEdit = useCallback(() => {
                 setRegionEditorIdx(null);
