@@ -60,15 +60,21 @@
         .detection-box.uncertain { border-style: dashed; }
         .detection-label {
             position: absolute;
-            top: -26px;
-            left: 0;
-            padding: 3px 8px;
-            font-size: 14px;
-            font-weight: bold;
+            top: -34px;
+            left: -2px;
+            padding: 6px 14px;
+            font-size: 22px;
+            font-weight: 800;
             color: white;
-            border-radius: 4px;
+            border-radius: 5px;
             white-space: nowrap;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.7), 0 0 2px rgba(0,0,0,0.5);
+            letter-spacing: 1px;
+            min-width: 32px;
+            min-height: 26px;
+            text-align: center;
+            line-height: 1.2;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         .reading-order-badge {
             position: absolute;
@@ -742,75 +748,47 @@
             }, []);
             
             const applyRegionEdit = useCallback(async () => {
-                if (regionEditorIdx === null || !regionEditorCanvasRef.current || !displayImage) return;
+                if (regionEditorIdx === null || !regionEditorCanvasRef.current) return;
                 
                 try {
                     const canvas = regionEditorCanvasRef.current;
-                    const regionX = parseFloat(canvas.dataset.regionX);
-                    const regionY = parseFloat(canvas.dataset.regionY);
-                    const regionW = parseFloat(canvas.dataset.regionW);
-                    const regionH = parseFloat(canvas.dataset.regionH);
                     
-                    // Create a new canvas with the full image
-                    const fullCanvas = document.createElement('canvas');
-                    const img = new Image();
-                    img.src = displayImage;
-                    await new Promise(resolve => { img.onload = resolve; });
-                    
-                    fullCanvas.width = img.naturalWidth;
-                    fullCanvas.height = img.naturalHeight;
-                    const fullCtx = fullCanvas.getContext('2d');
-                    fullCtx.drawImage(img, 0, 0);
-                    
-                    // Draw the edited region back onto the full image
-                    fullCtx.drawImage(
-                        canvas,
-                        0, 0, canvas.width, canvas.height,      // Source (edited region)
-                        regionX, regionY, regionW, regionH       // Destination
-                    );
-                    
-                    // Update display image
-                    const newDataUrl = fullCanvas.toDataURL('image/png');
-                    setDisplayImage(newDataUrl);
-                    
-                    // Update preprocessed mat AND original mat
-                    // This ensures changes persist through subsequent preprocessing
-                    const tempCanvas = document.createElement('canvas');
-                    tempCanvas.width = fullCanvas.width;
-                    tempCanvas.height = fullCanvas.height;
-                    tempCanvas.getContext('2d').drawImage(fullCanvas, 0, 0);
-                    const newMat = cv.imread(tempCanvas);
-                    
-                    if (originalMatRef.current) originalMatRef.current.delete();
-                    originalMatRef.current = newMat.clone();
-                    
-                    if (preprocessedMatRef.current) preprocessedMatRef.current.delete();
-                    preprocessedMatRef.current = newMat;
-                    
-                    // Also update originalImage so Reset goes back to edited version
-                    setOriginalImage(newDataUrl);
-                    
-                    // Update the thumbnail for this detection card
+                    // ONLY update the thumbnail for this detection card
+                    // Do NOT modify the main display image - keep it intact for viewing all boxes
                     const detection = recognitionResults[regionEditorIdx];
                     if (detection) {
+                        // Create thumbnail directly from the edited canvas
+                        // Scale it down to detection size
                         const pos = detection.position;
+                        const padding = 20;
+                        
+                        // The canvas contains the region with padding, extract just the detection area
                         const thumbCanvas = document.createElement('canvas');
                         thumbCanvas.width = pos.width;
                         thumbCanvas.height = pos.height;
-                        thumbCanvas.getContext('2d').drawImage(
-                            fullCanvas,
-                            pos.x, pos.y, pos.width, pos.height,
-                            0, 0, pos.width, pos.height
+                        const thumbCtx = thumbCanvas.getContext('2d');
+                        
+                        // Calculate where the actual detection is within the padded canvas
+                        const scale = parseFloat(canvas.dataset.scale || 1);
+                        const paddingScaled = padding * scale;
+                        
+                        thumbCtx.drawImage(
+                            canvas,
+                            paddingScaled, paddingScaled,  // Source x,y (skip padding)
+                            pos.width * scale, pos.height * scale,  // Source w,h
+                            0, 0, pos.width, pos.height  // Dest
                         );
+                        
                         const newThumbnail = thumbCanvas.toDataURL();
                         
-                        // Update recognition results with new thumbnail
+                        // Update recognition results with new thumbnail ONLY
                         setRecognitionResults(prev => {
                             const updated = [...prev];
                             if (updated[regionEditorIdx]) {
                                 updated[regionEditorIdx] = {
                                     ...updated[regionEditorIdx],
-                                    thumbnail: newThumbnail
+                                    thumbnail: newThumbnail,
+                                    thumbnailEdited: true  // Flag that this was manually edited
                                 };
                             }
                             return updated;
@@ -819,12 +797,12 @@
                     
                     const closedIdx = regionEditorIdx;
                     setRegionEditorIdx(null);
-                    console.log(`✅ Region edit applied for detection #${closedIdx + 1}`);
+                    console.log(`✅ Thumbnail updated for detection #${closedIdx + 1} (main image unchanged)`);
                 } catch (error) {
                     console.error('Region edit error:', error);
                     alert('Failed to apply region edit');
                 }
-            }, [regionEditorIdx, displayImage, recognitionResults]);
+            }, [regionEditorIdx, recognitionResults]);
             
             const cancelRegionEdit = useCallback(() => {
                 setRegionEditorIdx(null);
@@ -1404,8 +1382,8 @@
                                             {/* Eraser canvas (shown when eraser active) */}
                                             {eraserMode && (
                                                 <canvas ref={eraserCanvasRef}
-                                                    className="max-w-full max-h-full object-contain cursor-crosshair"
-                                                    style={{ cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${eraserSize * 2}" height="${eraserSize * 2}" viewBox="0 0 ${eraserSize * 2} ${eraserSize * 2}"><circle cx="${eraserSize}" cy="${eraserSize}" r="${eraserSize - 1}" fill="none" stroke="black" stroke-width="1"/></svg>') ${eraserSize} ${eraserSize}, crosshair` }}
+                                                    className="max-w-full max-h-full object-contain"
+                                                    style={{ cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${eraserSize * 2 + 2}" height="${eraserSize * 2 + 2}" viewBox="0 0 ${eraserSize * 2 + 2} ${eraserSize * 2 + 2}"><circle cx="${eraserSize + 1}" cy="${eraserSize + 1}" r="${eraserSize}" fill="none" stroke="black" stroke-width="1.5"/><circle cx="${eraserSize + 1}" cy="${eraserSize + 1}" r="${eraserSize}" fill="none" stroke="white" stroke-width="0.5"/><line x1="${eraserSize + 1}" y1="${eraserSize - 4}" x2="${eraserSize + 1}" y2="${eraserSize + 7}" stroke="black" stroke-width="1"/><line x1="${eraserSize - 4}" y1="${eraserSize + 1}" x2="${eraserSize + 7}" y2="${eraserSize + 1}" stroke="black" stroke-width="1"/></svg>') ${eraserSize + 1} ${eraserSize + 1}, crosshair` }}
                                                     onMouseDown={handleEraserStart}
                                                     onMouseMove={handleEraserDraw}
                                                     onMouseUp={handleEraserEnd}
@@ -1554,11 +1532,29 @@
                                                             <div className="p-2 cursor-pointer hover:bg-gray-50"
                                                                 onClick={() => setSelectedRegions(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n; })}>
                                                                 <div className="flex gap-2">
-                                                                    {result.thumbnail && (
-                                                                        <div className="w-10 h-10 bg-gray-100 rounded overflow-hidden flex-shrink-0">
-                                                                            <img src={result.thumbnail} alt="" className="w-full h-full object-contain" />
-                                                                        </div>
-                                                                    )}
+                                                                    {/* Thumbnails: Detected vs Chart */}
+                                                                    <div className="flex gap-1 flex-shrink-0">
+                                                                        {/* Detected region thumbnail */}
+                                                                        {result.thumbnail && (
+                                                                            <div className="relative">
+                                                                                <div className={`w-10 h-10 bg-gray-100 rounded overflow-hidden border ${result.thumbnailEdited ? 'border-patina border-2' : 'border-gray-300'}`}>
+                                                                                    <img src={result.thumbnail} alt="Detected" className="w-full h-full object-contain" />
+                                                                                </div>
+                                                                                <span className="absolute -bottom-1 left-0 right-0 text-center text-[8px] text-gray-400">
+                                                                                    {result.thumbnailEdited ? '✓det' : 'det'}
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+                                                                        {/* Chart glyph thumbnail */}
+                                                                        {glyphThumbnails[result.glyph.id] && (
+                                                                            <div className="relative">
+                                                                                <div className="w-10 h-10 bg-white rounded overflow-hidden border border-ancient-purple">
+                                                                                    <img src={glyphThumbnails[result.glyph.id]} alt="Chart" className="w-full h-full object-contain" />
+                                                                                </div>
+                                                                                <span className="absolute -bottom-1 left-0 right-0 text-center text-[8px] text-ancient-purple">chart</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
                                                                     <div className="flex-1 min-w-0">
                                                                         <div className="flex items-center gap-1">
                                                                             <span className="font-bold text-xs text-gray-500">#{viewMode === 'reading' ? displayIdx + 1 : idx + 1}</span>
@@ -1755,7 +1751,7 @@
                                 <div className="flex items-center justify-between p-4 border-b">
                                     <div>
                                         <h3 className="text-xl font-bold">✏️ Edit Region #{regionEditorIdx + 1}</h3>
-                                        <p className="text-sm text-gray-500">Erase stray marks from this detection</p>
+                                        <p className="text-sm text-gray-500">Clean up thumbnail only (main image stays intact)</p>
                                     </div>
                                     <button onClick={() => setRegionEditorIdx(null)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
                                 </div>
@@ -1776,8 +1772,11 @@
                                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-2 bg-gray-50 flex items-center justify-center">
                                         <canvas 
                                             ref={regionEditorCanvasRef}
-                                            className="max-w-full border border-gray-200 cursor-crosshair bg-white"
-                                            style={{ imageRendering: 'pixelated' }}
+                                            className="max-w-full border border-gray-200 bg-white"
+                                            style={{ 
+                                                imageRendering: 'pixelated',
+                                                cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${regionEditorSize * 2 + 2}" height="${regionEditorSize * 2 + 2}" viewBox="0 0 ${regionEditorSize * 2 + 2} ${regionEditorSize * 2 + 2}"><circle cx="${regionEditorSize + 1}" cy="${regionEditorSize + 1}" r="${regionEditorSize}" fill="none" stroke="black" stroke-width="1.5"/><circle cx="${regionEditorSize + 1}" cy="${regionEditorSize + 1}" r="${regionEditorSize}" fill="none" stroke="white" stroke-width="0.5"/><line x1="${regionEditorSize + 1}" y1="${regionEditorSize - 4}" x2="${regionEditorSize + 1}" y2="${regionEditorSize + 7}" stroke="black" stroke-width="1"/><line x1="${regionEditorSize - 4}" y1="${regionEditorSize + 1}" x2="${regionEditorSize + 7}" y2="${regionEditorSize + 1}" stroke="black" stroke-width="1"/></svg>') ${regionEditorSize + 1} ${regionEditorSize + 1}, crosshair`
+                                            }}
                                             onMouseDown={handleRegionEditorStart}
                                             onMouseMove={handleRegionEditorDraw}
                                             onMouseUp={handleRegionEditorEnd}
@@ -1786,7 +1785,7 @@
                                     </div>
                                     
                                     <p className="text-xs text-gray-400 mt-2 text-center">
-                                        Draw to erase (white out) unwanted marks. Changes apply only to this region.
+                                        Erase stray marks to clean up the thumbnail. The main image display won't change.
                                     </p>
                                 </div>
                                 
