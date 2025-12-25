@@ -60,18 +60,18 @@
         .detection-box.uncertain { border-style: dashed; }
         .detection-label {
             position: absolute;
-            top: -34px;
+            top: -28px;
             left: -2px;
-            padding: 6px 14px;
-            font-size: 22px;
-            font-weight: 800;
+            padding: 4px 10px;
+            font-size: 16px;
+            font-weight: 600;
             color: white;
-            border-radius: 5px;
+            border-radius: 4px;
             white-space: nowrap;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.7), 0 0 2px rgba(0,0,0,0.5);
-            letter-spacing: 1px;
-            min-width: 32px;
-            min-height: 26px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            letter-spacing: 0.5px;
+            min-width: 24px;
+            min-height: 20px;
             text-align: center;
             line-height: 1.2;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -558,7 +558,6 @@
                 const canvas = eraserCanvasRef.current;
                 const ctx = canvas.getContext('2d');
                 const rect = canvas.getBoundingClientRect();
-                const img = imageRef.current;
                 
                 // Calculate position relative to canvas (accounting for scaling)
                 const scaleX = canvas.width / rect.width;
@@ -566,7 +565,7 @@
                 const x = (e.clientX - rect.left) * scaleX;
                 const y = (e.clientY - rect.top) * scaleY;
                 
-                // Draw white circle (erase)
+                // Draw white circle (erase) - scale the brush to match cursor visually
                 ctx.beginPath();
                 ctx.arc(x, y, eraserSize * scaleX, 0, Math.PI * 2);
                 ctx.fillStyle = '#FFFFFF';
@@ -736,9 +735,9 @@
                 const x = (e.clientX - rect.left) * (canvas.width / rect.width);
                 const y = (e.clientY - rect.top) * (canvas.height / rect.height);
                 
-                // Draw white circle (erase)
+                // Draw white circle (erase) - size matches cursor exactly
                 ctx.beginPath();
-                ctx.arc(x, y, regionEditorSize * parseFloat(canvas.dataset.scale || 1), 0, Math.PI * 2);
+                ctx.arc(x, y, regionEditorSize, 0, Math.PI * 2);
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fill();
             }, [regionEditorIdx, regionEditorSize]);
