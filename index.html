@@ -62,20 +62,25 @@
             position: absolute;
             top: 2px;
             left: 2px;
-            padding: 2px 6px;
-            font-size: 12px;
+            padding: 1px 4px;
+            font-size: 10px;
             font-weight: 600;
             color: white;
-            border-radius: 3px;
+            border-radius: 2px;
             white-space: nowrap;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-            letter-spacing: 0.5px;
-            min-width: 18px;
-            min-height: 16px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+            letter-spacing: 0.3px;
+            min-width: 14px;
+            min-height: 12px;
             text-align: center;
             line-height: 1.2;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            opacity: 0.85;
         }
+        .detection-label.bg-stone { background: rgba(139, 125, 107, 0.7); }
+        .detection-label.bg-ochre { background: rgba(184, 149, 106, 0.8); }
+        .detection-label.bg-patina { background: rgba(107, 142, 127, 0.7); }
+        .detection-label.bg-rust { background: rgba(160, 103, 79, 0.7); }
         .reading-order-badge {
             position: absolute;
             top: -16px;
@@ -174,6 +179,9 @@
             const [showGlyphSelector, setShowGlyphSelector] = useState(null);
             const [glyphSelectorSearch, setGlyphSelectorSearch] = useState('');
             
+            // Drag-and-drop reorder state
+            const [draggedCardIdx, setDraggedCardIdx] = useState(null); // Index in readingOrder being dragged
+            const [dragOverCardIdx, setDragOverCardIdx] = useState(null); // Index being dragged over
             // Translation & inscription state
             const [translationEnglish, setTranslationEnglish] = useState('');
             const [translationArabic, setTranslationArabic] = useState('');
@@ -186,7 +194,7 @@
             // Transcription display state
             const [showTranscription, setShowTranscription] = useState(true);
             const [showEnhancedTranscription, setShowEnhancedTranscription] = useState(false);
-            const [transcriptionFormat, setTranscriptionFormat] = useState('english-ltr');
+            const [transcriptionFormat, setTranscriptionFormat] = useState('horizontal-ltr');
             
             // Storage state
             const [showStorageSection, setShowStorageSection] = useState(false);
@@ -282,7 +290,8 @@
                                     newImages[glyph.id] = img;
                                     newThumbnails[glyph.id] = img.src;
                                 } catch (e) {
-                                    console.warn(`Failed to load glyph ${glyph.id}`);
+                                    // Glyph image not available - not critical, skip silently
+                                    console.debug(`Skipped glyph ${glyph.id} (image not available)`);
                                 }
                             }
                             loaded++;
@@ -1351,6 +1360,47 @@
                 });
             }, []);
             
+            // Drag handlers for reordering reading order
+            const handleDragStart = useCallback((e, readingOrderPosition) => {
+                setDraggedCardIdx(readingOrderPosition);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', readingOrderPosition.toString());
+            }, []);
+            
+            const handleDragOver = useCallback((e, readingOrderPosition) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                setDragOverCardIdx(readingOrderPosition);
+            }, []);
+            
+            const handleDragLeave = useCallback(() => {
+                setDragOverCardIdx(null);
+            }, []);
+            
+            const handleDrop = useCallback((e, targetPosition) => {
+                e.preventDefault();
+                const sourcePosition = draggedCardIdx;
+                
+                if (sourcePosition !== null && sourcePosition !== targetPosition) {
+                    setReadingOrder(prev => {
+                        const newOrder = [...prev];
+                        // Remove from source position
+                        const [movedItem] = newOrder.splice(sourcePosition, 1);
+                        // Insert at target position
+                        newOrder.splice(targetPosition, 0, movedItem);
+                        return newOrder;
+                    });
+                }
+                
+                setDraggedCardIdx(null);
+                setDragOverCardIdx(null);
+            }, [draggedCardIdx]);
+            
+            const handleDragEnd = useCallback(() => {
+                setDraggedCardIdx(null);
+                setDragOverCardIdx(null);
+            }, []);
+            
             // Merge two selected detections
             const mergeSelectedDetections = useCallback(() => {
                 if (selectedRegions.size !== 2) {
@@ -1814,7 +1864,21 @@
                                                     else if (validation && !validation.isCorrect) borderColor = 'border-rust';
                                                     
                                                     return (
-                                                        <div key={idx} className={`border-2 ${borderColor} rounded-lg overflow-hidden ${isSelected ? 'bg-yellow-50' : ''} ${isExcluded ? 'opacity-50' : ''}`}>
+                                                        <div key={idx} 
+                                                            className={`border-2 ${borderColor} rounded-lg overflow-hidden ${isSelected ? 'bg-yellow-50' : ''} ${isExcluded ? 'opacity-50' : ''} ${viewMode === 'reading' ? 'cursor-grab' : ''} ${draggedCardIdx === displayIdx ? 'opacity-50' : ''} ${dragOverCardIdx === displayIdx ? 'border-ochre border-dashed' : ''}`}
+                                                            draggable={viewMode === 'reading'}
+                                                            onDragStart={viewMode === 'reading' ? (e) => handleDragStart(e, displayIdx) : undefined}
+                                                            onDragOver={viewMode === 'reading' ? (e) => handleDragOver(e, displayIdx) : undefined}
+                                                            onDragLeave={viewMode === 'reading' ? handleDragLeave : undefined}
+                                                            onDrop={viewMode === 'reading' ? (e) => handleDrop(e, displayIdx) : undefined}
+                                                            onDragEnd={viewMode === 'reading' ? handleDragEnd : undefined}
+                                                        >
+                                                            {/* Drag handle indicator for reading mode */}
+                                                            {viewMode === 'reading' && (
+                                                                <div className="bg-ochre/20 px-2 py-1 text-center text-ochre text-xs border-b border-ochre/30 cursor-grab hover:bg-ochre/30 font-medium">
+                                                                    ⋮⋮⋮ drag to reorder ⋮⋮⋮
+                                                                </div>
+                                                            )}
                                                             {/* Main card header */}
                                                             <div className="p-2 cursor-pointer hover:bg-gray-50"
                                                                 onClick={() => setSelectedRegions(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n; })}>
@@ -2020,7 +2084,8 @@
                                 </div>
                                 
                                 {/* Script Toggle */}
-                                <div className="mb-3 flex gap-2">
+                                <div className="mb-3 flex flex-wrap gap-2 items-center">
+                                    <span className="text-xs text-gray-500 mr-1">Script:</span>
                                     <button
                                         onClick={() => setTranscriptionScript('english')}
                                         className={`px-3 py-1 rounded text-sm font-medium ${
@@ -2029,7 +2094,7 @@
                                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                         }`}
                                     >
-                                        Transliteration (abc)
+                                        Transliteration
                                     </button>
                                     <button
                                         onClick={() => setTranscriptionScript('arabic')}
@@ -2039,36 +2104,137 @@
                                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                         }`}
                                     >
-                                        Arabic (ع ب ت)
+                                        Arabic
+                                    </button>
+                                    
+                                    <span className="text-gray-300 mx-2">|</span>
+                                    
+                                    <span className="text-xs text-gray-500 mr-1">Layout:</span>
+                                    <button
+                                        onClick={() => setTranscriptionFormat('horizontal-ltr')}
+                                        className={`px-2 py-1 rounded text-sm ${
+                                            transcriptionFormat === 'horizontal-ltr' 
+                                                ? 'bg-stone text-white' 
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                        title="Horizontal Left-to-Right"
+                                    >
+                                        → LTR
+                                    </button>
+                                    <button
+                                        onClick={() => setTranscriptionFormat('horizontal-rtl')}
+                                        className={`px-2 py-1 rounded text-sm ${
+                                            transcriptionFormat === 'horizontal-rtl' 
+                                                ? 'bg-stone text-white' 
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                        title="Horizontal Right-to-Left"
+                                    >
+                                        ← RTL
+                                    </button>
+                                    <button
+                                        onClick={() => setTranscriptionFormat('vertical-rtl')}
+                                        className={`px-2 py-1 rounded text-sm ${
+                                            transcriptionFormat === 'vertical-rtl' 
+                                                ? 'bg-stone text-white' 
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                        title="Vertical columns, Right-to-Left"
+                                    >
+                                        ↓ R→L
+                                    </button>
+                                    <button
+                                        onClick={() => setTranscriptionFormat('vertical-ltr')}
+                                        className={`px-2 py-1 rounded text-sm ${
+                                            transcriptionFormat === 'vertical-ltr' 
+                                                ? 'bg-stone text-white' 
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                        title="Vertical columns, Left-to-Right"
+                                    >
+                                        ↓ L→R
                                     </button>
                                 </div>
                                 
                                 {/* Transcription Content */}
-                                <div className="p-4 bg-white rounded border-2 border-stone shadow-inner">
-                                    <div 
-                                        className="font-mono text-lg leading-relaxed"
-                                        style={{
-                                            fontFamily: transcriptionScript === 'arabic'
-                                                ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
-                                                : '"Courier New", monospace',
-                                            direction: transcriptionScript === 'arabic' ? 'rtl' : 'ltr'
-                                        }}
-                                    >
-                                        {getReadingOrderedResults().map((result, index) => (
-                                            <span key={index}>
-                                                <span className="text-gray-900">
-                                                    {transcriptionScript === 'arabic'
-                                                        ? (result.glyph.arabic || result.glyph.name)
-                                                        : (result.glyph.transliteration || result.glyph.name)
+                                <div className="p-4 bg-white rounded border-2 border-stone shadow-inner overflow-x-auto">
+                                    {transcriptionFormat.startsWith('vertical') ? (
+                                        /* Vertical layout - columns */
+                                        <div 
+                                            className="flex gap-4"
+                                            style={{
+                                                flexDirection: transcriptionFormat === 'vertical-rtl' ? 'row-reverse' : 'row',
+                                                justifyContent: transcriptionFormat === 'vertical-rtl' ? 'flex-end' : 'flex-start'
+                                            }}
+                                        >
+                                            {(() => {
+                                                // Split into columns based on line breaks
+                                                const columns = [];
+                                                let currentColumn = [];
+                                                getReadingOrderedResults().forEach((result, index) => {
+                                                    currentColumn.push({ result, index });
+                                                    if (lineBreaks.has(readingOrder[index] ?? index)) {
+                                                        columns.push(currentColumn);
+                                                        currentColumn = [];
                                                     }
+                                                });
+                                                if (currentColumn.length > 0) columns.push(currentColumn);
+                                                
+                                                return columns.map((column, colIdx) => (
+                                                    <div 
+                                                        key={colIdx}
+                                                        className="flex flex-col items-center"
+                                                        style={{
+                                                            fontFamily: transcriptionScript === 'arabic'
+                                                                ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
+                                                                : '"Courier New", monospace',
+                                                            fontSize: '18px',
+                                                            lineHeight: '1.8'
+                                                        }}
+                                                    >
+                                                        {column.map(({ result, index }) => (
+                                                            <span key={index} className="text-gray-900">
+                                                                {transcriptionScript === 'arabic'
+                                                                    ? (result.glyph.arabic || result.glyph.name)
+                                                                    : (result.glyph.transliteration || result.glyph.name)
+                                                                }
+                                                                {wordBoundaries.has(readingOrder[index] ?? index) && (
+                                                                    <span className="text-stone-dark font-bold"> —</span>
+                                                                )}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ));
+                                            })()}
+                                        </div>
+                                    ) : (
+                                        /* Horizontal layout */
+                                        <div 
+                                            className="font-mono text-lg leading-relaxed"
+                                            style={{
+                                                fontFamily: transcriptionScript === 'arabic'
+                                                    ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
+                                                    : '"Courier New", monospace',
+                                                direction: transcriptionFormat === 'horizontal-rtl' ? 'rtl' : 'ltr',
+                                                textAlign: transcriptionFormat === 'horizontal-rtl' ? 'right' : 'left'
+                                            }}
+                                        >
+                                            {getReadingOrderedResults().map((result, index) => (
+                                                <span key={index}>
+                                                    <span className="text-gray-900">
+                                                        {transcriptionScript === 'arabic'
+                                                            ? (result.glyph.arabic || result.glyph.name)
+                                                            : (result.glyph.transliteration || result.glyph.name)
+                                                        }
+                                                    </span>
+                                                    {lineBreaks.has(readingOrder[index] ?? index) && <span className="text-ancient-purple font-bold mx-2">⏎<br/></span>}
+                                                    {!lineBreaks.has(readingOrder[index] ?? index) && columnBreaks.has(readingOrder[index] ?? index) && <span className="text-stone-dark font-bold mx-1">‖</span>}
+                                                    {!lineBreaks.has(readingOrder[index] ?? index) && !columnBreaks.has(readingOrder[index] ?? index) && wordBoundaries.has(readingOrder[index] ?? index) && <span className="text-stone-dark font-bold mx-1">|</span>}
+                                                    {!lineBreaks.has(readingOrder[index] ?? index) && !columnBreaks.has(readingOrder[index] ?? index) && !wordBoundaries.has(readingOrder[index] ?? index) && index < getReadingOrderedResults().length - 1 && <span className="text-gray-400">·</span>}
                                                 </span>
-                                                {lineBreaks.has(readingOrder[index] ?? index) && <span className="text-ancient-purple font-bold mx-2">⏎<br/></span>}
-                                                {!lineBreaks.has(readingOrder[index] ?? index) && columnBreaks.has(readingOrder[index] ?? index) && <span className="text-stone-dark font-bold mx-1">‖</span>}
-                                                {!lineBreaks.has(readingOrder[index] ?? index) && !columnBreaks.has(readingOrder[index] ?? index) && wordBoundaries.has(readingOrder[index] ?? index) && <span className="text-stone-dark font-bold mx-1">|</span>}
-                                                {!lineBreaks.has(readingOrder[index] ?? index) && !columnBreaks.has(readingOrder[index] ?? index) && !wordBoundaries.has(readingOrder[index] ?? index) && index < getReadingOrderedResults().length - 1 && <span className="text-gray-400">·</span>}
-                                            </span>
-                                        ))}
-                                    </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="mt-3 text-xs text-gray-600">
