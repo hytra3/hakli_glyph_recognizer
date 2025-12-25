@@ -1900,8 +1900,9 @@
                                                 
                                                 const containerRect = container.getBoundingClientRect();
                                                 const imgRect = img.getBoundingClientRect();
-                                                const offsetX = (containerRect.width - imgRect.width) / 2;
-                                                const offsetY = (containerRect.height - imgRect.height) / 2;
+                                                // Use actual image position relative to container
+                                                const offsetX = imgRect.left - containerRect.left;
+                                                const offsetY = imgRect.top - containerRect.top;
                                                 
                                                 const left = offsetX + Math.min(drawingBox.startX, drawingBox.currentX);
                                                 const top = offsetY + Math.min(drawingBox.startY, drawingBox.currentY);
@@ -1958,8 +1959,9 @@
                                                 
                                                 const scaleX = imgRect.width / sourceWidth;
                                                 const scaleY = imgRect.height / sourceHeight;
-                                                const offsetX = containerRect && imgRect ? (containerRect.width - imgRect.width) / 2 : 0;
-                                                const offsetY = containerRect && imgRect ? (containerRect.height - imgRect.height) / 2 : 0;
+                                                // Use actual image position relative to container (not assumed centering)
+                                                const offsetX = imgRect.left - containerRect.left;
+                                                const offsetY = imgRect.top - containerRect.top;
                                                 
                                                 // Skip rendering if dimensions aren't ready
                                                 if (!imgRect.width || !imgRect.height) return null;
@@ -2034,28 +2036,6 @@
                                             {manualBoxMode && (
                                                 <div className="p-2 bg-ochre/10 rounded text-xs text-ochre">
                                                     🖱️ Click and drag on image to draw a box
-                                                </div>
-                                            )}
-                                            
-                                            {recognitionResults.length > 0 && (
-                                                <button 
-                                                    onClick={() => {
-                                                        setTemplateTrainingMode(!templateTrainingMode);
-                                                        setSelectedForTemplate(null);
-                                                    }}
-                                                    className={`w-full px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                                                        templateTrainingMode 
-                                                            ? 'bg-ancient-purple text-white' 
-                                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    {templateTrainingMode ? '🎓 Exit Training Mode' : '🎓 Template Training'}
-                                                </button>
-                                            )}
-                                            
-                                            {templateTrainingMode && (
-                                                <div className="p-2 bg-ancient-purple/10 rounded text-xs text-ancient-purple">
-                                                    Save detections as Primary, Variant, or Example
                                                 </div>
                                             )}
                                         </div>
@@ -2300,56 +2280,6 @@
                                                                     </div>
                                                                 </div>
                                                             )}
-                                                            
-                                                            {/* Template Training Mode - Save as template options */}
-                                                            {templateTrainingMode && (() => {
-                                                                // Get current chart status for this glyph
-                                                                const chartGlyph = chartData?.glyphs?.find(g => g.id === result.glyph.id);
-                                                                const hasPrimary = !!(chartGlyph?.images?.primary);
-                                                                const variantCount = chartGlyph?.images?.variants?.length || 0;
-                                                                const exampleCount = chartGlyph?.images?.examples?.length || 0;
-                                                                
-                                                                return (
-                                                                    <div className="px-2 pb-2 border-t-2 border-ancient-purple bg-ancient-purple/5">
-                                                                        {/* Current chart status */}
-                                                                        <div className="text-xs text-gray-600 pt-2 mb-1 flex gap-3">
-                                                                            <span className={hasPrimary ? 'text-patina font-semibold' : 'text-gray-400'}>
-                                                                                🎯 {hasPrimary ? '✓' : '—'}
-                                                                            </span>
-                                                                            <span className={variantCount > 0 ? 'text-patina font-semibold' : 'text-gray-400'}>
-                                                                                ⭐ {variantCount}
-                                                                            </span>
-                                                                            <span className={exampleCount > 0 ? 'text-patina font-semibold' : 'text-gray-400'}>
-                                                                                📚 {exampleCount}
-                                                                            </span>
-                                                                        </div>
-                                                                        <div className="text-xs font-semibold text-ancient-purple mb-2">
-                                                                            Save "{result.glyph.name}" as:
-                                                                        </div>
-                                                                        <div className="flex gap-1 flex-wrap">
-                                                                            <button
-                                                                                onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'primary'); }}
-                                                                                className={`px-2 py-1 text-white text-xs rounded ${hasPrimary ? 'bg-stone/70 hover:bg-stone' : 'bg-stone hover:bg-stone-dark ring-2 ring-ochre'}`}
-                                                                                title={hasPrimary ? 'Replace existing primary' : 'No primary yet - recommended!'}
-                                                                            >
-                                                                                🎯 Primary {!hasPrimary && '⚠️'}
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'variant'); }}
-                                                                                className="px-2 py-1 bg-patina text-white text-xs rounded hover:bg-[#5d7a6d]"
-                                                                            >
-                                                                                ⭐ Variant
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={(e) => { e.stopPropagation(); saveAsTemplate(idx, 'example'); }}
-                                                                                className="px-2 py-1 bg-ochre text-white text-xs rounded hover:bg-[#a18259]"
-                                                                            >
-                                                                                📚 Example
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })()}
                                                         </div>
                                                     );
                                                 })}
@@ -2897,7 +2827,98 @@
                                     >
                                         📥 Export Chart
                                     </button>
+                                    {recognitionResults.length > 0 && (
+                                        <button
+                                            onClick={() => setTemplateTrainingMode(!templateTrainingMode)}
+                                            className={`px-4 py-2 rounded-lg font-medium ${
+                                                templateTrainingMode 
+                                                    ? 'bg-ochre text-white' 
+                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            🎓 {templateTrainingMode ? 'Hide' : 'Show'} Training ({recognitionResults.length})
+                                        </button>
+                                    )}
                                 </div>
+                                
+                                {/* Training Mode Panel - Shows current detections for saving */}
+                                {templateTrainingMode && recognitionResults.length > 0 && (
+                                    <div className="border-b bg-ancient-purple/5 p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">🎓 Save Detections to Chart</h4>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-64 overflow-y-auto">
+                                            {recognitionResults.map((result, idx) => {
+                                                const chartGlyph = chartData?.glyphs?.find(g => g.id === result.glyph.id);
+                                                const hasPrimary = !!(chartGlyph?.images?.primary);
+                                                const variantCount = chartGlyph?.images?.variants?.length || 0;
+                                                const exampleCount = chartGlyph?.images?.examples?.length || 0;
+                                                
+                                                return (
+                                                    <div key={idx} className="bg-white border rounded-lg p-2 shadow-sm">
+                                                        {/* Detection thumbnail and chart thumbnail side by side */}
+                                                        <div className="flex gap-2 mb-2">
+                                                            {/* Detection thumbnail */}
+                                                            <div className="flex-1">
+                                                                <div className="text-[10px] text-gray-500 mb-1">Detection</div>
+                                                                <div className="aspect-square bg-gray-100 rounded overflow-hidden">
+                                                                    {result.thumbnail ? (
+                                                                        <img src={result.thumbnail} alt="" className="w-full h-full object-contain" />
+                                                                    ) : (
+                                                                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">?</div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            {/* Chart thumbnail */}
+                                                            <div className="flex-1">
+                                                                <div className="text-[10px] text-gray-500 mb-1">In Chart</div>
+                                                                <div className="aspect-square bg-gray-100 rounded overflow-hidden">
+                                                                    {glyphThumbnails[result.glyph.id] ? (
+                                                                        <img src={glyphThumbnails[result.glyph.id]} alt="" className="w-full h-full object-contain" />
+                                                                    ) : (
+                                                                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">—</div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* Glyph name and stats */}
+                                                        <div className="text-center mb-2">
+                                                            <div className="font-medium text-sm">{result.glyph.name}</div>
+                                                            <div className="text-xs text-gray-500">
+                                                                {result.glyph.arabic} · {Math.round(result.confidence * 100)}%
+                                                            </div>
+                                                            <div className="text-[10px] text-gray-400 mt-1">
+                                                                🎯{hasPrimary ? '✓' : '—'} ⭐{variantCount} 📚{exampleCount}
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* Save buttons */}
+                                                        <div className="flex gap-1 flex-wrap justify-center">
+                                                            <button
+                                                                onClick={() => saveAsTemplate(idx, 'primary')}
+                                                                className={`px-1.5 py-0.5 text-white text-[10px] rounded ${hasPrimary ? 'bg-stone/70 hover:bg-stone' : 'bg-stone hover:bg-stone-dark ring-1 ring-ochre'}`}
+                                                                title={hasPrimary ? 'Replace primary' : 'No primary yet!'}
+                                                            >
+                                                                🎯 {!hasPrimary && '⚠️'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => saveAsTemplate(idx, 'variant')}
+                                                                className="px-1.5 py-0.5 bg-patina text-white text-[10px] rounded hover:bg-[#5d7a6d]"
+                                                            >
+                                                                ⭐
+                                                            </button>
+                                                            <button
+                                                                onClick={() => saveAsTemplate(idx, 'example')}
+                                                                className="px-1.5 py-0.5 bg-ochre text-white text-[10px] rounded hover:bg-[#a18259]"
+                                                            >
+                                                                📚
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                                 
                                 {/* Glyph Grid */}
                                 <div className="flex-1 overflow-y-auto p-4">
