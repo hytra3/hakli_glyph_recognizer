@@ -60,18 +60,18 @@
         .detection-box.uncertain { border-style: dashed; }
         .detection-label {
             position: absolute;
-            top: -28px;
-            left: -2px;
-            padding: 4px 10px;
-            font-size: 16px;
+            top: 2px;
+            left: 2px;
+            padding: 2px 6px;
+            font-size: 12px;
             font-weight: 600;
             color: white;
-            border-radius: 4px;
+            border-radius: 3px;
             white-space: nowrap;
             text-shadow: 0 1px 2px rgba(0,0,0,0.5);
             letter-spacing: 0.5px;
-            min-width: 24px;
-            min-height: 20px;
+            min-width: 18px;
+            min-height: 16px;
             text-align: center;
             line-height: 1.2;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -182,6 +182,11 @@
             const [inscriptionTitle, setInscriptionTitle] = useState('');
             const [inscriptionComplete, setInscriptionComplete] = useState(false);
             const [transcriptionScript, setTranscriptionScript] = useState('english');
+            
+            // Transcription display state
+            const [showTranscription, setShowTranscription] = useState(true);
+            const [showEnhancedTranscription, setShowEnhancedTranscription] = useState(false);
+            const [transcriptionFormat, setTranscriptionFormat] = useState('english-ltr');
             
             // Storage state
             const [showStorageSection, setShowStorageSection] = useState(false);
@@ -964,6 +969,85 @@
                 }
             }, [regionEditorIdx, initRegionEditorCanvas]);
             
+            // ========== TRANSCRIPTION HELPERS ==========
+            const getReadingOrderedResults = useCallback(() => {
+                if (viewMode !== 'reading' || readingOrder.length === 0) {
+                    return recognitionResults;
+                }
+                return readingOrder
+                    .filter(idx => !excludedDetections.has(idx))
+                    .map(idx => recognitionResults[idx])
+                    .filter(Boolean);
+            }, [viewMode, readingOrder, recognitionResults, excludedDetections]);
+            
+            const copyTranscriptionToClipboard = useCallback(() => {
+                const results = getReadingOrderedResults();
+                const text = results.map((r, idx) => {
+                    let char = showArabicLabels 
+                        ? (r.glyph.arabic || r.glyph.name)
+                        : (r.glyph.transliteration || r.glyph.name);
+                    if (wordBoundaries.has(idx)) char += ' ';
+                    if (lineBreaks.has(idx)) char += '\n';
+                    return char;
+                }).join('');
+                
+                navigator.clipboard.writeText(text).then(() => {
+                    alert('✅ Transcription copied to clipboard!');
+                }).catch(err => {
+                    console.error('Copy failed:', err);
+                    alert('❌ Failed to copy');
+                });
+            }, [getReadingOrderedResults, showArabicLabels, wordBoundaries, lineBreaks]);
+            
+            const exportTranscription = useCallback(() => {
+                const results = getReadingOrderedResults();
+                let translitText = '';
+                let arabicText = '';
+                
+                results.forEach((r, idx) => {
+                    translitText += r.glyph.transliteration || r.glyph.name;
+                    arabicText += r.glyph.arabic || r.glyph.name;
+                    if (wordBoundaries.has(idx)) {
+                        translitText += ' ';
+                        arabicText += ' ';
+                    }
+                    if (lineBreaks.has(idx)) {
+                        translitText += '\n';
+                        arabicText += '\n';
+                    }
+                });
+                
+                const content = [
+                    '='.repeat(60),
+                    'HAKLI INSCRIPTION TRANSCRIPTION',
+                    `Title: ${inscriptionTitle || 'Untitled'}`,
+                    `Date: ${new Date().toLocaleString()}`,
+                    '='.repeat(60),
+                    '',
+                    'TRANSLITERATION:',
+                    translitText,
+                    '',
+                    'ARABIC:',
+                    arabicText,
+                    '',
+                    translationEnglish ? `ENGLISH TRANSLATION:\n${translationEnglish}\n` : '',
+                    translationArabic ? `ARABIC TRANSLATION:\n${translationArabic}\n` : '',
+                    '='.repeat(60),
+                    `Total glyphs: ${results.length}`,
+                    `Words: ${Array.from(wordBoundaries).length + 1}`,
+                    `Lines: ${Array.from(lineBreaks).length + 1}`,
+                    '='.repeat(60)
+                ].join('\n');
+                
+                const blob = new Blob([content], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${inscriptionTitle || 'transcription'}_${new Date().toISOString().slice(0,10)}.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }, [getReadingOrderedResults, wordBoundaries, lineBreaks, inscriptionTitle, translationEnglish, translationArabic]);
+            
             // ========== RECOGNITION ==========
             const recognizeGlyphs = useCallback(async () => {
                 if (!displayImage || !chartData || Object.keys(loadedGlyphImages).length === 0) {
@@ -1372,10 +1456,10 @@
                     </header>
                     
                     {/* Main Content */}
-                    <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4">
-                        <div className="grid grid-cols-12 gap-4">
-                            {/* Left Sidebar */}
-                            <aside className="col-span-3 space-y-3">
+                    <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4 overflow-hidden">
+                        <div className="grid grid-cols-12 gap-4 h-[calc(100vh-140px)]">
+                            {/* Left Sidebar - Independent Scroll */}
+                            <aside className="col-span-3 overflow-y-auto space-y-3 pr-1">
                                 {/* Image Upload */}
                                 <div className="bg-white rounded-lg shadow p-3">
                                     <h3 className="font-bold text-gray-700 mb-2 text-sm">📷 Image</h3>
@@ -1511,9 +1595,9 @@
                                 )}
                             </aside>
                             
-                            {/* Center - Image */}
-                            <div className="col-span-6">
-                                <div className="bg-white rounded-lg shadow p-3 h-full flex flex-col">
+                            {/* Center - Image (Independent Scroll) */}
+                            <div className="col-span-6 overflow-hidden flex flex-col">
+                                <div className="bg-white rounded-lg shadow p-3 flex-1 flex flex-col min-h-0">
                                     {/* Eraser mode indicator */}
                                     {eraserMode && (
                                         <div className="mb-2 px-2 py-1 bg-ochre/20 border border-ochre rounded text-xs text-center">
@@ -1639,8 +1723,8 @@
                                 </div>
                             </div>
                             
-                            {/* Right Sidebar */}
-                            <aside className="col-span-3 flex flex-col gap-3">
+                            {/* Right Sidebar - Independent Scroll */}
+                            <aside className="col-span-3 flex flex-col gap-3 overflow-y-auto pl-1">
                                 {/* Recognition Button */}
                                 <div className="bg-white rounded-lg shadow p-3">
                                     <button onClick={recognizeGlyphs} disabled={isProcessing || chartStatus !== 'loaded' || !displayImage}
@@ -1737,24 +1821,32 @@
                                                                 <div className="flex gap-2">
                                                                     {/* Thumbnails: Detected vs Chart */}
                                                                     <div className="flex gap-1 flex-shrink-0">
-                                                                        {/* Detected region thumbnail */}
+                                                                        {/* Detected region thumbnail - click to edit */}
                                                                         {result.thumbnail && (
-                                                                            <div className="relative">
-                                                                                <div className={`w-10 h-10 bg-gray-100 rounded overflow-hidden border ${result.thumbnailEdited ? 'border-patina border-2' : 'border-gray-300'}`}>
+                                                                            <div 
+                                                                                className="relative cursor-pointer group"
+                                                                                onClick={(e) => { e.stopPropagation(); openRegionEditor(idx); }}
+                                                                                title="Click to edit region"
+                                                                            >
+                                                                                <div className={`w-10 h-10 bg-gray-100 rounded overflow-hidden border-2 transition-colors ${result.thumbnailEdited ? 'border-patina' : 'border-gray-300'} group-hover:border-blue-400`}>
                                                                                     <img src={result.thumbnail} alt="Detected" className="w-full h-full object-contain" />
                                                                                 </div>
-                                                                                <span className="absolute -bottom-1 left-0 right-0 text-center text-[8px] text-gray-400">
-                                                                                    {result.thumbnailEdited ? '✓det' : 'det'}
+                                                                                <span className="absolute -bottom-1 left-0 right-0 text-center text-[8px] text-gray-400 group-hover:text-blue-500">
+                                                                                    {result.thumbnailEdited ? '✓det' : '✏️det'}
                                                                                 </span>
                                                                             </div>
                                                                         )}
-                                                                        {/* Chart glyph thumbnail */}
+                                                                        {/* Chart glyph thumbnail - click to change glyph */}
                                                                         {glyphThumbnails[result.glyph.id] && (
-                                                                            <div className="relative">
-                                                                                <div className="w-10 h-10 bg-white rounded overflow-hidden border border-ancient-purple">
+                                                                            <div 
+                                                                                className="relative cursor-pointer group"
+                                                                                onClick={(e) => { e.stopPropagation(); openChartSelector(idx); }}
+                                                                                title="Click to change glyph"
+                                                                            >
+                                                                                <div className="w-10 h-10 bg-white rounded overflow-hidden border-2 border-ancient-purple transition-colors group-hover:border-ochre">
                                                                                     <img src={glyphThumbnails[result.glyph.id]} alt="Chart" className="w-full h-full object-contain" />
                                                                                 </div>
-                                                                                <span className="absolute -bottom-1 left-0 right-0 text-center text-[8px] text-ancient-purple">chart</span>
+                                                                                <span className="absolute -bottom-1 left-0 right-0 text-center text-[8px] text-ancient-purple group-hover:text-ochre">📋chart</span>
                                                                             </div>
                                                                         )}
                                                                     </div>
@@ -1764,6 +1856,10 @@
                                                                             <span className={`text-xs font-medium ${conf >= 70 ? 'text-patina' : conf >= 50 ? 'text-ochre' : 'text-rust'}`}>{conf}%</span>
                                                                             {isExcluded && <span className="text-xs text-gray-400">(excluded)</span>}
                                                                             {result.isMerged && <span className="text-xs text-blue-500">🔗</span>}
+                                                                            {/* Boundary indicators */}
+                                                                            {wordBoundaries.has(idx) && <span className="text-xs font-bold text-stone px-1 bg-stone/20 rounded">|</span>}
+                                                                            {columnBreaks.has(idx) && <span className="text-xs font-bold text-stone-dark px-1 bg-stone/20 rounded">‖</span>}
+                                                                            {lineBreaks.has(idx) && <span className="text-xs font-bold text-ancient-purple px-1 bg-ancient-purple/20 rounded">⏎</span>}
                                                                         </div>
                                                                         <div className="font-medium text-gray-900 text-sm truncate">{result.glyph.name}</div>
                                                                         <div className="text-lg text-ancient-purple leading-tight">{result.glyph.arabic || result.glyph.transliteration}</div>
@@ -1793,11 +1889,6 @@
                                                                     title="Show alternative matches">
                                                                     {isExpanded ? '▼' : '▶'} Alts {result.topMatches?.length > 1 ? `(${result.topMatches.length - 1})` : ''}
                                                                 </button>
-                                                                <button onClick={(e) => { e.stopPropagation(); openChartSelector(idx); }}
-                                                                    className="px-2 py-0.5 rounded text-xs bg-ochre/20 text-ochre hover:bg-ochre/30"
-                                                                    title="Select glyph from full chart">
-                                                                    📋 Chart
-                                                                </button>
                                                                 <button onClick={(e) => { e.stopPropagation(); toggleExcludeDetection(idx); }}
                                                                     className={`px-2 py-0.5 rounded text-xs ${isExcluded ? 'bg-gray-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                                                                     title={isExcluded ? 'Include in reading' : 'Exclude from reading'}>
@@ -1813,10 +1904,58 @@
                                                                     title="Expand detection box">
                                                                     ⊞ Expand
                                                                 </button>
-                                                                <button onClick={(e) => { e.stopPropagation(); openRegionEditor(idx); }}
-                                                                    className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-600 hover:bg-blue-200"
-                                                                    title="Edit region - erase stray marks">
-                                                                    ✏️ Edit
+                                                            </div>
+                                                            
+                                                            {/* Boundary controls row */}
+                                                            <div className="px-2 pb-2 flex items-center gap-1 border-t border-gray-100 pt-2">
+                                                                <span className="text-xs text-gray-500 mr-1">After:</span>
+                                                                <button onClick={(e) => { 
+                                                                    e.stopPropagation(); 
+                                                                    setWordBoundaries(prev => {
+                                                                        const next = new Set(prev);
+                                                                        next.has(idx) ? next.delete(idx) : next.add(idx);
+                                                                        return next;
+                                                                    });
+                                                                }}
+                                                                    className={`px-2 py-1 rounded text-xs font-bold ${
+                                                                        wordBoundaries.has(idx) 
+                                                                            ? 'bg-stone text-white' 
+                                                                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                                                    }`}
+                                                                    title="Toggle word boundary after this glyph">
+                                                                    | Word
+                                                                </button>
+                                                                <button onClick={(e) => { 
+                                                                    e.stopPropagation(); 
+                                                                    setColumnBreaks(prev => {
+                                                                        const next = new Set(prev);
+                                                                        next.has(idx) ? next.delete(idx) : next.add(idx);
+                                                                        return next;
+                                                                    });
+                                                                }}
+                                                                    className={`px-2 py-1 rounded text-xs font-bold ${
+                                                                        columnBreaks.has(idx) 
+                                                                            ? 'bg-stone-dark text-white' 
+                                                                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                                                    }`}
+                                                                    title="Toggle column break after this glyph">
+                                                                    ‖ Column
+                                                                </button>
+                                                                <button onClick={(e) => { 
+                                                                    e.stopPropagation(); 
+                                                                    setLineBreaks(prev => {
+                                                                        const next = new Set(prev);
+                                                                        next.has(idx) ? next.delete(idx) : next.add(idx);
+                                                                        return next;
+                                                                    });
+                                                                }}
+                                                                    className={`px-2 py-1 rounded text-xs font-bold ${
+                                                                        lineBreaks.has(idx) 
+                                                                            ? 'bg-ancient-purple text-white' 
+                                                                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                                                    }`}
+                                                                    title="Toggle line break after this glyph">
+                                                                    ⏎ Line
                                                                 </button>
                                                             </div>
                                                             
@@ -1849,6 +1988,107 @@
                                 </div>
                             </aside>
                         </div>
+                        
+                        {/* ===== TRANSCRIPTION DISPLAY ===== */}
+                        {viewMode === 'reading' && recognitionResults.length > 0 && showTranscription && (
+                            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-stone">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="font-semibold text-gray-900">📜 Transcription</h3>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={copyTranscriptionToClipboard}
+                                            className="px-3 py-1 bg-stone text-white text-sm rounded hover:bg-[#6d6355] flex items-center gap-1"
+                                            title="Copy transcription to clipboard"
+                                        >
+                                            📋 Copy
+                                        </button>
+                                        <button 
+                                            onClick={exportTranscription}
+                                            className="px-3 py-1 bg-patina text-white text-sm rounded hover:bg-[#5d7a6d] flex items-center gap-1"
+                                            title="Download transcription as text file"
+                                        >
+                                            💾 Export TXT
+                                        </button>
+                                        <button 
+                                            onClick={() => setShowTranscription(false)}
+                                            className="px-3 py-1 bg-rust text-white text-sm rounded hover:bg-[#8d5d47] font-bold"
+                                            title="Close transcription box"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                {/* Script Toggle */}
+                                <div className="mb-3 flex gap-2">
+                                    <button
+                                        onClick={() => setTranscriptionScript('english')}
+                                        className={`px-3 py-1 rounded text-sm font-medium ${
+                                            transcriptionScript === 'english' 
+                                                ? 'bg-ancient-purple text-white' 
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        Transliteration (abc)
+                                    </button>
+                                    <button
+                                        onClick={() => setTranscriptionScript('arabic')}
+                                        className={`px-3 py-1 rounded text-sm font-medium ${
+                                            transcriptionScript === 'arabic' 
+                                                ? 'bg-ancient-purple text-white' 
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        Arabic (ع ب ت)
+                                    </button>
+                                </div>
+                                
+                                {/* Transcription Content */}
+                                <div className="p-4 bg-white rounded border-2 border-stone shadow-inner">
+                                    <div 
+                                        className="font-mono text-lg leading-relaxed"
+                                        style={{
+                                            fontFamily: transcriptionScript === 'arabic'
+                                                ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
+                                                : '"Courier New", monospace',
+                                            direction: transcriptionScript === 'arabic' ? 'rtl' : 'ltr'
+                                        }}
+                                    >
+                                        {getReadingOrderedResults().map((result, index) => (
+                                            <span key={index}>
+                                                <span className="text-gray-900">
+                                                    {transcriptionScript === 'arabic'
+                                                        ? (result.glyph.arabic || result.glyph.name)
+                                                        : (result.glyph.transliteration || result.glyph.name)
+                                                    }
+                                                </span>
+                                                {lineBreaks.has(readingOrder[index] ?? index) && <span className="text-ancient-purple font-bold mx-2">⏎<br/></span>}
+                                                {!lineBreaks.has(readingOrder[index] ?? index) && columnBreaks.has(readingOrder[index] ?? index) && <span className="text-stone-dark font-bold mx-1">‖</span>}
+                                                {!lineBreaks.has(readingOrder[index] ?? index) && !columnBreaks.has(readingOrder[index] ?? index) && wordBoundaries.has(readingOrder[index] ?? index) && <span className="text-stone-dark font-bold mx-1">|</span>}
+                                                {!lineBreaks.has(readingOrder[index] ?? index) && !columnBreaks.has(readingOrder[index] ?? index) && !wordBoundaries.has(readingOrder[index] ?? index) && index < getReadingOrderedResults().length - 1 && <span className="text-gray-400">·</span>}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 text-xs text-gray-600">
+                                    <span className="text-ancient-purple font-bold">⏎</span> = line break · 
+                                    <span className="text-stone-dark font-bold">‖</span> = column break · 
+                                    <span className="text-stone-dark font-bold">|</span> = word boundary · 
+                                    <span className="text-gray-400">·</span> = glyph separator
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* Show Transcription button when hidden */}
+                        {viewMode === 'reading' && recognitionResults.length > 0 && !showTranscription && (
+                            <button 
+                                onClick={() => setShowTranscription(true)}
+                                className="mt-6 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                            >
+                                📜 Show Transcription
+                            </button>
+                        )}
                         
                         {/* ===== INSCRIPTION PANEL (Translation & Notes) ===== */}
                         {viewMode === 'reading' && recognitionResults.length > 0 && (
