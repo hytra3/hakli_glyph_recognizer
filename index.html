@@ -11,8 +11,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     
     <!-- Favicons -->
-    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="favicon.png">
+    <link rel="icon" type="image/png" href="favicon.png">
     <link rel="apple-touch-icon" href="hh-logo.png">
     
     <!-- React & Babel -->
@@ -172,6 +172,8 @@
             const [lastSelectedIdx, setLastSelectedIdx] = useState(null); // For Shift+click range selection
             const [showArabicLabels, setShowArabicLabels] = useState(false);
             const [isPreprocessingCollapsed, setIsPreprocessingCollapsed] = useState(false);
+            const [isLeftPanelHidden, setIsLeftPanelHidden] = useState(false); // Hide entire left panel
+            const [isRightPanelHidden, setIsRightPanelHidden] = useState(false); // Hide entire right panel
             const [isToolsCollapsed, setIsToolsCollapsed] = useState(true);
             
             // Mobile responsive state
@@ -745,6 +747,10 @@
                     // Also update originalImage so Reset goes back to erased version
                     setOriginalImage(dataUrl);
                     
+                    // Reset rotation to 0 since it's now baked into the new original image
+                    // This prevents double-rotation on next preprocessing
+                    setPreprocessing(prev => ({ ...prev, rotation: 0 }));
+                    
                     // Track dimensions
                     setRecognitionSourceDims({
                         width: newMat.cols,
@@ -752,7 +758,7 @@
                     });
                     
                     setEraserMode(false);
-                    console.log('✅ Eraser applied (original updated)');
+                    console.log('✅ Eraser applied (original updated, rotation reset to 0)');
                 } catch (error) {
                     console.error('Eraser apply error:', error);
                 }
@@ -1329,6 +1335,18 @@
                     if (e.key === '0' && !e.ctrlKey && !e.metaKey) {
                         e.preventDefault();
                         setCanvasZoom(1);
+                    }
+                    
+                    // Toggle left panel: [ key
+                    if (e.key === '[' && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        setIsLeftPanelHidden(h => !h);
+                    }
+                    
+                    // Toggle right panel: ] key
+                    if (e.key === ']' && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        setIsRightPanelHidden(h => !h);
                     }
                 };
                 
@@ -1975,8 +1993,33 @@
                     <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4 overflow-hidden">
                         {/* Desktop: 3-column grid */}
                         <div className="hidden lg:grid grid-cols-12 gap-4 h-[calc(100vh-140px)]">
+                            {/* Left Panel Toggle (shown when panel is hidden) */}
+                            {isLeftPanelHidden && (
+                                <button 
+                                    onClick={() => setIsLeftPanelHidden(false)}
+                                    className="fixed left-2 top-24 z-30 bg-ancient-purple text-white p-2 rounded-r-lg shadow-lg hover:bg-[#4a3d5a]"
+                                    title="Show preprocessing panel"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
+                            )}
+                            
                             {/* Left Sidebar - Independent Scroll */}
-                            <aside className="col-span-3 overflow-y-auto space-y-3 pr-1">
+                            <aside className={`${isLeftPanelHidden ? 'hidden' : 'col-span-3'} overflow-y-auto space-y-3 pr-1`}>
+                                {/* Hide panel button */}
+                                <button 
+                                    onClick={() => setIsLeftPanelHidden(true)}
+                                    className="w-full px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs text-gray-500 flex items-center justify-center gap-1"
+                                    title="Hide preprocessing panel"
+                                >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    Hide Panel
+                                </button>
+                                
                                 {/* Image Upload */}
                                 <div className="bg-white rounded-lg shadow p-3">
                                     <h3 className="font-bold text-gray-700 mb-2 text-sm">📷 Image</h3>
@@ -2106,6 +2149,25 @@
                                                         </div>
                                                     )}
                                                 </div>
+                                                
+                                                {/* Confidence Filter */}
+                                                <div className="pt-3 border-t border-gray-200 mt-3">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-gray-700">🎯 Confidence Filter</span>
+                                                        <span className={`text-xs font-medium ${confidenceThreshold > 0 ? 'text-ancient-purple' : 'text-gray-400'}`}>
+                                                            {confidenceThreshold > 0 ? `≥${confidenceThreshold}%` : 'Show All'}
+                                                        </span>
+                                                    </div>
+                                                    <input 
+                                                        type="range" 
+                                                        min="0" 
+                                                        max="99" 
+                                                        value={confidenceThreshold}
+                                                        onChange={(e) => setConfidenceThreshold(parseInt(e.target.value))}
+                                                        className="w-full h-1.5 accent-ancient-purple"
+                                                    />
+                                                    <p className="text-xs text-gray-400 mt-1">Hide low-confidence detections</p>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -2113,7 +2175,7 @@
                             </aside>
                             
                             {/* Center - Image (Independent Scroll) */}
-                            <div className="col-span-6 overflow-hidden flex flex-col">
+                            <div className={`${isLeftPanelHidden && isRightPanelHidden ? 'col-span-12' : isLeftPanelHidden || isRightPanelHidden ? 'col-span-9' : 'col-span-6'} overflow-hidden flex flex-col`}>
                                 <div className="bg-white rounded-lg shadow p-3 flex-1 flex flex-col min-h-0">
                                     {/* Eraser mode indicator */}
                                     {eraserMode && (
@@ -2124,7 +2186,7 @@
                                     
                                     {displayImage ? (
                                         <div ref={imageContainerRef} 
-                                            className="relative flex-1 flex items-center justify-center overflow-auto"
+                                            className="relative flex-1 overflow-auto"
                                             style={{ cursor: manualBoxMode ? 'crosshair' : 'default' }}
                                             onMouseDown={manualBoxMode ? handleManualBoxStart : undefined}
                                             onMouseMove={manualBoxMode ? handleManualBoxMove : undefined}
@@ -2132,7 +2194,7 @@
                                             onMouseLeave={manualBoxMode ? () => setDrawingBox(null) : undefined}
                                         >
                                             {/* Zoom controls floating */}
-                                            <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-white/90 rounded-lg shadow px-2 py-1">
+                                            <div className="sticky top-2 right-2 z-20 flex items-center gap-1 bg-white/90 rounded-lg shadow px-2 py-1 ml-auto mr-2 w-fit">
                                                 <button onClick={() => setCanvasZoom(z => Math.max(0.5, z - 0.25))} 
                                                     className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-sm font-bold" title="Zoom out">−</button>
                                                 <span className="text-xs w-12 text-center font-medium">{Math.round(canvasZoom * 100)}%</span>
@@ -2144,13 +2206,14 @@
                                                 )}
                                             </div>
                                             
-                                            {/* Zoomable content wrapper */}
-                                            <div className="relative inline-block" style={{ transform: `scale(${canvasZoom})`, transformOrigin: 'center center', transition: 'transform 0.15s ease' }}>
-                                                {/* Regular image display (hidden when eraser active) */}
-                                                <img ref={imageRef} src={displayImage} alt="Inscription" 
-                                                    className={`max-w-full max-h-full object-contain block ${eraserMode ? 'hidden' : ''}`}
-                                                    style={{ pointerEvents: manualBoxMode ? 'none' : 'auto' }}
-                                                />
+                                            {/* Zoomable content wrapper with padding for labels */}
+                                            <div className="flex items-center justify-center min-h-full" style={{ padding: canvasZoom > 1 ? `${(canvasZoom - 1) * 100}px` : '0' }}>
+                                                <div className="relative inline-block" style={{ transform: `scale(${canvasZoom})`, transformOrigin: 'center center', transition: 'transform 0.15s ease' }}>
+                                                    {/* Regular image display (hidden when eraser active) */}
+                                                    <img ref={imageRef} src={displayImage} alt="Inscription" 
+                                                        className={`max-w-full max-h-full object-contain block ${eraserMode ? 'hidden' : ''}`}
+                                                        style={{ pointerEvents: manualBoxMode ? 'none' : 'auto' }}
+                                                    />
                                             
                                             {/* Manual Box Drawing Overlay */}
                                             {manualBoxMode && drawingBox && (() => {
@@ -2247,6 +2310,7 @@
                                                 );
                                             })}
                                             </div>{/* End zoom wrapper */}
+                                            </div>{/* End padding wrapper */}
                                         </div>
                                     ) : (
                                         <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
@@ -2257,8 +2321,33 @@
                                 </div>
                             </div>
                             
+                            {/* Right Panel Toggle (shown when panel is hidden) */}
+                            {isRightPanelHidden && (
+                                <button 
+                                    onClick={() => setIsRightPanelHidden(false)}
+                                    className="fixed right-2 top-24 z-30 bg-ancient-purple text-white p-2 rounded-l-lg shadow-lg hover:bg-[#4a3d5a]"
+                                    title="Show detection panel"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                            )}
+                            
                             {/* Right Sidebar - Independent Scroll */}
-                            <aside className="col-span-3 flex flex-col gap-3 overflow-y-auto pl-1">
+                            <aside className={`${isRightPanelHidden ? 'hidden' : isLeftPanelHidden ? 'col-span-3' : 'col-span-3'} flex flex-col gap-3 overflow-y-auto pl-1`}>
+                                {/* Hide panel button */}
+                                <button 
+                                    onClick={() => setIsRightPanelHidden(true)}
+                                    className="w-full px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs text-gray-500 flex items-center justify-center gap-1"
+                                    title="Hide detection panel"
+                                >
+                                    Hide Panel
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
+                                
                                 {/* Recognition Section - Collapsible */}
                                 <div className="bg-white rounded-lg shadow p-3">
                                     <div className="flex gap-2 items-center">
@@ -2323,6 +2412,7 @@
                                                         <div><span className="bg-gray-700 px-1 rounded">Esc</span> Close/deselect</div>
                                                         <div><span className="bg-gray-700 px-1 rounded">Shift+Click</span> Range select</div>
                                                         <div><span className="bg-gray-700 px-1 rounded">+/−/0</span> Zoom in/out/reset</div>
+                                                        <div><span className="bg-gray-700 px-1 rounded">[ / ]</span> Toggle panels</div>
                                                         <div className="border-t border-gray-700 mt-1 pt-1">In Training Mode:</div>
                                                         <div><span className="bg-gray-700 px-1 rounded">P/V/E</span> Save as Pri/Var/Ex</div>
                                                     </div>
@@ -2351,22 +2441,6 @@
                                                     className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'reading' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}>📖 Reading</button>
                                                 <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); setExcludedDetections(new Set()); setExpandedCards(new Set()); }}}
                                                     className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200" title="Clear all detections">🗑</button>
-                                            </div>
-                                            
-                                            {/* Confidence threshold slider */}
-                                            <div className="mb-2 flex items-center gap-2">
-                                                <span className="text-xs text-gray-500">Min:</span>
-                                                <input 
-                                                    type="range" 
-                                                    min="0" 
-                                                    max="99" 
-                                                    value={confidenceThreshold}
-                                                    onChange={(e) => setConfidenceThreshold(parseInt(e.target.value))}
-                                                    className="flex-1 h-1.5 accent-ancient-purple"
-                                                />
-                                                <span className={`text-xs font-medium w-10 text-right ${confidenceThreshold > 0 ? 'text-ancient-purple' : 'text-gray-400'}`}>
-                                                    {confidenceThreshold > 0 ? `${confidenceThreshold}%` : 'All'}
-                                                </span>
                                             </div>
                                             
                                             {/* Selection actions */}
@@ -2428,7 +2502,7 @@
                                                 </div>
                                             )}
                                             
-                                            <div className="flex-1 overflow-y-auto space-y-2">
+                                            <div className={`flex-1 overflow-y-auto ${isLeftPanelHidden && viewMode !== 'reading' ? 'grid grid-cols-2 gap-2 auto-rows-max' : 'space-y-2'}`}>
                                                 {(viewMode === 'reading' 
                                                     ? readingOrder.filter(i => !excludedDetections.has(i) && Math.round(recognitionResults[i]?.confidence * 100) >= confidenceThreshold)
                                                     : recognitionResults.map((_, i) => i).filter(i => Math.round(recognitionResults[i]?.confidence * 100) >= confidenceThreshold)
@@ -3771,6 +3845,7 @@
                                             <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">Esc</kbd> Close/deselect</div>
                                             <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">Shift+Click</kbd> Range select</div>
                                             <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">+/−/0</kbd> Zoom in/out/reset</div>
+                                            <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">[ / ]</kbd> Toggle panels</div>
                                             <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">P/V/E</kbd> Save templates</div>
                                         </div>
                                     </div>
