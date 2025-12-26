@@ -10,6 +10,11 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="apple-touch-icon" href="hh-logo.png">
+    
     <!-- React & Babel -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -175,6 +180,7 @@
             // Force re-render of detection boxes when layout changes
             const [boxLayoutKey, setBoxLayoutKey] = useState(0);
             const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+            const [canvasZoom, setCanvasZoom] = useState(1); // 0.5 to 3x zoom
             
             // Enhanced detection card state
             const [expandedCards, setExpandedCards] = useState(new Set()); // Cards showing alternatives
@@ -235,6 +241,10 @@
             const [showGlyphEditor, setShowGlyphEditor] = useState(false);
             const [editingGlyph, setEditingGlyph] = useState(null);
             const [glyphEditorMode, setGlyphEditorMode] = useState('add');
+            
+            // Quick Start / Help state
+            const [showQuickStart, setShowQuickStart] = useState(false);
+            const [quickStartStep, setQuickStartStep] = useState(0);
             
             const [preprocessing, setPreprocessing] = useState({
                 rotation: 0,
@@ -385,6 +395,15 @@
                 }
             }, []);
             
+            // ========== SHOW QUICK START FOR NEW USERS ==========
+            useEffect(() => {
+                const hasSeenQuickStart = localStorage.getItem('hakli_seen_quickstart');
+                if (!hasSeenQuickStart) {
+                    // Small delay so the UI loads first
+                    setTimeout(() => setShowQuickStart(true), 500);
+                }
+            }, []);
+            
             // ========== TRACK IMAGE DIMENSIONS FOR BOX ALIGNMENT ==========
             useEffect(() => {
                 const img = imageRef.current;
@@ -453,6 +472,7 @@
                 if (!file) return;
                 
                 setIsImageLoading(true);
+                setCanvasZoom(1); // Reset zoom for new image
                 
                 const reader = new FileReader();
                 reader.onload = async (e) => {
@@ -1296,6 +1316,20 @@
                         const idx = Array.from(selectedRegions)[0];
                         setValidations(prev => ({ ...prev, [idx]: { isCorrect: true } }));
                     }
+                    
+                    // Zoom controls: +/= to zoom in, - to zoom out, 0 to reset
+                    if ((e.key === '+' || e.key === '=') && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        setCanvasZoom(z => Math.min(3, z + 0.25));
+                    }
+                    if (e.key === '-' && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        setCanvasZoom(z => Math.max(0.5, z - 0.25));
+                    }
+                    if (e.key === '0' && !e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        setCanvasZoom(1);
+                    }
                 };
                 
                 window.addEventListener('keydown', handleKeyDown);
@@ -1763,6 +1797,14 @@
                                 </div>
                                 
                                 <div className="flex items-center gap-2">
+                                    {/* Help Button */}
+                                    <button
+                                        onClick={() => setShowQuickStart(true)}
+                                        className="px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-medium"
+                                        title="Quick Start Guide"
+                                    >
+                                        ❓ Help
+                                    </button>
                                     {/* Manage Chart Button */}
                                     <button
                                         onClick={() => setShowChartManager(true)}
@@ -2082,18 +2124,33 @@
                                     
                                     {displayImage ? (
                                         <div ref={imageContainerRef} 
-                                            className="relative flex-1 flex items-center justify-center overflow-hidden"
+                                            className="relative flex-1 flex items-center justify-center overflow-auto"
                                             style={{ cursor: manualBoxMode ? 'crosshair' : 'default' }}
                                             onMouseDown={manualBoxMode ? handleManualBoxStart : undefined}
                                             onMouseMove={manualBoxMode ? handleManualBoxMove : undefined}
                                             onMouseUp={manualBoxMode ? handleManualBoxEnd : undefined}
                                             onMouseLeave={manualBoxMode ? () => setDrawingBox(null) : undefined}
                                         >
-                                            {/* Regular image display (hidden when eraser active) */}
-                                            <img ref={imageRef} src={displayImage} alt="Inscription" 
-                                                className={`max-w-full max-h-full object-contain ${eraserMode ? 'hidden' : ''}`}
-                                                style={{ pointerEvents: manualBoxMode ? 'none' : 'auto' }}
-                                            />
+                                            {/* Zoom controls floating */}
+                                            <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-white/90 rounded-lg shadow px-2 py-1">
+                                                <button onClick={() => setCanvasZoom(z => Math.max(0.5, z - 0.25))} 
+                                                    className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-sm font-bold" title="Zoom out">−</button>
+                                                <span className="text-xs w-12 text-center font-medium">{Math.round(canvasZoom * 100)}%</span>
+                                                <button onClick={() => setCanvasZoom(z => Math.min(3, z + 0.25))} 
+                                                    className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-sm font-bold" title="Zoom in">+</button>
+                                                {canvasZoom !== 1 && (
+                                                    <button onClick={() => setCanvasZoom(1)} 
+                                                        className="w-6 h-6 rounded bg-gray-200 hover:bg-gray-300 text-xs" title="Reset zoom">⟲</button>
+                                                )}
+                                            </div>
+                                            
+                                            {/* Zoomable content wrapper */}
+                                            <div className="relative inline-block" style={{ transform: `scale(${canvasZoom})`, transformOrigin: 'center center', transition: 'transform 0.15s ease' }}>
+                                                {/* Regular image display (hidden when eraser active) */}
+                                                <img ref={imageRef} src={displayImage} alt="Inscription" 
+                                                    className={`max-w-full max-h-full object-contain block ${eraserMode ? 'hidden' : ''}`}
+                                                    style={{ pointerEvents: manualBoxMode ? 'none' : 'auto' }}
+                                                />
                                             
                                             {/* Manual Box Drawing Overlay */}
                                             {manualBoxMode && drawingBox && (() => {
@@ -2189,6 +2246,7 @@
                                                     </div>
                                                 );
                                             })}
+                                            </div>{/* End zoom wrapper */}
                                         </div>
                                     ) : (
                                         <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
@@ -2256,7 +2314,7 @@
                                             {/* Keyboard shortcuts help */}
                                             <div className="relative group">
                                                 <button className="w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-[10px] hover:bg-gray-200" title="Keyboard shortcuts">?</button>
-                                                <div className="absolute right-0 top-full mt-1 bg-gray-900 text-white text-[10px] rounded-lg p-2 w-52 z-30 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                                                <div className="absolute left-0 top-full mt-1 bg-gray-900 text-white text-[10px] rounded-lg p-2 w-52 z-30 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-lg">
                                                     <div className="font-bold mb-1">⌨️ Shortcuts & Selection</div>
                                                     <div className="space-y-0.5">
                                                         <div><span className="bg-gray-700 px-1 rounded">1-9</span> Select detection</div>
@@ -2264,6 +2322,7 @@
                                                         <div><span className="bg-gray-700 px-1 rounded">Enter</span> Mark correct</div>
                                                         <div><span className="bg-gray-700 px-1 rounded">Esc</span> Close/deselect</div>
                                                         <div><span className="bg-gray-700 px-1 rounded">Shift+Click</span> Range select</div>
+                                                        <div><span className="bg-gray-700 px-1 rounded">+/−/0</span> Zoom in/out/reset</div>
                                                         <div className="border-t border-gray-700 mt-1 pt-1">In Training Mode:</div>
                                                         <div><span className="bg-gray-700 px-1 rounded">P/V/E</span> Save as Pri/Var/Ex</div>
                                                     </div>
@@ -3634,6 +3693,122 @@
                                         className="px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5a7d6e]">
                                         ✅ Apply Changes
                                     </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* ===== QUICK START MODAL ===== */}
+                    {showQuickStart && (
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+                                {/* Header */}
+                                <div className="bg-gradient-to-r from-ancient-purple to-stone p-6 text-white">
+                                    <h2 className="text-2xl font-bold mb-1">🏺 Welcome to Hakli Glyph Recognizer</h2>
+                                    <p className="text-white/80 text-sm">A tool for documenting ancient Dhofari script inscriptions</p>
+                                </div>
+                                
+                                {/* Steps */}
+                                <div className="flex-1 overflow-y-auto p-6">
+                                    {[
+                                        {
+                                            icon: '📷',
+                                            title: '1. Load an Image',
+                                            desc: 'Click "Change Image" to upload a photo of an inscription. Works best with clear, well-lit images.',
+                                            tip: 'Tip: Crop to just the inscription area for better results.'
+                                        },
+                                        {
+                                            icon: '🔧',
+                                            title: '2. Preprocess',
+                                            desc: 'Adjust rotation to align text horizontally. Use the Eraser Tool to remove noise or unwanted marks.',
+                                            tip: 'Tip: The rotation slider helps compensate for camera angle.'
+                                        },
+                                        {
+                                            icon: '🔍',
+                                            title: '3. Recognize Glyphs',
+                                            desc: 'Click "Recognize Glyphs" to detect symbols. The system matches against the glyph chart templates.',
+                                            tip: 'Tip: Use the confidence slider to filter uncertain matches.'
+                                        },
+                                        {
+                                            icon: '✓',
+                                            title: '4. Validate & Correct',
+                                            desc: 'Review each detection. Mark correct (✓) or incorrect (✗). Click "Alts" to see alternative matches.',
+                                            tip: 'Tip: Press 1-9 to select detections, Enter to mark correct.'
+                                        },
+                                        {
+                                            icon: '📖',
+                                            title: '5. Build the Reading',
+                                            desc: 'Switch to Reading mode to arrange glyphs in order. Drag cards to reorder. Add word/line breaks.',
+                                            tip: 'Tip: Set reading direction (RTL for Semitic scripts).'
+                                        },
+                                        {
+                                            icon: '🎓',
+                                            title: '6. Train the Chart',
+                                            desc: 'Open Manage Chart and enable Training mode. Add good detections as templates to improve future recognition.',
+                                            tip: 'Tip: Variants capture different writing styles of the same glyph.'
+                                        }
+                                    ].map((step, idx) => (
+                                        <div key={idx} className={`flex gap-4 p-4 rounded-lg mb-3 transition-all ${
+                                            quickStartStep === idx ? 'bg-ancient-purple/10 border-2 border-ancient-purple' : 'bg-gray-50 border-2 border-transparent'
+                                        }`}
+                                        onClick={() => setQuickStartStep(idx)}>
+                                            <div className="text-3xl flex-shrink-0">{step.icon}</div>
+                                            <div className="flex-1">
+                                                <h3 className="font-bold text-gray-800">{step.title}</h3>
+                                                <p className="text-sm text-gray-600 mt-1">{step.desc}</p>
+                                                <p className="text-xs text-ancient-purple mt-2 italic">{step.tip}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    
+                                    {/* Keyboard shortcuts summary */}
+                                    <div className="mt-4 p-4 bg-gray-100 rounded-lg">
+                                        <h4 className="font-bold text-gray-700 mb-2">⌨️ Keyboard Shortcuts</h4>
+                                        <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+                                            <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">1-9</kbd> Select detection</div>
+                                            <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">←/→</kbd> Navigate detections</div>
+                                            <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">Enter</kbd> Mark correct</div>
+                                            <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">Esc</kbd> Close/deselect</div>
+                                            <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">Shift+Click</kbd> Range select</div>
+                                            <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">+/−/0</kbd> Zoom in/out/reset</div>
+                                            <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">P/V/E</kbd> Save templates</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {/* Footer */}
+                                <div className="border-t p-4 flex justify-between items-center bg-gray-50">
+                                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    localStorage.setItem('hakli_seen_quickstart', 'true');
+                                                } else {
+                                                    localStorage.removeItem('hakli_seen_quickstart');
+                                                }
+                                            }}
+                                            className="rounded"
+                                        />
+                                        Don't show again
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => window.open('https://github.com/hytra3/hakli-glyph-recognizer', '_blank')}
+                                            className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm"
+                                        >
+                                            📚 Full Docs
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                setShowQuickStart(false);
+                                                localStorage.setItem('hakli_seen_quickstart', 'true');
+                                            }}
+                                            className="px-6 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] font-medium"
+                                        >
+                                            Get Started →
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
