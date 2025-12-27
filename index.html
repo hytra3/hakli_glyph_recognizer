@@ -220,6 +220,112 @@
             const [columnBreaks, setColumnBreaks] = useState(new Set());
             const [actionHistory, setActionHistory] = useState([]);
             
+            // Undo/Redo stacks
+            const [undoStack, setUndoStack] = useState([]);
+            const [redoStack, setRedoStack] = useState([]);
+            const MAX_UNDO = 50;
+            
+            // Push state to undo stack before making changes
+            const pushUndo = useCallback((actionType, data) => {
+                const snapshot = {
+                    type: actionType,
+                    timestamp: Date.now(),
+                    data: data
+                };
+                setUndoStack(prev => [...prev.slice(-MAX_UNDO + 1), snapshot]);
+                setRedoStack([]); // Clear redo on new action
+            }, []);
+            
+            // Undo function
+            const undo = useCallback(() => {
+                if (undoStack.length === 0) return;
+                
+                const lastAction = undoStack[undoStack.length - 1];
+                
+                // Save current state to redo stack
+                let redoData = {};
+                switch (lastAction.type) {
+                    case 'preprocessing':
+                        redoData = { ...preprocessing };
+                        setPreprocessing(lastAction.data);
+                        break;
+                    case 'validation':
+                        redoData = { ...validations };
+                        setValidations(lastAction.data);
+                        break;
+                    case 'readingOrder':
+                        redoData = [...readingOrder];
+                        setReadingOrder(lastAction.data);
+                        break;
+                    case 'wordBoundaries':
+                        redoData = new Set(wordBoundaries);
+                        setWordBoundaries(new Set(lastAction.data));
+                        break;
+                    case 'lineBreaks':
+                        redoData = new Set(lineBreaks);
+                        setLineBreaks(new Set(lastAction.data));
+                        break;
+                    case 'columnBreaks':
+                        redoData = new Set(columnBreaks);
+                        setColumnBreaks(new Set(lastAction.data));
+                        break;
+                    case 'excludedDetections':
+                        redoData = new Set(excludedDetections);
+                        setExcludedDetections(new Set(lastAction.data));
+                        break;
+                    default:
+                        return;
+                }
+                
+                setRedoStack(prev => [...prev, { type: lastAction.type, data: redoData }]);
+                setUndoStack(prev => prev.slice(0, -1));
+            }, [undoStack, preprocessing, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, excludedDetections]);
+            
+            // Redo function
+            const redo = useCallback(() => {
+                if (redoStack.length === 0) return;
+                
+                const nextAction = redoStack[redoStack.length - 1];
+                
+                // Save current state to undo stack
+                let undoData = {};
+                switch (nextAction.type) {
+                    case 'preprocessing':
+                        undoData = { ...preprocessing };
+                        setPreprocessing(nextAction.data);
+                        break;
+                    case 'validation':
+                        undoData = { ...validations };
+                        setValidations(nextAction.data);
+                        break;
+                    case 'readingOrder':
+                        undoData = [...readingOrder];
+                        setReadingOrder(nextAction.data);
+                        break;
+                    case 'wordBoundaries':
+                        undoData = new Set(wordBoundaries);
+                        setWordBoundaries(new Set(nextAction.data));
+                        break;
+                    case 'lineBreaks':
+                        undoData = new Set(lineBreaks);
+                        setLineBreaks(new Set(nextAction.data));
+                        break;
+                    case 'columnBreaks':
+                        undoData = new Set(columnBreaks);
+                        setColumnBreaks(new Set(nextAction.data));
+                        break;
+                    case 'excludedDetections':
+                        undoData = new Set(excludedDetections);
+                        setExcludedDetections(new Set(nextAction.data));
+                        break;
+                    default:
+                        return;
+                }
+                
+                setUndoStack(prev => [...prev, { type: nextAction.type, data: undoData }]);
+                setRedoStack(prev => prev.slice(0, -1));
+            }, [redoStack, preprocessing, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, excludedDetections]);
+            
             // Template training state
             const [templateTrainingMode, setTemplateTrainingMode] = useState(false);
             const [selectedForTemplate, setSelectedForTemplate] = useState(null);
@@ -1348,11 +1454,24 @@
                         e.preventDefault();
                         setIsRightPanelHidden(h => !h);
                     }
+                    
+                    // Undo: Ctrl+Z
+                    if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+                        e.preventDefault();
+                        undo();
+                    }
+                    
+                    // Redo: Ctrl+Y or Ctrl+Shift+Z
+                    if ((e.key === 'y' && (e.ctrlKey || e.metaKey)) || 
+                        (e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey)) {
+                        e.preventDefault();
+                        redo();
+                    }
                 };
                 
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [recognitionResults.length, selectedRegions, templateTrainingMode, showChartManager, editMenuCardIdx, showGlyphSelector, saveAsTemplate]);
+            }, [recognitionResults.length, selectedRegions, templateTrainingMode, showChartManager, editMenuCardIdx, showGlyphSelector, saveAsTemplate, undo, redo]);
             
             // ========== RECOGNITION ==========
             const recognizeGlyphs = useCallback(async () => {
@@ -1618,11 +1737,12 @@
             
             // ========== VALIDATION ==========
             const validateDetection = useCallback((index, isCorrect) => {
+                pushUndo('validation', { ...validations });
                 setValidations(prev => ({
                     ...prev,
                     [index]: { isCorrect, timestamp: new Date().toISOString() }
                 }));
-            }, []);
+            }, [validations, pushUndo]);
             
             const deleteDetection = useCallback((index) => {
                 setRecognitionResults(prev => prev.filter((_, i) => i !== index));
@@ -1678,6 +1798,7 @@
             
             // Toggle exclusion of a detection from reading order
             const toggleExcludeDetection = useCallback((index) => {
+                pushUndo('excludedDetections', Array.from(excludedDetections));
                 setExcludedDetections(prev => {
                     const updated = new Set(prev);
                     if (updated.has(index)) {
@@ -1687,7 +1808,37 @@
                     }
                     return updated;
                 });
-            }, []);
+            }, [excludedDetections, pushUndo]);
+            
+            // Toggle word boundary with undo
+            const toggleWordBoundary = useCallback((idx) => {
+                pushUndo('wordBoundaries', Array.from(wordBoundaries));
+                setWordBoundaries(prev => {
+                    const next = new Set(prev);
+                    next.has(idx) ? next.delete(idx) : next.add(idx);
+                    return next;
+                });
+            }, [wordBoundaries, pushUndo]);
+            
+            // Toggle line break with undo
+            const toggleLineBreak = useCallback((idx) => {
+                pushUndo('lineBreaks', Array.from(lineBreaks));
+                setLineBreaks(prev => {
+                    const next = new Set(prev);
+                    next.has(idx) ? next.delete(idx) : next.add(idx);
+                    return next;
+                });
+            }, [lineBreaks, pushUndo]);
+            
+            // Toggle column break with undo
+            const toggleColumnBreak = useCallback((idx) => {
+                pushUndo('columnBreaks', Array.from(columnBreaks));
+                setColumnBreaks(prev => {
+                    const next = new Set(prev);
+                    next.has(idx) ? next.delete(idx) : next.add(idx);
+                    return next;
+                });
+            }, [columnBreaks, pushUndo]);
             
             // Drag handlers for reordering reading order
             const handleDragStart = useCallback((e, readingOrderPosition) => {
@@ -1815,6 +1966,25 @@
                                 </div>
                                 
                                 <div className="flex items-center gap-2">
+                                    {/* Undo/Redo Buttons */}
+                                    <div className="flex items-center gap-1 mr-2">
+                                        <button
+                                            onClick={undo}
+                                            disabled={undoStack.length === 0}
+                                            className="w-7 h-7 flex items-center justify-center bg-white/20 hover:bg-white/30 disabled:opacity-30 disabled:cursor-not-allowed rounded text-sm"
+                                            title={`Undo (Ctrl+Z)${undoStack.length > 0 ? ` - ${undoStack.length} action${undoStack.length > 1 ? 's' : ''}` : ''}`}
+                                        >
+                                            ↩️
+                                        </button>
+                                        <button
+                                            onClick={redo}
+                                            disabled={redoStack.length === 0}
+                                            className="w-7 h-7 flex items-center justify-center bg-white/20 hover:bg-white/30 disabled:opacity-30 disabled:cursor-not-allowed rounded text-sm"
+                                            title={`Redo (Ctrl+Y)${redoStack.length > 0 ? ` - ${redoStack.length} action${redoStack.length > 1 ? 's' : ''}` : ''}`}
+                                        >
+                                            ↪️
+                                        </button>
+                                    </div>
                                     {/* Help Button */}
                                     <button
                                         onClick={() => setShowQuickStart(true)}
@@ -2474,6 +2644,7 @@
                                                         <div><span className="bg-gray-700 px-1 rounded">Shift+Click</span> Range select</div>
                                                         <div><span className="bg-gray-700 px-1 rounded">+/−/0</span> Zoom in/out/reset</div>
                                                         <div><span className="bg-gray-700 px-1 rounded">[ / ]</span> Toggle panels</div>
+                                                        <div><span className="bg-gray-700 px-1 rounded">Ctrl+Z/Y</span> Undo/Redo</div>
                                                         <div className="border-t border-gray-700 mt-1 pt-1">In Training Mode:</div>
                                                         <div><span className="bg-gray-700 px-1 rounded">P/V/E</span> Save as Pri/Var/Ex</div>
                                                     </div>
@@ -2748,11 +2919,7 @@
                                                                 <span className="text-xs text-gray-500 mr-1">After:</span>
                                                                 <button onClick={(e) => { 
                                                                     e.stopPropagation(); 
-                                                                    setWordBoundaries(prev => {
-                                                                        const next = new Set(prev);
-                                                                        next.has(idx) ? next.delete(idx) : next.add(idx);
-                                                                        return next;
-                                                                    });
+                                                                    toggleWordBoundary(idx);
                                                                 }}
                                                                     className={`px-2 py-1 rounded text-xs font-bold ${
                                                                         wordBoundaries.has(idx) 
@@ -2764,11 +2931,7 @@
                                                                 </button>
                                                                 <button onClick={(e) => { 
                                                                     e.stopPropagation(); 
-                                                                    setColumnBreaks(prev => {
-                                                                        const next = new Set(prev);
-                                                                        next.has(idx) ? next.delete(idx) : next.add(idx);
-                                                                        return next;
-                                                                    });
+                                                                    toggleColumnBreak(idx);
                                                                 }}
                                                                     className={`px-2 py-1 rounded text-xs font-bold ${
                                                                         columnBreaks.has(idx) 
@@ -2780,11 +2943,7 @@
                                                                 </button>
                                                                 <button onClick={(e) => { 
                                                                     e.stopPropagation(); 
-                                                                    setLineBreaks(prev => {
-                                                                        const next = new Set(prev);
-                                                                        next.has(idx) ? next.delete(idx) : next.add(idx);
-                                                                        return next;
-                                                                    });
+                                                                    toggleLineBreak(idx);
                                                                 }}
                                                                     className={`px-2 py-1 rounded text-xs font-bold ${
                                                                         lineBreaks.has(idx) 
@@ -2905,36 +3064,47 @@
                         </div>
                         
                         {/* ===== TRANSCRIPTION DISPLAY ===== */}
-                        {viewMode === 'reading' && recognitionResults.length > 0 && showTranscription && (
-                            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-stone">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="font-semibold text-gray-900">📜 Transcription</h3>
-                                    <div className="flex gap-2">
-                                        <button 
-                                            onClick={copyTranscriptionToClipboard}
-                                            className="px-3 py-1 bg-stone text-white text-sm rounded hover:bg-[#6d6355] flex items-center gap-1"
-                                            title="Copy transcription to clipboard"
+                        {viewMode === 'reading' && recognitionResults.length > 0 && (
+                            <div className="mt-6 border border-gray-200 rounded-lg overflow-hidden">
+                                <div 
+                                    className="w-full px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 flex items-center justify-between transition-colors cursor-pointer"
+                                    onClick={() => setShowTranscription(!showTranscription)}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-gray-700">📜 Transcription</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {showTranscription && (
+                                            <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                                                <button 
+                                                    onClick={copyTranscriptionToClipboard}
+                                                    className="px-2 py-1 bg-stone text-white text-xs rounded hover:bg-[#6d6355]"
+                                                    title="Copy transcription to clipboard"
+                                                >
+                                                    📋 Copy
+                                                </button>
+                                                <button 
+                                                    onClick={exportTranscription}
+                                                    className="px-2 py-1 bg-patina text-white text-xs rounded hover:bg-[#5d7a6d]"
+                                                    title="Download transcription as text file"
+                                                >
+                                                    💾 Export
+                                                </button>
+                                            </div>
+                                        )}
+                                        <svg 
+                                            className={`w-5 h-5 text-gray-500 transition-transform ${!showTranscription ? '' : 'rotate-180'}`}
+                                            fill="none" 
+                                            stroke="currentColor" 
+                                            viewBox="0 0 24 24"
                                         >
-                                            📋 Copy
-                                        </button>
-                                        <button 
-                                            onClick={exportTranscription}
-                                            className="px-3 py-1 bg-patina text-white text-sm rounded hover:bg-[#5d7a6d] flex items-center gap-1"
-                                            title="Download transcription as text file"
-                                        >
-                                            💾 Export TXT
-                                        </button>
-                                        <button 
-                                            onClick={() => setShowTranscription(false)}
-                                            className="px-3 py-1 bg-rust text-white text-sm rounded hover:bg-[#8d5d47] font-bold"
-                                            title="Close transcription box"
-                                        >
-                                            ✕
-                                        </button>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
                                     </div>
                                 </div>
                                 
-                                {/* Script Toggle */}
+                                {showTranscription && (
+                                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50">
                                 <div className="mb-3 flex flex-wrap gap-2 items-center">
                                     <span className="text-xs text-gray-500 mr-1">Script:</span>
                                     <button
@@ -3100,17 +3270,9 @@
                                         <span className="ml-2 text-stone">(Vertical: line/column breaks split into columns)</span>
                                     )}
                                 </div>
+                                </div>
+                                )}
                             </div>
-                        )}
-                        
-                        {/* Show Transcription button when hidden */}
-                        {viewMode === 'reading' && recognitionResults.length > 0 && !showTranscription && (
-                            <button 
-                                onClick={() => setShowTranscription(true)}
-                                className="mt-6 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
-                            >
-                                📜 Show Transcription
-                            </button>
                         )}
                         
                         {/* ===== INSCRIPTION PANEL (Translation & Notes) ===== */}
@@ -3907,6 +4069,7 @@
                                             <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">Shift+Click</kbd> Range select</div>
                                             <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">+/−/0</kbd> Zoom in/out/reset</div>
                                             <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">[ / ]</kbd> Toggle panels</div>
+                                            <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">Ctrl+Z/Y</kbd> Undo/Redo</div>
                                             <div><kbd className="px-1.5 py-0.5 bg-white rounded border text-xs">P/V/E</kbd> Save templates</div>
                                         </div>
                                     </div>
