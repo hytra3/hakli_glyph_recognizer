@@ -116,6 +116,9 @@
     <script src="src/storage/cache.js"></script>
     <script src="src/storage/corrections.js"></script>
     <script src="src/storage/drive-sync.js"></script>
+    <script src="src/storage/access-control.js"></script>
+    <script src="src/storage/sync-manager.js"></script>
+    
     
     <!-- Recognition modules -->
     <script src="src/recognition/preprocessing.js"></script>
@@ -133,11 +136,12 @@
     <script type="text/babel" src="src/components/common/CommonComponents.jsx"></script>
     <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx"></script>
     <script type="text/babel" src="src/components/panels/ExportPanel.jsx"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251224';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION);
+        const APP_VERSION = 'v251227-access';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Access Control & Auto-Sync)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -224,6 +228,14 @@
             const [undoStack, setUndoStack] = useState([]);
             const [redoStack, setRedoStack] = useState([]);
             const MAX_UNDO = 50;
+            
+            // Access Control & Sync state
+            const [isReadOnly, setIsReadOnly] = useState(false);
+            const [showUnlockModal, setShowUnlockModal] = useState(false);
+            const [pendingHkiData, setPendingHkiData] = useState(null);
+            const [accessControl, setAccessControl] = useState(null);
+            const [currentUser, setCurrentUser] = useState(null);
+            const [syncStatus, setSyncStatus] = useState({ isOnline: navigator.onLine, pending: 0 });
             
             // Push state to undo stack before making changes
             const pushUndo = useCallback((actionType, data) => {
@@ -394,6 +406,27 @@
                     if (originalMatRef.current) try { originalMatRef.current.delete(); } catch(e) {}
                     if (preprocessedMatRef.current) try { preprocessedMatRef.current.delete(); } catch(e) {}
                 };
+            }, []);
+            
+            // ========== SYNC MANAGER SETUP ==========
+            useEffect(() => {
+                // Initialize SyncManager if available
+                if (typeof SyncManager !== 'undefined') {
+                    SyncManager.initialize();
+                    
+                    // Listen for sync events
+                    const unsubscribe = SyncManager.addListener((event) => {
+                        setSyncStatus(SyncManager.getSummary());
+                        
+                        if (event.type === 'synced') {
+                            console.log(`☁️ Synced: ${event.inscriptionId}`);
+                        } else if (event.type === 'error') {
+                            console.warn(`⚠️ Sync failed: ${event.inscriptionId} - ${event.error}`);
+                        }
+                    });
+                    
+                    return unsubscribe;
+                }
             }, []);
             
             // ========== LOAD CHART ==========
@@ -1985,6 +2018,33 @@
                                             ↪️
                                         </button>
                                     </div>
+                                    
+                                    {/* Edit Mode / Sync Status */}
+                                    {currentUser ? (
+                                        <div className="flex items-center gap-2 px-2 py-1 bg-green-500/30 rounded-lg border border-green-400/50">
+                                            <span className="text-xs">✏️ {currentUser.name}</span>
+                                            <span className="text-xs px-1.5 py-0.5 bg-green-400/30 rounded">{currentUser.role}</span>
+                                            <button
+                                                onClick={() => {
+                                                    if (typeof AccessControl !== 'undefined') AccessControl.logout();
+                                                    setCurrentUser(null);
+                                                    setIsReadOnly(true);
+                                                }}
+                                                className="text-green-200 hover:text-white text-xs ml-1"
+                                                title="Switch to view-only"
+                                            >✕</button>
+                                        </div>
+                                    ) : (
+                                        <div className={`px-2 py-1 rounded-full text-xs ${
+                                            syncStatus.pending > 0 ? 'bg-amber-500' : 
+                                            !syncStatus.isOnline ? 'bg-gray-500' : 'bg-patina'
+                                        }`}>
+                                            {!syncStatus.isOnline ? '📴 Offline' :
+                                             syncStatus.pending > 0 ? `⏳ ${syncStatus.pending} pending` :
+                                             '☁️ Synced'}
+                                        </div>
+                                    )}
+                                    
                                     {/* Help Button */}
                                     <button
                                         onClick={() => setShowQuickStart(true)}
@@ -2011,6 +2071,24 @@
                             </div>
                         </div>
                     </header>
+                    
+                    {/* Read-Only Banner - Shows when viewing without edit access */}
+                    {isReadOnly && recognitionResults.length > 0 && (
+                        <div className="bg-amber-50 border-b-2 border-amber-200 px-4 py-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="text-amber-600">👁️</span>
+                                <span className="text-sm text-amber-800">
+                                    You are viewing this inscription in read-only mode
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setShowUnlockModal(true)}
+                                className="px-3 py-1 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded text-sm font-medium"
+                            >
+                                🔓 Unlock Editing
+                            </button>
+                        </div>
+                    )}
                     
                     {/* Mobile Navigation Bar - Only visible on small screens */}
                     <div className="lg:hidden flex items-center justify-between px-4 py-2 bg-white border-b shadow-sm">
@@ -3316,9 +3394,16 @@
                                     inscriptionComplete={inscriptionComplete}
                                     isCollapsed={!showStorageSection}
                                     onToggleCollapse={() => setShowStorageSection(!showStorageSection)}
-                                    onSaveHki={() => {
+                                    onSaveHki={async () => {
+                                        // Check edit permissions
+                                        if (isReadOnly && accessControl) {
+                                            alert('❌ You are in read-only mode. Unlock editing first.');
+                                            setShowUnlockModal(true);
+                                            return;
+                                        }
+                                        
                                         if (typeof HKIStorage !== 'undefined') {
-                                            HKIStorage.saveAsHkiFile({
+                                            const result = await HKIStorage.saveAsHkiFile({
                                                 recognitionResults, validations,
                                                 image: originalImage, displayImage,
                                                 preprocessing, viewMode, readingDirection, readingOrder,
@@ -3326,7 +3411,17 @@
                                                 translationEnglish, translationArabic,
                                                 actionHistory, currentInscriptionId,
                                                 inscriptionComplete, inscriptionTitle
+                                            }, {
+                                                syncToCloud: true,
+                                                downloadLocal: true
                                             });
+                                            
+                                            if (result?.id) {
+                                                setCurrentInscriptionId(result.id);
+                                                if (result.hkiData?.accessControl) {
+                                                    setAccessControl(result.hkiData.accessControl);
+                                                }
+                                            }
                                         } else {
                                             const hkiData = {
                                                 version: '1.0',
@@ -3362,33 +3457,53 @@
                                         reader.onload = (ev) => {
                                             try {
                                                 const data = JSON.parse(ev.target.result);
-                                                if (data.image) setOriginalImage(data.image);
-                                                if (data.displayImage) setDisplayImage(data.displayImage);
-                                                if (data.images?.original) setOriginalImage(data.images.original);
-                                                if (data.images?.preprocessed) setDisplayImage(data.images.preprocessed);
-                                                if (data.preprocessing || data.images?.preprocessingSettings) 
-                                                    setPreprocessing(data.preprocessing || data.images.preprocessingSettings);
-                                                if (data.recognitionResults) setRecognitionResults(data.recognitionResults);
-                                                if (data.detections) setRecognitionResults(data.detections.map(d => ({
-                                                    glyph: d.glyph, confidence: d.confidence, position: d.position,
-                                                    thumbnail: d.thumbnail, matchType: d.matchType
-                                                })));
-                                                if (data.validations) setValidations(data.validations);
-                                                if (data.readingOrder) setReadingOrder(data.readingOrder);
-                                                if (data.readingData?.readingOrder) setReadingOrder(data.readingData.readingOrder);
-                                                if (data.wordBoundaries) setWordBoundaries(new Set(data.wordBoundaries));
-                                                if (data.readingData?.wordBoundaries) setWordBoundaries(new Set(data.readingData.wordBoundaries));
-                                                if (data.lineBreaks) setLineBreaks(new Set(data.lineBreaks));
-                                                if (data.readingData?.lineBreaks) setLineBreaks(new Set(data.readingData.lineBreaks));
-                                                if (data.translationEnglish || data.translations?.english)
-                                                    setTranslationEnglish(data.translationEnglish || data.translations?.english || '');
-                                                if (data.translationArabic || data.translations?.arabic)
-                                                    setTranslationArabic(data.translationArabic || data.translations?.arabic || '');
-                                                if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
-                                                if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
-                                                if (data.inscriptionComplete || data.complete) setInscriptionComplete(data.inscriptionComplete || data.complete);
-                                                if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
-                                                alert('✅ Loaded successfully!\n\n📊 ' + (data.recognitionResults?.length || data.detections?.length || 0) + ' detections');
+                                                
+                                                // Helper to load data into state
+                                                const loadDataIntoState = (isReadOnlyMode = false) => {
+                                                    if (data.image) setOriginalImage(data.image);
+                                                    if (data.displayImage) setDisplayImage(data.displayImage);
+                                                    if (data.images?.original) setOriginalImage(data.images.original);
+                                                    if (data.images?.preprocessed) setDisplayImage(data.images.preprocessed);
+                                                    if (data.preprocessing || data.images?.preprocessingSettings) 
+                                                        setPreprocessing(data.preprocessing || data.images.preprocessingSettings);
+                                                    if (data.recognitionResults) setRecognitionResults(data.recognitionResults);
+                                                    if (data.detections) setRecognitionResults(data.detections.map(d => ({
+                                                        glyph: d.glyph, confidence: d.confidence, position: d.position,
+                                                        thumbnail: d.thumbnail, matchType: d.matchType,
+                                                        corrected: d.corrected, originalGlyph: d.originalGlyph
+                                                    })));
+                                                    if (data.validations) setValidations(data.validations);
+                                                    if (data.readingOrder) setReadingOrder(data.readingOrder);
+                                                    if (data.readingData?.readingOrder) setReadingOrder(data.readingData.readingOrder);
+                                                    if (data.wordBoundaries) setWordBoundaries(new Set(data.wordBoundaries));
+                                                    if (data.readingData?.wordBoundaries) setWordBoundaries(new Set(data.readingData.wordBoundaries));
+                                                    if (data.lineBreaks) setLineBreaks(new Set(data.lineBreaks));
+                                                    if (data.readingData?.lineBreaks) setLineBreaks(new Set(data.readingData.lineBreaks));
+                                                    if (data.translationEnglish || data.translations?.english)
+                                                        setTranslationEnglish(data.translationEnglish || data.translations?.english || '');
+                                                    if (data.translationArabic || data.translations?.arabic)
+                                                        setTranslationArabic(data.translationArabic || data.translations?.arabic || '');
+                                                    if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
+                                                    if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                    if (data.inscriptionComplete || data.complete) setInscriptionComplete(data.inscriptionComplete || data.complete);
+                                                    if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
+                                                    if (data.accessControl) setAccessControl(data.accessControl);
+                                                    setIsReadOnly(isReadOnlyMode);
+                                                    
+                                                    const detectionCount = data.recognitionResults?.length || data.detections?.length || 0;
+                                                    const modeText = isReadOnlyMode ? ' (Read-only mode)' : '';
+                                                    alert(`✅ Loaded successfully!${modeText}\n\n📊 ${detectionCount} detections`);
+                                                };
+                                                
+                                                // Check if file has access control
+                                                if (data.accessControl && typeof AccessControl !== 'undefined') {
+                                                    // Store for unlock modal
+                                                    setPendingHkiData(data);
+                                                    setShowUnlockModal(true);
+                                                } else {
+                                                    // No access control - load directly
+                                                    loadDataIntoState(false);
+                                                }
                                             } catch (err) {
                                                 alert('❌ Failed to load: ' + err.message);
                                             }
@@ -3990,6 +4105,147 @@
                                         className="px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5a7d6e]">
                                         ✅ Apply Changes
                                     </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* ===== UNLOCK MODAL (Access Control) ===== */}
+                    {showUnlockModal && pendingHkiData && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+                                <div className="p-6">
+                                    <div className="text-center mb-6">
+                                        <div className="w-16 h-16 bg-ancient-purple/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <span className="text-3xl">🔒</span>
+                                        </div>
+                                        <h3 className="text-xl font-bold text-gray-900">Unlock Editing</h3>
+                                        <p className="text-gray-600 mt-2">
+                                            Enter your keyword to edit<br />
+                                            <span className="font-medium text-ancient-purple">{pendingHkiData.inscriptionTitle || 'this inscription'}</span>
+                                        </p>
+                                    </div>
+
+                                    <form onSubmit={(e) => {
+                                        e.preventDefault();
+                                        const keyword = e.target.keyword.value;
+                                        
+                                        if (typeof AccessControl !== 'undefined') {
+                                            const user = AccessControl.authenticate(pendingHkiData.accessControl, keyword);
+                                            
+                                            if (user) {
+                                                // Load with edit access
+                                                setCurrentUser(user);
+                                                setIsReadOnly(!user.permissions.includes('edit'));
+                                                
+                                                // Load the data
+                                                const data = pendingHkiData;
+                                                if (data.image) setOriginalImage(data.image);
+                                                if (data.displayImage) setDisplayImage(data.displayImage);
+                                                if (data.images?.original) setOriginalImage(data.images.original);
+                                                if (data.images?.preprocessed) setDisplayImage(data.images.preprocessed);
+                                                if (data.preprocessing || data.images?.preprocessingSettings) 
+                                                    setPreprocessing(data.preprocessing || data.images.preprocessingSettings);
+                                                if (data.recognitionResults) setRecognitionResults(data.recognitionResults);
+                                                if (data.detections) setRecognitionResults(data.detections.map(d => ({
+                                                    glyph: d.glyph, confidence: d.confidence, position: d.position,
+                                                    thumbnail: d.thumbnail, matchType: d.matchType,
+                                                    corrected: d.corrected, originalGlyph: d.originalGlyph
+                                                })));
+                                                if (data.validations) setValidations(data.validations);
+                                                if (data.readingOrder) setReadingOrder(data.readingOrder);
+                                                if (data.readingData?.readingOrder) setReadingOrder(data.readingData.readingOrder);
+                                                if (data.wordBoundaries) setWordBoundaries(new Set(data.wordBoundaries));
+                                                if (data.readingData?.wordBoundaries) setWordBoundaries(new Set(data.readingData.wordBoundaries));
+                                                if (data.lineBreaks) setLineBreaks(new Set(data.lineBreaks));
+                                                if (data.readingData?.lineBreaks) setLineBreaks(new Set(data.readingData.lineBreaks));
+                                                if (data.translationEnglish || data.translations?.english)
+                                                    setTranslationEnglish(data.translationEnglish || data.translations?.english || '');
+                                                if (data.translationArabic || data.translations?.arabic)
+                                                    setTranslationArabic(data.translationArabic || data.translations?.arabic || '');
+                                                if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
+                                                if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                if (data.inscriptionComplete || data.complete) setInscriptionComplete(data.inscriptionComplete || data.complete);
+                                                if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
+                                                if (data.accessControl) setAccessControl(data.accessControl);
+                                                
+                                                setShowUnlockModal(false);
+                                                setPendingHkiData(null);
+                                                
+                                                alert(`✅ Loaded as ${user.name} (${user.role})\n\n📊 ${data.detections?.length || data.recognitionResults?.length || 0} detections`);
+                                            } else {
+                                                alert('❌ Invalid keyword');
+                                            }
+                                        }
+                                    }}>
+                                        <div className="mb-4">
+                                            <input
+                                                type="password"
+                                                name="keyword"
+                                                placeholder="Enter your keyword"
+                                                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-ancient-purple focus:ring-2 focus:ring-ancient-purple/20 outline-none text-center text-lg"
+                                                autoFocus
+                                            />
+                                        </div>
+
+                                        <div className="flex gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    // Load in read-only mode
+                                                    const data = pendingHkiData;
+                                                    if (data.image) setOriginalImage(data.image);
+                                                    if (data.displayImage) setDisplayImage(data.displayImage);
+                                                    if (data.images?.original) setOriginalImage(data.images.original);
+                                                    if (data.images?.preprocessed) setDisplayImage(data.images.preprocessed);
+                                                    if (data.preprocessing || data.images?.preprocessingSettings) 
+                                                        setPreprocessing(data.preprocessing || data.images.preprocessingSettings);
+                                                    if (data.recognitionResults) setRecognitionResults(data.recognitionResults);
+                                                    if (data.detections) setRecognitionResults(data.detections.map(d => ({
+                                                        glyph: d.glyph, confidence: d.confidence, position: d.position,
+                                                        thumbnail: d.thumbnail, matchType: d.matchType
+                                                    })));
+                                                    if (data.validations) setValidations(data.validations);
+                                                    if (data.readingOrder) setReadingOrder(data.readingOrder);
+                                                    if (data.readingData?.readingOrder) setReadingOrder(data.readingData.readingOrder);
+                                                    if (data.wordBoundaries) setWordBoundaries(new Set(data.wordBoundaries));
+                                                    if (data.readingData?.wordBoundaries) setWordBoundaries(new Set(data.readingData.wordBoundaries));
+                                                    if (data.lineBreaks) setLineBreaks(new Set(data.lineBreaks));
+                                                    if (data.readingData?.lineBreaks) setLineBreaks(new Set(data.readingData.lineBreaks));
+                                                    if (data.translationEnglish || data.translations?.english)
+                                                        setTranslationEnglish(data.translationEnglish || data.translations?.english || '');
+                                                    if (data.translationArabic || data.translations?.arabic)
+                                                        setTranslationArabic(data.translationArabic || data.translations?.arabic || '');
+                                                    if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
+                                                    if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                    if (data.inscriptionComplete || data.complete) setInscriptionComplete(data.inscriptionComplete || data.complete);
+                                                    if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
+                                                    if (data.accessControl) setAccessControl(data.accessControl);
+                                                    
+                                                    setIsReadOnly(true);
+                                                    setShowUnlockModal(false);
+                                                    setPendingHkiData(null);
+                                                    
+                                                    alert(`✅ Loaded in read-only mode\n\n📊 ${data.detections?.length || data.recognitionResults?.length || 0} detections`);
+                                                }}
+                                                className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium"
+                                            >
+                                                View Only
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                className="flex-1 px-4 py-3 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] font-medium"
+                                            >
+                                                🔓 Unlock
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                <div className="px-6 py-4 bg-gray-50 rounded-b-xl border-t border-gray-100">
+                                    <p className="text-xs text-gray-500 text-center">
+                                        💡 Don't have a keyword? Contact the inscription owner to request edit access.
+                                    </p>
                                 </div>
                             </div>
                         </div>
