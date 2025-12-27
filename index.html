@@ -1999,26 +1999,6 @@
                                 </div>
                                 
                                 <div className="flex items-center gap-2">
-                                    {/* Undo/Redo Buttons */}
-                                    <div className="flex items-center gap-1 mr-2">
-                                        <button
-                                            onClick={undo}
-                                            disabled={undoStack.length === 0}
-                                            className="w-7 h-7 flex items-center justify-center bg-white/20 hover:bg-white/30 disabled:opacity-30 disabled:cursor-not-allowed rounded text-sm"
-                                            title={`Undo (Ctrl+Z)${undoStack.length > 0 ? ` - ${undoStack.length} action${undoStack.length > 1 ? 's' : ''}` : ''}`}
-                                        >
-                                            ↩️
-                                        </button>
-                                        <button
-                                            onClick={redo}
-                                            disabled={redoStack.length === 0}
-                                            className="w-7 h-7 flex items-center justify-center bg-white/20 hover:bg-white/30 disabled:opacity-30 disabled:cursor-not-allowed rounded text-sm"
-                                            title={`Redo (Ctrl+Y)${redoStack.length > 0 ? ` - ${redoStack.length} action${redoStack.length > 1 ? 's' : ''}` : ''}`}
-                                        >
-                                            ↪️
-                                        </button>
-                                    </div>
-                                    
                                     {/* Edit Mode / Sync Status */}
                                     {currentUser ? (
                                         <div className="flex items-center gap-2 px-2 py-1 bg-green-500/30 rounded-lg border border-green-400/50">
@@ -2502,17 +2482,46 @@
                                             onMouseUp={manualBoxMode ? handleManualBoxEnd : undefined}
                                             onMouseLeave={manualBoxMode ? () => setDrawingBox(null) : undefined}
                                         >
-                                            {/* Zoom controls floating */}
-                                            <div className="sticky top-2 right-2 z-20 flex items-center gap-1 bg-white/90 rounded-lg shadow px-2 py-1 ml-auto mr-2 w-fit">
-                                                <button onClick={() => setCanvasZoom(z => Math.max(0.5, z - 0.25))} 
-                                                    className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-sm font-bold" title="Zoom out">−</button>
-                                                <span className="text-xs w-12 text-center font-medium">{Math.round(canvasZoom * 100)}%</span>
-                                                <button onClick={() => setCanvasZoom(z => Math.min(3, z + 0.25))} 
-                                                    className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-sm font-bold" title="Zoom in">+</button>
-                                                {canvasZoom !== 1 && (
-                                                    <button onClick={() => setCanvasZoom(1)} 
-                                                        className="w-6 h-6 rounded bg-gray-200 hover:bg-gray-300 text-xs" title="Reset zoom">⟲</button>
+                                            {/* Floating toolbar row with undo/redo (left) and zoom (right) */}
+                                            <div className="sticky top-2 z-20 flex justify-between items-start px-2">
+                                                {/* Undo/Redo floating - top left */}
+                                                {(undoStack.length > 0 || redoStack.length > 0) && (
+                                                    <div className="flex items-center gap-1 bg-white/90 rounded-lg shadow px-2 py-1">
+                                                        <button
+                                                            onClick={undo}
+                                                            disabled={undoStack.length === 0}
+                                                            className="w-7 h-7 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                                                            title={`Undo (Ctrl+Z)${undoStack.length > 0 ? ` - ${undoStack.length} action${undoStack.length > 1 ? 's' : ''}` : ''}`}
+                                                        >
+                                                            ↩️
+                                                        </button>
+                                                        <button
+                                                            onClick={redo}
+                                                            disabled={redoStack.length === 0}
+                                                            className="w-7 h-7 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                                                            title={`Redo (Ctrl+Y)${redoStack.length > 0 ? ` - ${redoStack.length} action${redoStack.length > 1 ? 's' : ''}` : ''}`}
+                                                        >
+                                                            ↪️
+                                                        </button>
+                                                        {undoStack.length > 0 && (
+                                                            <span className="text-xs text-gray-500 ml-1">{undoStack.length}</span>
+                                                        )}
+                                                    </div>
                                                 )}
+                                                {(undoStack.length === 0 && redoStack.length === 0) && <div />}
+                                                
+                                                {/* Zoom controls - top right */}
+                                                <div className="flex items-center gap-1 bg-white/90 rounded-lg shadow px-2 py-1">
+                                                    <button onClick={() => setCanvasZoom(z => Math.max(0.5, z - 0.25))} 
+                                                        className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-sm font-bold" title="Zoom out">−</button>
+                                                    <span className="text-xs w-12 text-center font-medium">{Math.round(canvasZoom * 100)}%</span>
+                                                    <button onClick={() => setCanvasZoom(z => Math.min(3, z + 0.25))} 
+                                                        className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-sm font-bold" title="Zoom in">+</button>
+                                                    {canvasZoom !== 1 && (
+                                                        <button onClick={() => setCanvasZoom(1)} 
+                                                            className="w-6 h-6 rounded bg-gray-200 hover:bg-gray-300 text-xs" title="Reset zoom">⟲</button>
+                                                    )}
+                                                </div>
                                             </div>
                                             
                                             {/* Zoomable content wrapper with padding for labels */}
