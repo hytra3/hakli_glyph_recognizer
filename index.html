@@ -3473,6 +3473,27 @@
                                         }
                                         
                                         try {
+                                            // Clean recognition results to remove circular references
+                                            const cleanResults = recognitionResults.map(r => ({
+                                                glyph: {
+                                                    id: r.glyph?.id,
+                                                    name: r.glyph?.name,
+                                                    transliteration: r.glyph?.transliteration,
+                                                    arabic: r.glyph?.arabic,
+                                                    description: r.glyph?.description
+                                                },
+                                                confidence: r.confidence,
+                                                position: r.position,
+                                                thumbnail: r.thumbnail,
+                                                matchType: r.matchType,
+                                                corrected: r.corrected,
+                                                originalGlyph: r.originalGlyph ? {
+                                                    id: r.originalGlyph.id,
+                                                    name: r.originalGlyph.name,
+                                                    transliteration: r.originalGlyph.transliteration
+                                                } : null
+                                            }));
+                                            
                                             const hkiData = {
                                                 version: '2.0',
                                                 created: new Date().toISOString(),
@@ -3482,7 +3503,7 @@
                                                 image: originalImage,
                                                 displayImage,
                                                 preprocessing,
-                                                recognitionResults,
+                                                recognitionResults: cleanResults,
                                                 readingOrder: Array.isArray(readingOrder) ? readingOrder : Array.from(readingOrder),
                                                 readingDirection,
                                                 wordBoundaries: Array.from(wordBoundaries),
@@ -3515,6 +3536,27 @@
                                         try {
                                             const newId = `HKI-${Date.now().toString(36).toUpperCase()}`;
                                             
+                                            // Clean recognition results to remove circular references
+                                            const cleanResults = recognitionResults.map(r => ({
+                                                glyph: {
+                                                    id: r.glyph?.id,
+                                                    name: r.glyph?.name,
+                                                    transliteration: r.glyph?.transliteration,
+                                                    arabic: r.glyph?.arabic,
+                                                    description: r.glyph?.description
+                                                },
+                                                confidence: r.confidence,
+                                                position: r.position,
+                                                thumbnail: r.thumbnail,
+                                                matchType: r.matchType,
+                                                corrected: r.corrected,
+                                                originalGlyph: r.originalGlyph ? {
+                                                    id: r.originalGlyph.id,
+                                                    name: r.originalGlyph.name,
+                                                    transliteration: r.originalGlyph.transliteration
+                                                } : null
+                                            }));
+                                            
                                             const hkiData = {
                                                 version: '2.0',
                                                 created: new Date().toISOString(),
@@ -3524,7 +3566,7 @@
                                                 image: originalImage,
                                                 displayImage,
                                                 preprocessing,
-                                                recognitionResults,
+                                                recognitionResults: cleanResults,
                                                 readingOrder: Array.isArray(readingOrder) ? readingOrder : Array.from(readingOrder),
                                                 readingDirection,
                                                 wordBoundaries: Array.from(wordBoundaries),

@@ -403,6 +403,25 @@ const DriveSync = {
     },
 
     /**
+     * Safe JSON stringify that handles circular references
+     */
+    _safeStringify: (obj) => {
+        const seen = new WeakSet();
+        return JSON.stringify(obj, (key, value) => {
+            // Skip topMatches which often has circular refs
+            if (key === 'topMatches') return undefined;
+            
+            if (typeof value === 'object' && value !== null) {
+                if (seen.has(value)) {
+                    return undefined; // Remove circular reference
+                }
+                seen.add(value);
+            }
+            return value;
+        });
+    },
+
+    /**
      * Save HKI file to Drive
      */
     saveHki: async (hkiData, options = {}) => {
@@ -452,7 +471,7 @@ const DriveSync = {
             `--${boundary}`,
             'Content-Type: application/json',
             '',
-            JSON.stringify(hkiData),
+            DriveSync._safeStringify(hkiData),
             `--${boundary}--`
         ].join('\r\n');
 
