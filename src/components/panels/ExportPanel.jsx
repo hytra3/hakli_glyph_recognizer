@@ -1,6 +1,6 @@
 // ============================================
-// EXPORT PANEL (Simplified)
-// HKI save/load with visibility control and collapsible exports
+// EXPORT PANEL (Simplified with Thumbnail)
+// HKI save/load with visibility control and image preview
 // ============================================
 
 const ExportPanel = ({
@@ -26,7 +26,7 @@ const ExportPanel = ({
     onLoadHki,
     visibility = 'draft',
     onVisibilityChange,
-    syncStatus,
+    syncStatus = null,
     imageRef,
     className = ''
 }) => {
@@ -47,6 +47,33 @@ const ExportPanel = ({
     
     const currentVisibility = visibilityOptions.find(v => v.value === visibility) || visibilityOptions[0];
     
+    // Get sync status text safely
+    const getSyncStatusText = () => {
+        if (!syncStatus || typeof syncStatus !== 'object') {
+            return '☁️ Auto-syncs to Drive';
+        }
+        if (syncStatus.isOnline === false) {
+            return '📴 Offline - will sync when connected';
+        }
+        if (syncStatus.pending > 0) {
+            return '⏳ ' + syncStatus.pending + ' pending sync';
+        }
+        return '☁️ Auto-syncs to Drive';
+    };
+    
+    const getSyncStatusClass = () => {
+        if (!syncStatus || typeof syncStatus !== 'object') {
+            return 'text-patina';
+        }
+        if (syncStatus.isOnline === false) {
+            return 'text-gray-500';
+        }
+        if (syncStatus.pending > 0) {
+            return 'text-amber-600';
+        }
+        return 'text-patina';
+    };
+    
     /**
      * Export transcription as text file
      */
@@ -54,7 +81,7 @@ const ExportPanel = ({
         if (!hasData) return;
         
         try {
-            const orderedIndices = readingOrder.length > 0 
+            const orderedIndices = readingOrder && readingOrder.length > 0 
                 ? readingOrder 
                 : recognitionResults.map((_, i) => i);
             
@@ -70,14 +97,14 @@ const ExportPanel = ({
                 currentWord.push(result.glyph.transliteration || result.glyph.name);
                 currentArabicWord.push(result.glyph.arabic || result.glyph.transliteration);
                 
-                if (wordBoundaries.has(idx)) {
+                if (wordBoundaries && wordBoundaries.has(idx)) {
                     translitParts.push(currentWord.join(''));
                     arabicParts.push(currentArabicWord.join(''));
                     currentWord = [];
                     currentArabicWord = [];
                 }
                 
-                if (lineBreaks.has(idx)) {
+                if (lineBreaks && lineBreaks.has(idx)) {
                     if (currentWord.length > 0) {
                         translitParts.push(currentWord.join(''));
                         arabicParts.push(currentArabicWord.join(''));
@@ -97,9 +124,9 @@ const ExportPanel = ({
             const content = [
                 '='.repeat(60),
                 'HAKLI INSCRIPTION TRANSCRIPTION',
-                `ID: ${currentInscriptionId || 'Unknown'}`,
-                `Title: ${inscriptionTitle || 'Untitled'}`,
-                `Date: ${new Date().toLocaleString()}`,
+                'ID: ' + (currentInscriptionId || 'Unknown'),
+                'Title: ' + (inscriptionTitle || 'Untitled'),
+                'Date: ' + new Date().toLocaleString(),
                 '='.repeat(60),
                 '',
                 'TRANSLITERATION:',
@@ -112,10 +139,10 @@ const ExportPanel = ({
                 translationEnglish || '(not provided)',
                 '',
                 '='.repeat(60),
-                `Total glyphs: ${recognitionResults.length}`,
-                `Reading direction: ${readingDirection}`,
-                `Words: ${Array.from(wordBoundaries).length + 1}`,
-                `Lines: ${Array.from(lineBreaks).length + 1}`,
+                'Total glyphs: ' + recognitionResults.length,
+                'Reading direction: ' + readingDirection,
+                'Words: ' + (wordBoundaries ? Array.from(wordBoundaries).length + 1 : 1),
+                'Lines: ' + (lineBreaks ? Array.from(lineBreaks).length + 1 : 1),
                 '='.repeat(60)
             ].join('\n');
             
@@ -123,7 +150,7 @@ const ExportPanel = ({
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${currentInscriptionId || 'inscription'}-transcription.txt`;
+            a.download = (currentInscriptionId || 'inscription') + '-transcription.txt';
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {
@@ -157,15 +184,15 @@ const ExportPanel = ({
                     },
                     confidence: result.confidence,
                     position: result.position,
-                    validated: validations[index] || null,
+                    validated: validations ? validations[index] : null,
                     corrected: result.corrected || false
                 })),
                 reading: {
                     direction: readingDirection,
-                    order: readingOrder,
-                    wordBoundaries: Array.from(wordBoundaries),
-                    lineBreaks: Array.from(lineBreaks),
-                    columnBreaks: Array.from(columnBreaks)
+                    order: readingOrder || [],
+                    wordBoundaries: wordBoundaries ? Array.from(wordBoundaries) : [],
+                    lineBreaks: lineBreaks ? Array.from(lineBreaks) : [],
+                    columnBreaks: columnBreaks ? Array.from(columnBreaks) : []
                 },
                 translations: {
                     english: translationEnglish,
@@ -177,7 +204,7 @@ const ExportPanel = ({
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${currentInscriptionId || 'inscription'}-data.json`;
+            a.download = (currentInscriptionId || 'inscription') + '-data.json';
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {
@@ -202,21 +229,21 @@ const ExportPanel = ({
                 result.glyph.transliteration,
                 result.glyph.arabic || '',
                 (result.confidence * 100).toFixed(1) + '%',
-                validations[index] ? 'Yes' : 'No',
-                validations[index]?.isCorrect ? 'Yes' : validations[index] ? 'No' : '',
+                validations && validations[index] ? 'Yes' : 'No',
+                validations && validations[index] && validations[index].isCorrect ? 'Yes' : (validations && validations[index] ? 'No' : ''),
                 result.position.x,
                 result.position.y,
                 result.position.width,
                 result.position.height
             ]);
             
-            const csv = [headers.join(','), ...rows.map(r => r.map(cell => `"${cell}"`).join(','))].join('\n');
+            const csv = [headers.join(','), ...rows.map(r => r.map(cell => '"' + cell + '"').join(','))].join('\n');
             
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${currentInscriptionId || 'inscription'}-data.csv`;
+            a.download = (currentInscriptionId || 'inscription') + '-data.csv';
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {
@@ -229,7 +256,7 @@ const ExportPanel = ({
      * Export annotated image
      */
     const exportAnnotatedImage = () => {
-        if (!hasData || !imageRef?.current) return;
+        if (!hasData || !imageRef || !imageRef.current) return;
         
         try {
             const img = imageRef.current;
@@ -242,9 +269,9 @@ const ExportPanel = ({
             
             recognitionResults.forEach((result, index) => {
                 const pos = result.position;
-                const validation = validations[index];
+                const validation = validations ? validations[index] : null;
                 
-                if (validation?.isCorrect) {
+                if (validation && validation.isCorrect) {
                     ctx.strokeStyle = '#6b8e7f';
                     ctx.fillStyle = 'rgba(107, 142, 127, 0.3)';
                 } else if (validation && !validation.isCorrect) {
@@ -268,7 +295,7 @@ const ExportPanel = ({
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `${currentInscriptionId || 'inscription'}-annotated.png`;
+                a.download = (currentInscriptionId || 'inscription') + '-annotated.png';
                 a.click();
                 URL.revokeObjectURL(url);
             }, 'image/png');
@@ -307,19 +334,6 @@ const ExportPanel = ({
         }
     };
     
-    // Sync status display
-    const getSyncStatusDisplay = () => {
-        if (!syncStatus) return null;
-        
-        if (!syncStatus.isOnline) {
-            return <span className="text-gray-500">📴 Offline - will sync when connected</span>;
-        }
-        if (syncStatus.pending > 0) {
-            return <span className="text-amber-600">⏳ {syncStatus.pending} pending sync</span>;
-        }
-        return <span className="text-patina">☁️ Auto-syncs to Drive</span>;
-    };
-    
     return (
         <CollapsibleSection
             title="📤 Export"
@@ -337,28 +351,53 @@ const ExportPanel = ({
                     )}
                 </div>
                 
-                {/* HKI Package - Simplified */}
+                {/* HKI Package - with thumbnail */}
                 <div className="p-3 bg-ancient-purple/10 rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="font-medium text-gray-700">📦 HKI Package</span>
+                    <div className="flex items-start gap-3 mb-3">
+                        {/* Thumbnail */}
+                        {(displayImage || image) && (
+                            <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden border-2 border-ancient-purple/30 bg-gray-100">
+                                <img 
+                                    src={displayImage || image} 
+                                    alt="Inscription thumbnail" 
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+                        )}
                         
-                        {/* Visibility Dropdown */}
-                        <div className="relative">
-                            <select
-                                value={visibility}
-                                onChange={(e) => onVisibilityChange && onVisibilityChange(e.target.value)}
-                                className={`text-xs px-2 py-1 rounded-full border-0 cursor-pointer appearance-none pr-6 ${
-                                    visibility === 'draft' ? 'bg-gray-200 text-gray-700' :
-                                    visibility === 'review' ? 'bg-amber-100 text-amber-700' :
-                                    'bg-patina/20 text-patina'
-                                }`}
-                                title={currentVisibility.desc}
-                            >
-                                {visibilityOptions.map(opt => (
-                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                ))}
-                            </select>
-                            <span className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-xs">▼</span>
+                        {/* Header with title and visibility */}
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-gray-700 truncate">
+                                    📦 {inscriptionTitle || 'Untitled'}
+                                </span>
+                                
+                                {/* Visibility Dropdown */}
+                                <div className="relative flex-shrink-0">
+                                    <select
+                                        value={visibility || 'draft'}
+                                        onChange={(e) => onVisibilityChange && onVisibilityChange(e.target.value)}
+                                        className={'text-xs px-2 py-1 rounded-full border-0 cursor-pointer appearance-none pr-6 ' + (
+                                            visibility === 'draft' ? 'bg-gray-200 text-gray-700' :
+                                            visibility === 'review' ? 'bg-amber-100 text-amber-700' :
+                                            'bg-patina/20 text-patina'
+                                        )}
+                                        title={currentVisibility.desc}
+                                    >
+                                        {visibilityOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-xs">▼</span>
+                                </div>
+                            </div>
+                            
+                            {/* ID if exists */}
+                            {currentInscriptionId && (
+                                <div className="text-xs text-gray-500 mt-1 truncate">
+                                    {currentInscriptionId}
+                                </div>
+                            )}
                         </div>
                     </div>
                     
@@ -379,7 +418,7 @@ const ExportPanel = ({
                                 accept=".hki,.json"
                                 className="hidden"
                                 onChange={(e) => {
-                                    if (onLoadHki && e.target.files[0]) {
+                                    if (onLoadHki && e.target.files && e.target.files[0]) {
                                         onLoadHki(e);
                                         e.target.value = '';
                                     }
@@ -388,17 +427,10 @@ const ExportPanel = ({
                         </label>
                     </div>
                     
-                    {/* Sync status */}
-                    <div className="text-xs text-center">
-                        {getSyncStatusDisplay()}
+                    {/* Sync status - rendered as text only */}
+                    <div className={'text-xs text-center ' + getSyncStatusClass()}>
+                        {getSyncStatusText()}
                     </div>
-                    
-                    {/* Current ID */}
-                    {currentInscriptionId && (
-                        <div className="mt-2 text-xs text-gray-500 text-center border-t border-gray-200 pt-2">
-                            📦 {currentInscriptionId}
-                        </div>
-                    )}
                 </div>
                 
                 {/* Export Formats - Collapsible */}
@@ -408,7 +440,7 @@ const ExportPanel = ({
                         className="w-full px-3 py-2 bg-gray-50 hover:bg-gray-100 flex items-center justify-between text-sm text-gray-600"
                     >
                         <span>📋 Export formats</span>
-                        <span className={`transition-transform ${showExportFormats ? 'rotate-180' : ''}`}>▼</span>
+                        <span className={'transition-transform ' + (showExportFormats ? 'rotate-180' : '')}>▼</span>
                     </button>
                     
                     {showExportFormats && (
@@ -437,7 +469,7 @@ const ExportPanel = ({
                                 </button>
                                 <button
                                     onClick={exportAnnotatedImage}
-                                    disabled={!hasData || !imageRef?.current}
+                                    disabled={!hasData || !imageRef || !imageRef.current}
                                     className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 rounded-lg transition-colors text-sm"
                                 >
                                     🖼️ Image
@@ -469,4 +501,4 @@ const ExportPanel = ({
 // Make globally available
 window.ExportPanel = ExportPanel;
 
-console.log('✅ ExportPanel (simplified) loaded');
+console.log('✅ ExportPanel (simplified with thumbnail) loaded');
