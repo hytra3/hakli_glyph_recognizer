@@ -9,7 +9,7 @@ const DriveSync = {
     CONFIG: {
         CLIENT_ID: '894554328044-5ocv2t6g8h9ssj80sscniuqgl2t3021m.apps.googleusercontent.com',
         API_KEY: 'AIzaSyAZ6ptZw3XfBZJDUdV9V-GKClCej0iEkRI',
-        SCOPES: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email',
+        SCOPES: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email',
         FOLDER_NAME: 'Hakli_Inscriptions',
         SHARED_FOLDER_ID: '1XttYhdnw4Pl11ccfS5AEuO3W-aCRZ2qo'
     },
@@ -360,14 +360,23 @@ const DriveSync = {
      */
     _parseFileMetadata: (file) => {
         const props = { ...file.properties, ...file.appProperties };
+        let collaborators = [];
+        try {
+            if (props.collaborators) {
+                collaborators = JSON.parse(props.collaborators);
+            }
+        } catch (e) {
+            // Invalid JSON, ignore
+        }
+        
         return {
             id: file.id,
             name: file.name,
             title: props.title || file.name.replace('.hki', ''),
-            owner: props.owner,
+            owner: props.owner || '',
             visibility: props.visibility || 'draft',
-            collaborators: props.collaborators ? JSON.parse(props.collaborators) : [],
-            thumbnail: props.thumbnail || file.thumbnailLink,
+            collaborators: collaborators,
+            thumbnail: file.thumbnailLink || null, // Use Drive's thumbnail if available
             glyphCount: props.glyphCount ? parseInt(props.glyphCount) : undefined,
             modifiedTime: file.modifiedTime
         };
@@ -412,25 +421,22 @@ const DriveSync = {
             ? DriveSync.CONFIG.SHARED_FOLDER_ID 
             : await DriveSync.getOrCreateFolder();
 
-        // Generate thumbnail from image data
-        let thumbnail = '';
-        if (hkiData.displayImage || hkiData.image) {
-            thumbnail = await DriveSync._generateThumbnail(hkiData.displayImage || hkiData.image);
-        }
-
-        // Prepare metadata
+        // Prepare metadata - keep properties small (124 byte limit per property)
         const metadata = {
             name: `${title}.hki`,
             mimeType: 'application/json',
             appProperties: {
-                owner: DriveSync._userEmail,
-                visibility,
-                collaborators: JSON.stringify(collaborators),
-                title,
-                thumbnail,
+                owner: DriveSync._userEmail || '',
+                visibility: visibility,
+                title: title.substring(0, 50), // Limit title length
                 glyphCount: String(hkiData.recognitionResults?.length || 0)
             }
         };
+        
+        // Store collaborators only if not too long
+        if (collaborators.length > 0 && collaborators.length <= 5) {
+            metadata.appProperties.collaborators = JSON.stringify(collaborators);
+        }
 
         if (!fileId) {
             metadata.parents = [folderId];
