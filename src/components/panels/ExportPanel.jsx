@@ -23,10 +23,16 @@ const ExportPanel = ({
     isCollapsed,
     onToggleCollapse,
     onSaveHki,
+    onSaveAsNew,
+    onOpenWarehouse,
     onLoadHki,
     visibility = 'draft',
     onVisibilityChange,
     syncStatus = null,
+    driveSignedIn = false,
+    driveUserEmail = null,
+    currentFileId = null,
+    fileOwner = null,
     imageRef,
     className = ''
 }) => {
@@ -49,6 +55,9 @@ const ExportPanel = ({
     
     // Get sync status text safely
     const getSyncStatusText = () => {
+        if (!driveSignedIn) {
+            return '☁️ Sign in to Drive to enable sync';
+        }
         if (!syncStatus || typeof syncStatus !== 'object') {
             return '☁️ Auto-syncs to Drive';
         }
@@ -62,6 +71,9 @@ const ExportPanel = ({
     };
     
     const getSyncStatusClass = () => {
+        if (!driveSignedIn) {
+            return 'text-gray-400';
+        }
         if (!syncStatus || typeof syncStatus !== 'object') {
             return 'text-patina';
         }
@@ -402,29 +414,67 @@ const ExportPanel = ({
                     </div>
                     
                     {/* Save / Load buttons */}
-                    <div className="flex gap-2 mb-2">
-                        <button
-                            onClick={() => onSaveHki && onSaveHki()}
-                            disabled={!hasData}
-                            className="flex-1 px-3 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-                        >
-                            💾 Save .hki
-                        </button>
-                        <label className="flex-1 px-3 py-2 bg-stone text-white rounded-lg hover:bg-stone/80 cursor-pointer transition-colors text-sm text-center font-medium">
-                            📂 Load .hki
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".hki,.json"
-                                className="hidden"
-                                onChange={(e) => {
-                                    if (onLoadHki && e.target.files && e.target.files[0]) {
-                                        onLoadHki(e);
-                                        e.target.value = '';
-                                    }
-                                }}
-                            />
-                        </label>
+                    <div className="space-y-2 mb-2">
+                        {/* Save buttons - only when signed in */}
+                        {driveSignedIn ? (
+                            <div className="flex gap-2">
+                                {/* Save (update existing) - only if owner or collaborator */}
+                                {currentFileId && (fileOwner === driveUserEmail || 
+                                    (typeof fileOwner === 'undefined')) ? (
+                                    <button
+                                        onClick={() => onSaveHki && onSaveHki()}
+                                        disabled={!hasData}
+                                        className="flex-1 px-3 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                                    >
+                                        💾 Save
+                                    </button>
+                                ) : null}
+                                
+                                {/* Save As New - always available when signed in */}
+                                <button
+                                    onClick={() => onSaveAsNew && onSaveAsNew()}
+                                    disabled={!hasData}
+                                    className={'px-3 py-2 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-sm font-medium ' + 
+                                        (currentFileId && fileOwner === driveUserEmail 
+                                            ? 'bg-stone hover:bg-stone/80 flex-1' 
+                                            : 'bg-ancient-purple hover:bg-[#4a3d5a] flex-1')}
+                                >
+                                    {currentFileId && fileOwner === driveUserEmail ? '📄 Save As New' : '💾 Save to Drive'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="text-xs text-center text-gray-500 py-2 bg-gray-50 rounded">
+                                🔒 Sign in to save to cloud
+                            </div>
+                        )}
+                        
+                        {/* Load buttons */}
+                        <div className="flex gap-2">
+                            {/* Load from Warehouse */}
+                            <button
+                                onClick={() => onOpenWarehouse && onOpenWarehouse()}
+                                className="flex-1 px-3 py-2 bg-ochre text-white rounded-lg hover:bg-ochre/80 transition-colors text-sm font-medium"
+                            >
+                                📚 Browse Warehouse
+                            </button>
+                            
+                            {/* Load from local file */}
+                            <label className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 cursor-pointer transition-colors text-sm text-center font-medium">
+                                📂
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".hki,.json"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        if (onLoadHki && e.target.files && e.target.files[0]) {
+                                            onLoadHki(e);
+                                            e.target.value = '';
+                                        }
+                                    }}
+                                />
+                            </label>
+                        </div>
                     </div>
                     
                     {/* Sync status - rendered as text only */}

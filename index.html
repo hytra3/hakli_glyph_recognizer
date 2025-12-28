@@ -137,6 +137,8 @@
     <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx"></script>
     <script type="text/babel" src="src/components/panels/ExportPanel.jsx"></script>
     <script type="text/babel" src="src/components/common/AccessControlUI.jsx"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
@@ -237,6 +239,11 @@
             const [currentUser, setCurrentUser] = useState(null);
             const [syncStatus, setSyncStatus] = useState({ isOnline: navigator.onLine, pending: 0 });
             const [visibility, setVisibility] = useState('draft'); // 'draft' | 'review' | 'published'
+            const [driveSignedIn, setDriveSignedIn] = useState(false);
+            const [driveUserEmail, setDriveUserEmail] = useState(null);
+            const [showWarehouse, setShowWarehouse] = useState(false);
+            const [currentFileId, setCurrentFileId] = useState(null); // Drive file ID for updates
+            const [fileOwner, setFileOwner] = useState(null); // Owner email of current file
             
             // Push state to undo stack before making changes
             const pushUndo = useCallback((actionType, data) => {
@@ -415,9 +422,21 @@
                 if (typeof SyncManager !== 'undefined') {
                     SyncManager.initialize();
                     
+                    // Check initial Drive sign-in status
+                    if (typeof DriveSync !== 'undefined') {
+                        setDriveSignedIn(DriveSync.isSignedIn());
+                        setDriveUserEmail(DriveSync.getUserEmail());
+                    }
+                    
                     // Listen for sync events
                     const unsubscribe = SyncManager.addListener((event) => {
                         setSyncStatus(SyncManager.getSummary());
+                        
+                        // Also check Drive sign-in status on each event
+                        if (typeof DriveSync !== 'undefined') {
+                            setDriveSignedIn(DriveSync.isSignedIn());
+                            setDriveUserEmail(DriveSync.getUserEmail());
+                        }
                         
                         if (event.type === 'synced') {
                             console.log(`☁️ Synced: ${event.inscriptionId}`);
@@ -2021,7 +2040,7 @@
                                             {opencvReady ? '✅ CV' : '⏳ CV'}
                                         </div>
                                         
-                                        {/* Sync Status */}
+                                        {/* Sync Status / Drive Sign-in */}
                                         {currentUser ? (
                                             <div className="flex items-center gap-1 px-2 py-1 bg-green-500/30 rounded-full border border-green-400/50">
                                                 <span className="text-xs">✏️ {currentUser.name}</span>
@@ -2035,15 +2054,45 @@
                                                     title="Switch to view-only"
                                                 >✕</button>
                                             </div>
-                                        ) : (
-                                            <div className={`px-2 py-1 rounded-full text-xs ${
-                                                syncStatus.pending > 0 ? 'bg-amber-500' : 
-                                                !syncStatus.isOnline ? 'bg-gray-500' : 'bg-patina'
-                                            }`}>
-                                                {!syncStatus.isOnline ? '📴 Offline' :
-                                                 syncStatus.pending > 0 ? `⏳ ${syncStatus.pending} pending` :
-                                                 '☁️ Synced'}
+                                        ) : driveSignedIn ? (
+                                            <div className="flex items-center gap-1">
+                                                <div className="px-2 py-1 rounded-full text-xs bg-patina flex items-center gap-1">
+                                                    <span>☁️</span>
+                                                    <span className="max-w-[100px] truncate">{driveUserEmail || 'Connected'}</span>
+                                                </div>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (typeof DriveSync !== 'undefined') {
+                                                            DriveSync.signOut();
+                                                            setDriveSignedIn(false);
+                                                            setDriveUserEmail(null);
+                                                        }
+                                                    }}
+                                                    className="text-white/60 hover:text-white text-xs"
+                                                    title="Sign out of Google Drive"
+                                                >✕</button>
                                             </div>
+                                        ) : (
+                                            <button
+                                                onClick={async () => {
+                                                    if (typeof DriveSync !== 'undefined') {
+                                                        try {
+                                                            await DriveSync.signIn();
+                                                            setDriveSignedIn(DriveSync.isSignedIn());
+                                                            setDriveUserEmail(DriveSync.getUserEmail());
+                                                        } catch (err) {
+                                                            console.error('Drive sign-in failed:', err);
+                                                            alert('❌ Google Drive sign-in failed. Please try again.');
+                                                        }
+                                                    } else {
+                                                        alert('❌ Drive sync not available');
+                                                    }
+                                                }}
+                                                className="px-2 py-1 bg-blue-500 hover:bg-blue-600 rounded-full text-xs font-medium"
+                                                title="Sign in to enable cloud sync"
+                                            >
+                                                ☁️ Sign in
+                                            </button>
                                         )}
                                         
                                         {/* Help Button - far right */}
@@ -3412,45 +3461,29 @@
                                     isCollapsed={!showStorageSection}
                                     onToggleCollapse={() => setShowStorageSection(!showStorageSection)}
                                     onSaveHki={async () => {
-                                        // Check edit permissions
-                                        if (isReadOnly && accessControl) {
-                                            alert('❌ You are in read-only mode. Unlock editing first.');
-                                            setShowUnlockModal(true);
+                                        // Save = Update existing file (only if owner)
+                                        if (!driveSignedIn || !currentFileId) {
+                                            alert('❌ Cannot save: no file loaded or not signed in');
                                             return;
                                         }
                                         
-                                        if (typeof HKIStorage !== 'undefined') {
-                                            const result = await HKIStorage.saveAsHkiFile({
-                                                recognitionResults, validations,
-                                                image: originalImage, displayImage,
-                                                preprocessing, viewMode, readingDirection, readingOrder,
-                                                wordBoundaries, columnBreaks, lineBreaks,
-                                                translationEnglish, translationArabic,
-                                                actionHistory, currentInscriptionId,
-                                                inscriptionComplete, inscriptionTitle,
-                                                visibility
-                                            }, {
-                                                syncToCloud: true,
-                                                downloadLocal: true
-                                            });
-                                            
-                                            if (result?.id) {
-                                                setCurrentInscriptionId(result.id);
-                                                if (result.hkiData?.accessControl) {
-                                                    setAccessControl(result.hkiData.accessControl);
-                                                }
-                                            }
-                                        } else {
+                                        if (fileOwner && fileOwner !== driveUserEmail) {
+                                            alert('❌ You are not the owner. Use "Save As New" instead.');
+                                            return;
+                                        }
+                                        
+                                        try {
                                             const hkiData = {
-                                                version: '1.0',
+                                                version: '2.0',
                                                 created: new Date().toISOString(),
+                                                inscriptionId: currentInscriptionId,
                                                 inscriptionTitle: inscriptionTitle || 'Untitled',
                                                 inscriptionNotes,
                                                 image: originalImage,
                                                 displayImage,
                                                 preprocessing,
                                                 recognitionResults,
-                                                readingOrder: Array.from(readingOrder),
+                                                readingOrder: Array.isArray(readingOrder) ? readingOrder : Array.from(readingOrder),
                                                 readingDirection,
                                                 wordBoundaries: Array.from(wordBoundaries),
                                                 lineBreaks: Array.from(lineBreaks),
@@ -3459,17 +3492,70 @@
                                                 translationArabic,
                                                 visibility
                                             };
-                                            const blob = new Blob([JSON.stringify(hkiData, null, 2)], { type: 'application/json' });
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement('a');
-                                            a.href = url;
-                                            a.download = `${inscriptionTitle || 'inscription'}_${new Date().toISOString().slice(0,10)}.hki`;
-                                            a.click();
-                                            URL.revokeObjectURL(url);
-                                            alert('✅ HKI file saved!');
+                                            
+                                            const result = await DriveSync.saveHki(hkiData, {
+                                                fileId: currentFileId,
+                                                title: inscriptionTitle || 'Untitled',
+                                                visibility
+                                            });
+                                            
+                                            alert('✅ Saved to Drive!');
+                                        } catch (err) {
+                                            console.error('Save failed:', err);
+                                            alert('❌ Save failed: ' + err.message);
                                         }
                                     }}
+                                    onSaveAsNew={async () => {
+                                        // Save As New = Create new file (user becomes owner)
+                                        if (!driveSignedIn) {
+                                            alert('❌ Please sign in to save to Drive');
+                                            return;
+                                        }
+                                        
+                                        try {
+                                            const newId = `HKI-${Date.now().toString(36).toUpperCase()}`;
+                                            
+                                            const hkiData = {
+                                                version: '2.0',
+                                                created: new Date().toISOString(),
+                                                inscriptionId: newId,
+                                                inscriptionTitle: inscriptionTitle || 'Untitled',
+                                                inscriptionNotes,
+                                                image: originalImage,
+                                                displayImage,
+                                                preprocessing,
+                                                recognitionResults,
+                                                readingOrder: Array.isArray(readingOrder) ? readingOrder : Array.from(readingOrder),
+                                                readingDirection,
+                                                wordBoundaries: Array.from(wordBoundaries),
+                                                lineBreaks: Array.from(lineBreaks),
+                                                validations,
+                                                translationEnglish,
+                                                translationArabic,
+                                                visibility: 'draft' // New files start as draft
+                                            };
+                                            
+                                            const result = await DriveSync.saveHki(hkiData, {
+                                                fileId: null, // null = create new
+                                                title: inscriptionTitle || 'Untitled',
+                                                visibility: 'draft'
+                                            });
+                                            
+                                            // Update tracking
+                                            setCurrentInscriptionId(newId);
+                                            setCurrentFileId(result.id);
+                                            setFileOwner(driveUserEmail);
+                                            setVisibility('draft');
+                                            
+                                            alert('✅ Saved as new inscription!');
+                                        } catch (err) {
+                                            console.error('Save As New failed:', err);
+                                            alert('❌ Save failed: ' + err.message);
+                                        }
+                                    }}
+                                    onOpenWarehouse={() => setShowWarehouse(true)}
                                     onLoadHki={(e) => {
+                                        // Load from local file (for offline work)
                                         const file = e.target.files[0];
                                         if (!file) return;
                                         const reader = new FileReader();
@@ -3477,53 +3563,43 @@
                                             try {
                                                 const data = JSON.parse(ev.target.result);
                                                 
-                                                // Helper to load data into state
-                                                const loadDataIntoState = (isReadOnlyMode = false) => {
-                                                    if (data.image) setOriginalImage(data.image);
-                                                    if (data.displayImage) setDisplayImage(data.displayImage);
-                                                    if (data.images?.original) setOriginalImage(data.images.original);
-                                                    if (data.images?.preprocessed) setDisplayImage(data.images.preprocessed);
-                                                    if (data.preprocessing || data.images?.preprocessingSettings) 
-                                                        setPreprocessing(data.preprocessing || data.images.preprocessingSettings);
-                                                    if (data.recognitionResults) setRecognitionResults(data.recognitionResults);
-                                                    if (data.detections) setRecognitionResults(data.detections.map(d => ({
-                                                        glyph: d.glyph, confidence: d.confidence, position: d.position,
-                                                        thumbnail: d.thumbnail, matchType: d.matchType,
-                                                        corrected: d.corrected, originalGlyph: d.originalGlyph
-                                                    })));
-                                                    if (data.validations) setValidations(data.validations);
-                                                    if (data.readingOrder) setReadingOrder(data.readingOrder);
-                                                    if (data.readingData?.readingOrder) setReadingOrder(data.readingData.readingOrder);
-                                                    if (data.wordBoundaries) setWordBoundaries(new Set(data.wordBoundaries));
-                                                    if (data.readingData?.wordBoundaries) setWordBoundaries(new Set(data.readingData.wordBoundaries));
-                                                    if (data.lineBreaks) setLineBreaks(new Set(data.lineBreaks));
-                                                    if (data.readingData?.lineBreaks) setLineBreaks(new Set(data.readingData.lineBreaks));
-                                                    if (data.translationEnglish || data.translations?.english)
-                                                        setTranslationEnglish(data.translationEnglish || data.translations?.english || '');
-                                                    if (data.translationArabic || data.translations?.arabic)
-                                                        setTranslationArabic(data.translationArabic || data.translations?.arabic || '');
-                                                    if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
-                                                    if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
-                                                    if (data.inscriptionComplete || data.complete) setInscriptionComplete(data.inscriptionComplete || data.complete);
-                                                    if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
-                                                    if (data.accessControl) setAccessControl(data.accessControl);
-                                                    if (data.visibility) setVisibility(data.visibility);
-                                                    setIsReadOnly(isReadOnlyMode);
-                                                    
-                                                    const detectionCount = data.recognitionResults?.length || data.detections?.length || 0;
-                                                    const modeText = isReadOnlyMode ? ' (Read-only mode)' : '';
-                                                    alert(`✅ Loaded successfully!${modeText}\n\n📊 ${detectionCount} detections`);
-                                                };
+                                                // Load all data into state
+                                                if (data.image) setOriginalImage(data.image);
+                                                if (data.displayImage) setDisplayImage(data.displayImage);
+                                                if (data.images?.original) setOriginalImage(data.images.original);
+                                                if (data.images?.preprocessed) setDisplayImage(data.images.preprocessed);
+                                                if (data.preprocessing || data.images?.preprocessingSettings) 
+                                                    setPreprocessing(data.preprocessing || data.images.preprocessingSettings);
+                                                if (data.recognitionResults) setRecognitionResults(data.recognitionResults);
+                                                if (data.detections) setRecognitionResults(data.detections.map(d => ({
+                                                    glyph: d.glyph, confidence: d.confidence, position: d.position,
+                                                    thumbnail: d.thumbnail, matchType: d.matchType,
+                                                    corrected: d.corrected, originalGlyph: d.originalGlyph
+                                                })));
+                                                if (data.validations) setValidations(data.validations);
+                                                if (data.readingOrder) setReadingOrder(data.readingOrder);
+                                                if (data.readingData?.readingOrder) setReadingOrder(data.readingData.readingOrder);
+                                                if (data.wordBoundaries) setWordBoundaries(new Set(data.wordBoundaries));
+                                                if (data.readingData?.wordBoundaries) setWordBoundaries(new Set(data.readingData.wordBoundaries));
+                                                if (data.lineBreaks) setLineBreaks(new Set(data.lineBreaks));
+                                                if (data.readingData?.lineBreaks) setLineBreaks(new Set(data.readingData.lineBreaks));
+                                                if (data.translationEnglish || data.translations?.english)
+                                                    setTranslationEnglish(data.translationEnglish || data.translations?.english || '');
+                                                if (data.translationArabic || data.translations?.arabic)
+                                                    setTranslationArabic(data.translationArabic || data.translations?.arabic || '');
+                                                if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
+                                                if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                if (data.inscriptionComplete || data.complete) setInscriptionComplete(data.inscriptionComplete || data.complete);
+                                                if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
+                                                if (data.visibility) setVisibility(data.visibility);
                                                 
-                                                // Check if file has access control
-                                                if (data.accessControl && typeof AccessControl !== 'undefined') {
-                                                    // Store for unlock modal
-                                                    setPendingHkiData(data);
-                                                    setShowUnlockModal(true);
-                                                } else {
-                                                    // No access control - load directly
-                                                    loadDataIntoState(false);
-                                                }
+                                                // Clear file tracking for local files
+                                                setCurrentFileId(null);
+                                                setFileOwner(null);
+                                                setIsReadOnly(false);
+                                                
+                                                const detectionCount = data.recognitionResults?.length || data.detections?.length || 0;
+                                                alert(`✅ Loaded from local file!\n\n📊 ${detectionCount} detections`);
                                             } catch (err) {
                                                 alert('❌ Failed to load: ' + err.message);
                                             }
@@ -3533,6 +3609,10 @@
                                     visibility={visibility}
                                     onVisibilityChange={(newVis) => setVisibility(newVis)}
                                     syncStatus={syncStatus}
+                                    driveSignedIn={driveSignedIn}
+                                    driveUserEmail={driveUserEmail}
+                                    currentFileId={currentFileId}
+                                    fileOwner={fileOwner}
                                     imageRef={imageRef}
                                     className="bg-[#f7f3ed] border-2 border-ochre"
                                 />
@@ -4392,6 +4472,83 @@
                                 </div>
                             </div>
                         </div>
+                    )}
+                    
+                    {/* ===== WAREHOUSE MODAL ===== */}
+                    {showWarehouse && (
+                        <WarehouseModal
+                            isOpen={showWarehouse}
+                            onClose={() => setShowWarehouse(false)}
+                            currentUserEmail={driveUserEmail}
+                            onSignIn={async () => {
+                                if (typeof DriveSync !== 'undefined') {
+                                    await DriveSync.signIn();
+                                    setDriveSignedIn(DriveSync.isSignedIn());
+                                    setDriveUserEmail(DriveSync.getUserEmail());
+                                }
+                            }}
+                            onSignOut={() => {
+                                if (typeof DriveSync !== 'undefined') {
+                                    DriveSync.signOut();
+                                    setDriveSignedIn(false);
+                                    setDriveUserEmail(null);
+                                }
+                            }}
+                            onLoadHki={(hkiData, fileInfo) => {
+                                // Load image
+                                if (hkiData.image) setOriginalImage(hkiData.image);
+                                if (hkiData.displayImage) setDisplayImage(hkiData.displayImage);
+                                if (hkiData.images?.original) setOriginalImage(hkiData.images.original);
+                                if (hkiData.images?.preprocessed) setDisplayImage(hkiData.images.preprocessed);
+                                
+                                // Load preprocessing
+                                if (hkiData.preprocessing || hkiData.images?.preprocessingSettings) 
+                                    setPreprocessing(hkiData.preprocessing || hkiData.images.preprocessingSettings);
+                                
+                                // Load detections
+                                if (hkiData.recognitionResults) setRecognitionResults(hkiData.recognitionResults);
+                                if (hkiData.detections) setRecognitionResults(hkiData.detections.map(d => ({
+                                    glyph: d.glyph, confidence: d.confidence, position: d.position,
+                                    thumbnail: d.thumbnail, matchType: d.matchType,
+                                    corrected: d.corrected, originalGlyph: d.originalGlyph
+                                })));
+                                
+                                // Load validations and reading data
+                                if (hkiData.validations) setValidations(hkiData.validations);
+                                if (hkiData.readingOrder) setReadingOrder(hkiData.readingOrder);
+                                if (hkiData.readingData?.readingOrder) setReadingOrder(hkiData.readingData.readingOrder);
+                                if (hkiData.wordBoundaries) setWordBoundaries(new Set(hkiData.wordBoundaries));
+                                if (hkiData.readingData?.wordBoundaries) setWordBoundaries(new Set(hkiData.readingData.wordBoundaries));
+                                if (hkiData.lineBreaks) setLineBreaks(new Set(hkiData.lineBreaks));
+                                if (hkiData.readingData?.lineBreaks) setLineBreaks(new Set(hkiData.readingData.lineBreaks));
+                                
+                                // Load translations
+                                if (hkiData.translationEnglish || hkiData.translations?.english)
+                                    setTranslationEnglish(hkiData.translationEnglish || hkiData.translations?.english || '');
+                                if (hkiData.translationArabic || hkiData.translations?.arabic)
+                                    setTranslationArabic(hkiData.translationArabic || hkiData.translations?.arabic || '');
+                                
+                                // Load metadata
+                                if (hkiData.inscriptionTitle) setInscriptionTitle(hkiData.inscriptionTitle);
+                                if (hkiData.inscriptionNotes) setInscriptionNotes(hkiData.inscriptionNotes);
+                                if (hkiData.inscriptionComplete || hkiData.complete) 
+                                    setInscriptionComplete(hkiData.inscriptionComplete || hkiData.complete);
+                                if (hkiData.inscriptionId) setCurrentInscriptionId(hkiData.inscriptionId);
+                                if (hkiData.visibility) setVisibility(hkiData.visibility);
+                                
+                                // Set file tracking for Save vs Save As New
+                                setCurrentFileId(fileInfo.id);
+                                setFileOwner(fileInfo.owner);
+                                
+                                // Determine if read-only (not owner and not collaborator)
+                                const isOwner = fileInfo.owner === driveUserEmail;
+                                const isCollaborator = fileInfo.collaborators?.includes(driveUserEmail);
+                                setIsReadOnly(!driveUserEmail || (!isOwner && !isCollaborator));
+                                
+                                const count = hkiData.recognitionResults?.length || hkiData.detections?.length || 0;
+                                console.log(`📂 Loaded from warehouse: ${fileInfo.title} (${count} glyphs)`);
+                            }}
+                        />
                     )}
                 </div>
             );
