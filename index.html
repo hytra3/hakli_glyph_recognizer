@@ -684,9 +684,13 @@
                 
                 img.addEventListener('load', handleImageLoad);
                 
-                // Also observe container resize
+                // Also observe container resize (debounced to handle CSS transitions)
+                let resizeTimeout;
                 const resizeObserver = new ResizeObserver(() => {
-                    setBoxLayoutKey(k => k + 1);
+                    clearTimeout(resizeTimeout);
+                    resizeTimeout = setTimeout(() => {
+                        setBoxLayoutKey(k => k + 1);
+                    }, 100);
                 });
                 resizeObserver.observe(container);
                 
@@ -698,8 +702,18 @@
                 return () => {
                     img.removeEventListener('load', handleImageLoad);
                     resizeObserver.disconnect();
+                    clearTimeout(resizeTimeout);
                 };
             }, [displayImage]);
+            
+            // ========== UPDATE BOX LAYOUT WHEN PANELS TOGGLE ==========
+            useEffect(() => {
+                // Small delay to let CSS transitions complete
+                const timer = setTimeout(() => {
+                    setBoxLayoutKey(k => k + 1);
+                }, 200);
+                return () => clearTimeout(timer);
+            }, [isLeftPanelHidden, isRightPanelHidden]);
             
             // ========== IMAGE HANDLING ==========
             const loadImageToMat = useCallback((imageSource) => {
@@ -1257,30 +1271,12 @@
                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                 const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                 
-                // Calculate actual rendered image size accounting for object-contain
-                const imgAspectRatio = sourceWidth / sourceHeight;
-                const elementAspectRatio = img.clientWidth / img.clientHeight;
+                // Simple scale calculation
+                const scaleX = sourceWidth / img.clientWidth;
+                const scaleY = sourceHeight / img.clientHeight;
                 
-                let renderedWidth, renderedHeight, offsetX, offsetY;
-                
-                if (imgAspectRatio > elementAspectRatio) {
-                    renderedWidth = img.clientWidth;
-                    renderedHeight = img.clientWidth / imgAspectRatio;
-                    offsetX = 0;
-                    offsetY = (img.clientHeight - renderedHeight) / 2;
-                } else {
-                    renderedHeight = img.clientHeight;
-                    renderedWidth = img.clientHeight * imgAspectRatio;
-                    offsetY = 0;
-                    offsetX = (img.clientWidth - renderedWidth) / 2;
-                }
-                
-                // Convert screen coords to image coords (accounting for object-contain offset)
-                const scaleX = sourceWidth / renderedWidth;
-                const scaleY = sourceHeight / renderedHeight;
-                
-                const x = (Math.min(drawingBox.startX, drawingBox.currentX) - offsetX) * scaleX;
-                const y = (Math.min(drawingBox.startY, drawingBox.currentY) - offsetY) * scaleY;
+                const x = Math.min(drawingBox.startX, drawingBox.currentX) * scaleX;
+                const y = Math.min(drawingBox.startY, drawingBox.currentY) * scaleY;
                 const width = Math.abs(drawingBox.currentX - drawingBox.startX) * scaleX;
                 const height = Math.abs(drawingBox.currentY - drawingBox.startY) * scaleY;
                 
@@ -2792,34 +2788,16 @@
                                                 // Skip rendering if dimensions aren't ready
                                                 if (!img.clientWidth || !img.clientHeight || !sourceWidth || !sourceHeight) return null;
                                                 
-                                                // Calculate actual rendered image size accounting for object-contain
-                                                const imgAspectRatio = sourceWidth / sourceHeight;
-                                                const elementAspectRatio = img.clientWidth / img.clientHeight;
-                                                
-                                                let renderedWidth, renderedHeight, offsetX, offsetY;
-                                                
-                                                if (imgAspectRatio > elementAspectRatio) {
-                                                    // Image is wider - constrained by width
-                                                    renderedWidth = img.clientWidth;
-                                                    renderedHeight = img.clientWidth / imgAspectRatio;
-                                                    offsetX = 0;
-                                                    offsetY = (img.clientHeight - renderedHeight) / 2;
-                                                } else {
-                                                    // Image is taller - constrained by height  
-                                                    renderedHeight = img.clientHeight;
-                                                    renderedWidth = img.clientHeight * imgAspectRatio;
-                                                    offsetY = 0;
-                                                    offsetX = (img.clientWidth - renderedWidth) / 2;
-                                                }
-                                                
-                                                const scaleX = renderedWidth / sourceWidth;
-                                                const scaleY = renderedHeight / sourceHeight;
+                                                // Simple scale calculation
+                                                // With max-w-full max-h-full, the img element sizes to the rendered content
+                                                const scaleX = img.clientWidth / sourceWidth;
+                                                const scaleY = img.clientHeight / sourceHeight;
                                                 
                                                 return (
                                                     <div key={index} className={boxClass}
                                                         style={{
-                                                            left: offsetX + result.position.x * scaleX,
-                                                            top: offsetY + result.position.y * scaleY,
+                                                            left: result.position.x * scaleX,
+                                                            top: result.position.y * scaleY,
                                                             width: result.position.width * scaleX,
                                                             height: result.position.height * scaleY
                                                         }}
@@ -3322,26 +3300,9 @@
                                                     const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                                                     const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                                                     
-                                                    // Calculate actual rendered image size accounting for object-contain
-                                                    const imgAspectRatio = sourceWidth / sourceHeight;
-                                                    const elementAspectRatio = img.clientWidth / img.clientHeight;
-                                                    
-                                                    let renderedWidth, renderedHeight, imgOffsetX, imgOffsetY;
-                                                    
-                                                    if (imgAspectRatio > elementAspectRatio) {
-                                                        renderedWidth = img.clientWidth;
-                                                        renderedHeight = img.clientWidth / imgAspectRatio;
-                                                        imgOffsetX = 0;
-                                                        imgOffsetY = (img.clientHeight - renderedHeight) / 2;
-                                                    } else {
-                                                        renderedHeight = img.clientHeight;
-                                                        renderedWidth = img.clientHeight * imgAspectRatio;
-                                                        imgOffsetY = 0;
-                                                        imgOffsetX = (img.clientWidth - renderedWidth) / 2;
-                                                    }
-                                                    
-                                                    const scaleX = renderedWidth / sourceWidth;
-                                                    const scaleY = renderedHeight / sourceHeight;
+                                                    // Simple scale calculation
+                                                    const scaleX = img.clientWidth / sourceWidth;
+                                                    const scaleY = img.clientHeight / sourceHeight;
                                                     
                                                     // Offset for centering in container
                                                     const containerOffsetX = (container.clientWidth - img.clientWidth) / 2;
@@ -3354,8 +3315,8 @@
                                                             <div key={index}
                                                                 className={`absolute border-2 rounded ${isSelected ? 'border-ochre bg-ochre/20' : 'border-patina bg-patina/20'}`}
                                                                 style={{
-                                                                    left: containerOffsetX + imgOffsetX + result.position.x * scaleX,
-                                                                    top: containerOffsetY + imgOffsetY + result.position.y * scaleY,
+                                                                    left: containerOffsetX + result.position.x * scaleX,
+                                                                    top: containerOffsetY + result.position.y * scaleY,
                                                                     width: result.position.width * scaleX,
                                                                     height: result.position.height * scaleY,
                                                                     pointerEvents: 'auto'
