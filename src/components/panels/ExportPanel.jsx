@@ -1,6 +1,6 @@
 // ============================================
-// EXPORT PANEL (Simplified with Thumbnail)
-// HKI save/load with visibility control and image preview
+// EXPORT PANEL - Redesigned with HTML/PDF exports
+// Storage and sharing for HKI inscriptions
 // ============================================
 
 const ExportPanel = ({
@@ -40,6 +40,13 @@ const ExportPanel = ({
     
     const [isExporting, setIsExporting] = useState(false);
     const [showExportFormats, setShowExportFormats] = useState(false);
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [htmlOptions, setHtmlOptions] = useState({
+        showImage: true,
+        showDetections: true,
+        showTranscription: true,
+        showTranslation: true
+    });
     const fileInputRef = useRef(null);
     
     const hasData = recognitionResults && recognitionResults.length > 0;
@@ -53,126 +60,424 @@ const ExportPanel = ({
     
     const currentVisibility = visibilityOptions.find(v => v.value === visibility) || visibilityOptions[0];
     
-    // Get sync status text safely
+    // Get sync status
     const getSyncStatusText = () => {
-        if (!driveSignedIn) {
-            return '☁️ Sign in to Drive to enable sync';
-        }
-        if (!syncStatus || typeof syncStatus !== 'object') {
-            return '☁️ Auto-syncs to Drive';
-        }
-        if (syncStatus.isOnline === false) {
-            return '📴 Offline - will sync when connected';
-        }
-        if (syncStatus.pending > 0) {
-            return '⏳ ' + syncStatus.pending + ' pending sync';
-        }
+        if (!driveSignedIn) return '☁️ Sign in to Drive to enable sync';
+        if (!syncStatus || typeof syncStatus !== 'object') return '☁️ Auto-syncs to Drive';
+        if (syncStatus.isOnline === false) return '📴 Offline - will sync when connected';
+        if (syncStatus.pending > 0) return '⏳ ' + syncStatus.pending + ' pending sync';
         return '☁️ Auto-syncs to Drive';
     };
     
     const getSyncStatusClass = () => {
-        if (!driveSignedIn) {
-            return 'text-gray-400';
-        }
-        if (!syncStatus || typeof syncStatus !== 'object') {
-            return 'text-patina';
-        }
-        if (syncStatus.isOnline === false) {
-            return 'text-gray-500';
-        }
-        if (syncStatus.pending > 0) {
-            return 'text-amber-600';
-        }
+        if (!driveSignedIn) return 'text-gray-400';
+        if (!syncStatus || typeof syncStatus !== 'object') return 'text-patina';
+        if (syncStatus.isOnline === false) return 'text-gray-500';
+        if (syncStatus.pending > 0) return 'text-amber-600';
         return 'text-patina';
     };
     
     /**
-     * Export transcription as text file
+     * Get ordered transcription text
      */
-    const exportTranscription = () => {
-        if (!hasData) return;
+    const getTranscription = (script = 'translit') => {
+        if (!hasData) return '';
         
-        try {
-            const orderedIndices = readingOrder && readingOrder.length > 0 
-                ? readingOrder 
-                : recognitionResults.map((_, i) => i);
+        const orderedIndices = readingOrder && readingOrder.length > 0 
+            ? readingOrder 
+            : recognitionResults.map((_, i) => i);
+        
+        let parts = [];
+        let currentWord = [];
+        
+        orderedIndices.forEach((idx) => {
+            const result = recognitionResults[idx];
+            if (!result) return;
             
-            let translitParts = [];
-            let arabicParts = [];
-            let currentWord = [];
-            let currentArabicWord = [];
+            const char = script === 'arabic' 
+                ? (result.glyph.arabic || result.glyph.transliteration || result.glyph.name)
+                : (result.glyph.transliteration || result.glyph.name);
             
-            orderedIndices.forEach((idx) => {
-                const result = recognitionResults[idx];
-                if (!result) return;
-                
-                currentWord.push(result.glyph.transliteration || result.glyph.name);
-                currentArabicWord.push(result.glyph.arabic || result.glyph.transliteration);
-                
-                if (wordBoundaries && wordBoundaries.has(idx)) {
-                    translitParts.push(currentWord.join(''));
-                    arabicParts.push(currentArabicWord.join(''));
-                    currentWord = [];
-                    currentArabicWord = [];
-                }
-                
-                if (lineBreaks && lineBreaks.has(idx)) {
-                    if (currentWord.length > 0) {
-                        translitParts.push(currentWord.join(''));
-                        arabicParts.push(currentArabicWord.join(''));
-                        currentWord = [];
-                        currentArabicWord = [];
-                    }
-                    translitParts.push('\n');
-                    arabicParts.push('\n');
-                }
-            });
+            currentWord.push(char);
             
-            if (currentWord.length > 0) {
-                translitParts.push(currentWord.join(''));
-                arabicParts.push(currentArabicWord.join(''));
+            if (wordBoundaries && wordBoundaries.has(idx)) {
+                parts.push(currentWord.join(''));
+                currentWord = [];
             }
             
-            const content = [
-                '='.repeat(60),
-                'HAKLI INSCRIPTION TRANSCRIPTION',
-                'ID: ' + (currentInscriptionId || 'Unknown'),
-                'Title: ' + (inscriptionTitle || 'Untitled'),
-                'Date: ' + new Date().toLocaleString(),
-                '='.repeat(60),
-                '',
-                'TRANSLITERATION:',
-                translitParts.join(' ').replace(/ \n /g, '\n'),
-                '',
-                'ARABIC:',
-                arabicParts.join(' ').replace(/ \n /g, '\n') || '(not provided)',
-                '',
-                'ENGLISH TRANSLATION:',
-                translationEnglish || '(not provided)',
-                '',
-                '='.repeat(60),
-                'Total glyphs: ' + recognitionResults.length,
-                'Reading direction: ' + readingDirection,
-                'Words: ' + (wordBoundaries ? Array.from(wordBoundaries).length + 1 : 1),
-                'Lines: ' + (lineBreaks ? Array.from(lineBreaks).length + 1 : 1),
-                '='.repeat(60)
-            ].join('\n');
+            if (lineBreaks && lineBreaks.has(idx)) {
+                if (currentWord.length > 0) {
+                    parts.push(currentWord.join(''));
+                    currentWord = [];
+                }
+                parts.push('\n');
+            }
+        });
+        
+        if (currentWord.length > 0) {
+            parts.push(currentWord.join(''));
+        }
+        
+        return parts.join(' ').replace(/ \n /g, '\n').trim();
+    };
+    
+    /**
+     * Export annotated image
+     */
+    const exportImage = () => {
+        if (!hasData || !imageRef || !imageRef.current) return;
+        
+        try {
+            const img = imageRef.current;
+            const canvas = document.createElement('canvas');
             
-            const blob = new Blob([content], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = (currentInscriptionId || 'inscription') + '-transcription.txt';
-            a.click();
-            URL.revokeObjectURL(url);
+            // Add space for transcription below image
+            const transcription = getTranscription();
+            const padding = 20;
+            const textHeight = transcription ? 80 : 0;
+            
+            canvas.width = img.naturalWidth + padding * 2;
+            canvas.height = img.naturalHeight + padding * 2 + textHeight;
+            const ctx = canvas.getContext('2d');
+            
+            // Background
+            ctx.fillStyle = '#f5f3f0';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw image
+            ctx.drawImage(img, padding, padding);
+            
+            // Draw detection boxes
+            recognitionResults.forEach((result, index) => {
+                const pos = result.position;
+                const validation = validations ? validations[index] : null;
+                
+                // Colors based on validation
+                if (validation && validation.isCorrect) {
+                    ctx.strokeStyle = '#6b8e7f';
+                    ctx.fillStyle = 'rgba(107, 142, 127, 0.2)';
+                } else if (validation && !validation.isCorrect) {
+                    ctx.strokeStyle = '#a0674f';
+                    ctx.fillStyle = 'rgba(160, 103, 79, 0.2)';
+                } else {
+                    ctx.strokeStyle = '#5c4d6e';
+                    ctx.fillStyle = 'rgba(92, 77, 110, 0.15)';
+                }
+                
+                ctx.lineWidth = 2;
+                ctx.fillRect(pos.x + padding, pos.y + padding, pos.width, pos.height);
+                ctx.strokeRect(pos.x + padding, pos.y + padding, pos.width, pos.height);
+                
+                // Glyph label
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.font = 'bold 12px Arial';
+                ctx.fillText(result.glyph.transliteration || result.glyph.name, pos.x + padding, pos.y + padding - 3);
+            });
+            
+            // Draw transcription below image
+            if (transcription) {
+                ctx.fillStyle = '#333';
+                ctx.font = '16px "Courier New", monospace';
+                const textY = img.naturalHeight + padding * 2 + 20;
+                
+                // Title
+                ctx.font = 'bold 14px Arial';
+                ctx.fillText(inscriptionTitle || currentInscriptionId || 'Inscription', padding, textY);
+                
+                // Transcription
+                ctx.font = '18px "Courier New", monospace';
+                ctx.fillText(transcription.replace(/\n/g, ' | '), padding, textY + 25);
+                
+                // Translation if available
+                if (translationEnglish) {
+                    ctx.font = 'italic 14px Arial';
+                    ctx.fillStyle = '#666';
+                    ctx.fillText('"' + translationEnglish.substring(0, 80) + (translationEnglish.length > 80 ? '...' : '') + '"', padding, textY + 50);
+                }
+            }
+            
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = (inscriptionTitle || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '.png';
+                a.click();
+                URL.revokeObjectURL(url);
+            }, 'image/png');
         } catch (error) {
-            console.error('Export error:', error);
+            console.error('Image export error:', error);
             alert('❌ Export failed: ' + error.message);
         }
     };
     
     /**
-     * Export detection data as JSON
+     * Generate HTML report content
+     */
+    const generateHtmlContent = (forPrint = false) => {
+        const transcriptTranslit = getTranscription('translit');
+        const transcriptArabic = getTranscription('arabic');
+        const dateStr = new Date().toLocaleDateString('en-US', { 
+            year: 'numeric', month: 'long', day: 'numeric' 
+        });
+        
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${inscriptionTitle || currentInscriptionId || 'Hakli Inscription'}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: Georgia, 'Times New Roman', serif;
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 40px 20px;
+            background: ${forPrint ? '#fff' : '#f9f7f4'};
+            color: #333;
+            line-height: 1.6;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #8b7d6b;
+        }
+        .header h1 {
+            font-size: 24px;
+            color: #5c4d6e;
+            margin-bottom: 8px;
+        }
+        .header .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        .header .date {
+            color: #999;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .section {
+            margin: 25px 0;
+        }
+        .section-title {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #8b7d6b;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .image-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .image-container img {
+            max-width: 100%;
+            height: auto;
+            border: 3px solid #e8e4df;
+            border-radius: 4px;
+        }
+        .transcription {
+            font-family: 'Courier New', monospace;
+            font-size: 22px;
+            padding: 20px;
+            background: #fff;
+            border-left: 4px solid #5c4d6e;
+            margin: 15px 0;
+        }
+        .transcription.arabic {
+            font-family: 'Traditional Arabic', 'Arabic Typesetting', serif;
+            direction: rtl;
+            text-align: right;
+            font-size: 26px;
+        }
+        .translation {
+            font-style: italic;
+            padding: 15px 20px;
+            background: #f0ede8;
+            border-radius: 4px;
+            color: #555;
+        }
+        .notes {
+            padding: 15px;
+            background: #faf8f5;
+            border: 1px solid #e8e4df;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .detection-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .detection-card {
+            text-align: center;
+            padding: 8px;
+            background: #fff;
+            border: 1px solid #e8e4df;
+            border-radius: 4px;
+        }
+        .detection-card img {
+            width: 50px;
+            height: 50px;
+            object-fit: contain;
+            margin-bottom: 5px;
+        }
+        .detection-card .glyph {
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            font-weight: bold;
+            color: #5c4d6e;
+        }
+        .detection-card .confidence {
+            font-size: 11px;
+            color: #999;
+        }
+        .metadata {
+            font-size: 12px;
+            color: #999;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e8e4df;
+        }
+        @media print {
+            body { padding: 20px; background: #fff; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>${inscriptionTitle || 'Hakli Inscription'}</h1>
+        <div class="subtitle">${currentInscriptionId || ''}</div>
+        <div class="date">${dateStr}</div>
+    </div>
+    
+    ${htmlOptions.showImage && (displayImage || image) ? `
+    <div class="section">
+        <div class="section-title">Inscription Image</div>
+        <div class="image-container">
+            <img src="${displayImage || image}" alt="Inscription">
+        </div>
+    </div>
+    ` : ''}
+    
+    ${htmlOptions.showTranscription && transcriptTranslit ? `
+    <div class="section">
+        <div class="section-title">Transliteration</div>
+        <div class="transcription">${transcriptTranslit.replace(/\n/g, '<br>')}</div>
+    </div>
+    
+    ${transcriptArabic ? `
+    <div class="section">
+        <div class="section-title">Arabic Script</div>
+        <div class="transcription arabic">${transcriptArabic.replace(/\n/g, '<br>')}</div>
+    </div>
+    ` : ''}
+    ` : ''}
+    
+    ${htmlOptions.showTranslation && translationEnglish ? `
+    <div class="section">
+        <div class="section-title">English Translation</div>
+        <div class="translation">${translationEnglish}</div>
+    </div>
+    ` : ''}
+    
+    ${htmlOptions.showTranslation && translationArabic ? `
+    <div class="section">
+        <div class="section-title">ترجمة عربية</div>
+        <div class="translation" style="direction: rtl; text-align: right;">${translationArabic}</div>
+    </div>
+    ` : ''}
+    
+    ${inscriptionNotes ? `
+    <div class="section">
+        <div class="section-title">Notes</div>
+        <div class="notes">${inscriptionNotes}</div>
+    </div>
+    ` : ''}
+    
+    ${htmlOptions.showDetections && hasData ? `
+    <div class="section">
+        <div class="section-title">Detected Glyphs (${recognitionResults.length})</div>
+        <div class="detection-grid">
+            ${recognitionResults.map((result, idx) => `
+                <div class="detection-card">
+                    ${result.thumbnail ? `<img src="${result.thumbnail}" alt="${result.glyph.name}">` : ''}
+                    <div class="glyph">${result.glyph.transliteration || result.glyph.name}</div>
+                    <div class="confidence">${Math.round(result.confidence * 100)}%</div>
+                </div>
+            `).join('')}
+        </div>
+    </div>
+    ` : ''}
+    
+    <div class="metadata">
+        <strong>Reading direction:</strong> ${readingDirection || 'RTL'}<br>
+        <strong>Total glyphs:</strong> ${recognitionResults?.length || 0}<br>
+        <strong>Generated by:</strong> Hakli Glyph Recognizer
+    </div>
+</body>
+</html>`;
+    };
+    
+    /**
+     * Export HTML report
+     */
+    const exportHtml = () => {
+        if (!hasData) return;
+        
+        setIsExporting(true);
+        
+        try {
+            const html = generateHtmlContent(false);
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = (inscriptionTitle || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '-report.html';
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('HTML export error:', error);
+            alert('❌ Export failed: ' + error.message);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+    
+    /**
+     * Export PDF (via print dialog)
+     */
+    const exportPdf = () => {
+        if (!hasData) return;
+        
+        setIsExporting(true);
+        
+        try {
+            const html = generateHtmlContent(true);
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(html);
+            printWindow.document.close();
+            
+            // Wait for images to load then print
+            printWindow.onload = () => {
+                setTimeout(() => {
+                    printWindow.print();
+                    setIsExporting(false);
+                }, 500);
+            };
+        } catch (error) {
+            console.error('PDF export error:', error);
+            alert('❌ Export failed: ' + error.message);
+            setIsExporting(false);
+        }
+    };
+    
+    /**
+     * Export JSON (for database/backup)
      */
     const exportJson = () => {
         if (!hasData) return;
@@ -182,9 +487,9 @@ const ExportPanel = ({
                 metadata: {
                     inscriptionId: currentInscriptionId,
                     title: inscriptionTitle,
+                    notes: inscriptionNotes,
                     exportDate: new Date().toISOString(),
-                    totalGlyphs: recognitionResults.length,
-                    preprocessing: preprocessing
+                    totalGlyphs: recognitionResults.length
                 },
                 detections: recognitionResults.map((result, index) => ({
                     index,
@@ -196,8 +501,7 @@ const ExportPanel = ({
                     },
                     confidence: result.confidence,
                     position: result.position,
-                    validated: validations ? validations[index] : null,
-                    corrected: result.corrected || false
+                    validated: validations ? validations[index] : null
                 })),
                 reading: {
                     direction: readingDirection,
@@ -220,129 +524,8 @@ const ExportPanel = ({
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {
-            console.error('Export error:', error);
+            console.error('JSON export error:', error);
             alert('❌ Export failed: ' + error.message);
-        }
-    };
-    
-    /**
-     * Export as CSV
-     */
-    const exportCsv = () => {
-        if (!hasData) return;
-        
-        try {
-            const headers = ['Index', 'Glyph ID', 'Name', 'Transliteration', 'Arabic', 'Confidence', 'Validated', 'Correct', 'X', 'Y', 'Width', 'Height'];
-            
-            const rows = recognitionResults.map((result, index) => [
-                index,
-                result.glyph.id,
-                result.glyph.name,
-                result.glyph.transliteration,
-                result.glyph.arabic || '',
-                (result.confidence * 100).toFixed(1) + '%',
-                validations && validations[index] ? 'Yes' : 'No',
-                validations && validations[index] && validations[index].isCorrect ? 'Yes' : (validations && validations[index] ? 'No' : ''),
-                result.position.x,
-                result.position.y,
-                result.position.width,
-                result.position.height
-            ]);
-            
-            const csv = [headers.join(','), ...rows.map(r => r.map(cell => '"' + cell + '"').join(','))].join('\n');
-            
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = (currentInscriptionId || 'inscription') + '-data.csv';
-            a.click();
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('Export error:', error);
-            alert('❌ Export failed: ' + error.message);
-        }
-    };
-    
-    /**
-     * Export annotated image
-     */
-    const exportAnnotatedImage = () => {
-        if (!hasData || !imageRef || !imageRef.current) return;
-        
-        try {
-            const img = imageRef.current;
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-            const ctx = canvas.getContext('2d');
-            
-            ctx.drawImage(img, 0, 0);
-            
-            recognitionResults.forEach((result, index) => {
-                const pos = result.position;
-                const validation = validations ? validations[index] : null;
-                
-                if (validation && validation.isCorrect) {
-                    ctx.strokeStyle = '#6b8e7f';
-                    ctx.fillStyle = 'rgba(107, 142, 127, 0.3)';
-                } else if (validation && !validation.isCorrect) {
-                    ctx.strokeStyle = '#a0674f';
-                    ctx.fillStyle = 'rgba(160, 103, 79, 0.3)';
-                } else {
-                    ctx.strokeStyle = '#8b7d6b';
-                    ctx.fillStyle = 'rgba(139, 125, 107, 0.3)';
-                }
-                
-                ctx.lineWidth = 3;
-                ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-                ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
-                
-                ctx.fillStyle = ctx.strokeStyle;
-                ctx.font = 'bold 14px Arial';
-                ctx.fillText(result.glyph.transliteration, pos.x, pos.y - 5);
-            });
-            
-            canvas.toBlob((blob) => {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = (currentInscriptionId || 'inscription') + '-annotated.png';
-                a.click();
-                URL.revokeObjectURL(url);
-            }, 'image/png');
-        } catch (error) {
-            console.error('Export error:', error);
-            alert('❌ Export failed: ' + error.message);
-        }
-    };
-    
-    /**
-     * Export HTML report
-     */
-    const exportHtmlReport = () => {
-        if (!hasData) return;
-        
-        setIsExporting(true);
-        
-        try {
-            if (typeof ExportUtils !== 'undefined' && ExportUtils.exportHtmlReport) {
-                ExportUtils.exportHtmlReport({
-                    recognitionResults,
-                    validations,
-                    image,
-                    displayImage,
-                    readingDirection,
-                    wordBoundaries,
-                    translationEnglish,
-                    translationArabic,
-                    currentInscriptionId
-                });
-            } else {
-                alert('HTML report export not available');
-            }
-        } finally {
-            setIsExporting(false);
         }
     };
     
@@ -357,9 +540,9 @@ const ExportPanel = ({
                 {/* Status */}
                 <div className="text-sm text-gray-600">
                     {hasData ? (
-                        <span className="text-patina">✅ {recognitionResults.length} glyphs ready to export</span>
+                        <span className="text-patina">✅ {recognitionResults.length} glyphs ready</span>
                     ) : (
-                        <span className="text-gray-400">No recognition data to export</span>
+                        <span className="text-gray-400">No recognition data</span>
                     )}
                 </div>
                 
@@ -415,12 +598,9 @@ const ExportPanel = ({
                     
                     {/* Save / Load buttons */}
                     <div className="space-y-2 mb-2">
-                        {/* Save buttons - only when signed in */}
                         {driveSignedIn ? (
                             <div className="flex gap-2">
-                                {/* Save (update existing) - only if owner or collaborator */}
-                                {currentFileId && (fileOwner === driveUserEmail || 
-                                    (typeof fileOwner === 'undefined')) ? (
+                                {currentFileId && (fileOwner === driveUserEmail || typeof fileOwner === 'undefined') ? (
                                     <button
                                         onClick={() => onSaveHki && onSaveHki()}
                                         disabled={!hasData}
@@ -430,7 +610,6 @@ const ExportPanel = ({
                                     </button>
                                 ) : null}
                                 
-                                {/* Save As New - always available when signed in */}
                                 <button
                                     onClick={() => onSaveAsNew && onSaveAsNew()}
                                     disabled={!hasData}
@@ -450,7 +629,6 @@ const ExportPanel = ({
                         
                         {/* Load buttons */}
                         <div className="flex gap-2">
-                            {/* Load from Warehouse */}
                             <button
                                 onClick={() => onOpenWarehouse && onOpenWarehouse()}
                                 className="flex-1 px-3 py-2 bg-ochre text-white rounded-lg hover:bg-ochre/80 transition-colors text-sm font-medium"
@@ -458,7 +636,6 @@ const ExportPanel = ({
                                 📚 Browse Warehouse
                             </button>
                             
-                            {/* Load from local file */}
                             <label className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 cursor-pointer transition-colors text-sm text-center font-medium">
                                 📂
                                 <input
@@ -477,70 +654,132 @@ const ExportPanel = ({
                         </div>
                     </div>
                     
-                    {/* Sync status - rendered as text only */}
+                    {/* Sync status */}
                     <div className={'text-xs text-center ' + getSyncStatusClass()}>
                         {getSyncStatusText()}
                     </div>
                 </div>
                 
-                {/* Export Formats - Collapsible */}
+                {/* Share / Export Section */}
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <button
                         onClick={() => setShowExportFormats(!showExportFormats)}
                         className="w-full px-3 py-2 bg-gray-50 hover:bg-gray-100 flex items-center justify-between text-sm text-gray-600"
                     >
-                        <span>📋 Export formats</span>
+                        <span>📤 Share & Export</span>
                         <span className={'transition-transform ' + (showExportFormats ? 'rotate-180' : '')}>▼</span>
                     </button>
                     
                     {showExportFormats && (
-                        <div className="p-3 space-y-2 bg-white">
+                        <div className="p-3 space-y-3 bg-white">
+                            {/* Primary exports */}
                             <div className="grid grid-cols-2 gap-2">
                                 <button
-                                    onClick={exportTranscription}
-                                    disabled={!hasData}
-                                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 rounded-lg transition-colors text-sm"
-                                >
-                                    📝 Text
-                                </button>
-                                <button
-                                    onClick={exportJson}
-                                    disabled={!hasData}
-                                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 rounded-lg transition-colors text-sm"
-                                >
-                                    📋 JSON
-                                </button>
-                                <button
-                                    onClick={exportCsv}
-                                    disabled={!hasData}
-                                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 rounded-lg transition-colors text-sm"
-                                >
-                                    📊 CSV
-                                </button>
-                                <button
-                                    onClick={exportAnnotatedImage}
+                                    onClick={exportImage}
                                     disabled={!hasData || !imageRef || !imageRef.current}
-                                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 rounded-lg transition-colors text-sm"
+                                    className="px-3 py-3 bg-blue-50 hover:bg-blue-100 disabled:bg-gray-50 disabled:text-gray-400 rounded-lg transition-colors text-sm border border-blue-200"
+                                    title="Share on social media, WhatsApp"
                                 >
-                                    🖼️ Image
+                                    <div className="text-lg mb-1">📷</div>
+                                    <div className="font-medium">Image</div>
+                                    <div className="text-xs text-gray-500">For sharing</div>
+                                </button>
+                                
+                                <button
+                                    onClick={exportPdf}
+                                    disabled={!hasData || isExporting}
+                                    className="px-3 py-3 bg-red-50 hover:bg-red-100 disabled:bg-gray-50 disabled:text-gray-400 rounded-lg transition-colors text-sm border border-red-200"
+                                    title="Printable document for elders"
+                                >
+                                    <div className="text-lg mb-1">📄</div>
+                                    <div className="font-medium">PDF</div>
+                                    <div className="text-xs text-gray-500">For printing</div>
                                 </button>
                             </div>
                             
-                            <button
-                                onClick={exportHtmlReport}
-                                disabled={!hasData || isExporting}
-                                className="w-full px-3 py-2 bg-ochre text-white rounded-lg hover:bg-[#a07a5a] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-sm"
-                            >
-                                {isExporting ? '⏳ Generating...' : '📄 Full HTML Report'}
-                            </button>
+                            {/* HTML Export with options */}
+                            <div className="border border-gray-200 rounded-lg p-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium text-gray-700">🌐 HTML Report</span>
+                                    <button
+                                        onClick={exportHtml}
+                                        disabled={!hasData || isExporting}
+                                        className="px-3 py-1 bg-ochre text-white rounded hover:bg-ochre/80 disabled:bg-gray-300 text-xs"
+                                    >
+                                        {isExporting ? '⏳...' : 'Download'}
+                                    </button>
+                                </div>
+                                
+                                {/* HTML options */}
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={htmlOptions.showImage}
+                                            onChange={(e) => setHtmlOptions(prev => ({...prev, showImage: e.target.checked}))}
+                                            className="rounded"
+                                        />
+                                        <span>Image</span>
+                                    </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={htmlOptions.showDetections}
+                                            onChange={(e) => setHtmlOptions(prev => ({...prev, showDetections: e.target.checked}))}
+                                            className="rounded"
+                                        />
+                                        <span>Detections</span>
+                                    </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={htmlOptions.showTranscription}
+                                            onChange={(e) => setHtmlOptions(prev => ({...prev, showTranscription: e.target.checked}))}
+                                            className="rounded"
+                                        />
+                                        <span>Transcription</span>
+                                    </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={htmlOptions.showTranslation}
+                                            onChange={(e) => setHtmlOptions(prev => ({...prev, showTranslation: e.target.checked}))}
+                                            className="rounded"
+                                        />
+                                        <span>Translation</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            {/* Advanced (JSON) */}
+                            <div className="border-t border-gray-100 pt-2">
+                                <button
+                                    onClick={() => setShowAdvanced(!showAdvanced)}
+                                    className="text-xs text-gray-500 hover:text-gray-700"
+                                >
+                                    {showAdvanced ? '▼' : '▶'} Advanced
+                                </button>
+                                
+                                {showAdvanced && (
+                                    <div className="mt-2">
+                                        <button
+                                            onClick={exportJson}
+                                            disabled={!hasData}
+                                            className="w-full px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 rounded-lg transition-colors text-sm"
+                                        >
+                                            💾 JSON Data (for database import)
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
                 
-                {/* Tips - only show when export formats visible */}
+                {/* Tips */}
                 {showExportFormats && (
                     <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded">
-                        💡 <strong>HKI files</strong> contain everything needed to resume work later.
+                        💡 <strong>Image</strong> for quick sharing · <strong>PDF</strong> for printing · <strong>HTML</strong> for email
                     </div>
                 )}
             </div>
@@ -551,4 +790,4 @@ const ExportPanel = ({
 // Make globally available
 window.ExportPanel = ExportPanel;
 
-console.log('✅ ExportPanel (simplified with thumbnail) loaded');
+console.log('✅ ExportPanel (redesigned with HTML/PDF) loaded');
