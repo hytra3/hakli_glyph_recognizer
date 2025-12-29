@@ -348,7 +348,7 @@ const ExportPanel = ({
     
     return (
         <CollapsibleSection
-            title="📤 Export"
+            title="💾 Storage"
             isCollapsed={isCollapsed}
             onToggle={onToggleCollapse}
             className={className}
