@@ -21,6 +21,34 @@ const WarehouseModal = ({
     const [sharedItems, setSharedItems] = useState([]);
     const [selectedItem, setSelectedItem] = useState(null);
     const [showCollaborators, setShowCollaborators] = useState(false);
+    const [thumbnails, setThumbnails] = useState({}); // { fileId: thumbnailDataUrl }
+    
+    // Load thumbnail for a specific file
+    const loadThumbnail = useCallback(async (fileId) => {
+        if (thumbnails[fileId]) return; // Already loaded
+        
+        try {
+            const hkiData = await DriveSync.loadHki(fileId);
+            const thumbSrc = hkiData.displayImage || hkiData.image || 
+                            hkiData.images?.preprocessed || hkiData.images?.original;
+            if (thumbSrc) {
+                setThumbnails(prev => ({ ...prev, [fileId]: thumbSrc }));
+            }
+        } catch (err) {
+            console.warn('Failed to load thumbnail for', fileId, err);
+        }
+    }, [thumbnails]);
+    
+    // Load thumbnails for visible items
+    const loadThumbnails = useCallback(async (items) => {
+        // Load first 10 thumbnails immediately, rest lazily
+        const toLoad = items.slice(0, 10);
+        for (const item of toLoad) {
+            if (!thumbnails[item.id]) {
+                loadThumbnail(item.id);
+            }
+        }
+    }, [thumbnails, loadThumbnail]);
     
     // Load warehouse contents
     const loadWarehouse = useCallback(async () => {
@@ -43,17 +71,24 @@ const WarehouseModal = ({
                 
                 const shared = await DriveSync.listSharedWithMe(currentUserEmail);
                 setSharedItems(shared || []);
+                
+                // Load thumbnails for drafts first (user's own files)
+                loadThumbnails(drafts || []);
             } else {
                 setDraftItems([]);
                 setSharedItems([]);
             }
+            
+            // Load thumbnails for published
+            loadThumbnails(published || []);
+            
         } catch (err) {
             console.error('Failed to load warehouse:', err);
             setError(err.message);
         } finally {
             setLoading(false);
         }
-    }, [currentUserEmail]);
+    }, [currentUserEmail, loadThumbnails]);
     
     // Load on open
     useEffect(() => {
@@ -65,6 +100,10 @@ const WarehouseModal = ({
     // Handle item click
     const handleItemClick = (item) => {
         setSelectedItem(item);
+        // Load thumbnail if not already loaded
+        if (!thumbnails[item.id]) {
+            loadThumbnail(item.id);
+        }
     };
     
     // Handle load
@@ -87,6 +126,7 @@ const WarehouseModal = ({
     // Render thumbnail card
     const ThumbnailCard = ({ item, isOwner = false, sharedBy = null }) => {
         const isSelected = selectedItem?.id === item.id;
+        const thumbSrc = thumbnails[item.id];
         
         return (
             <div
@@ -99,9 +139,9 @@ const WarehouseModal = ({
             >
                 {/* Thumbnail */}
                 <div className="aspect-square bg-gray-100 relative">
-                    {item.thumbnail ? (
+                    {thumbSrc ? (
                         <img 
-                            src={item.thumbnail} 
+                            src={thumbSrc} 
                             alt={item.title || 'Inscription'}
                             className="w-full h-full object-cover"
                         />

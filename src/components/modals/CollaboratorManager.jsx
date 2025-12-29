@@ -19,6 +19,23 @@ const CollaboratorManager = ({
     const [selectedCollaborator, setSelectedCollaborator] = useState(null);
     const [itemSharing, setItemSharing] = useState({}); // { itemId: [email1, email2] }
     const [saving, setSaving] = useState(false);
+    const [thumbnails, setThumbnails] = useState({}); // { fileId: thumbnailDataUrl }
+    
+    // Load thumbnail for a specific file
+    const loadThumbnail = useCallback(async (fileId) => {
+        if (thumbnails[fileId]) return;
+        
+        try {
+            const hkiData = await DriveSync.loadHki(fileId);
+            const thumbSrc = hkiData.displayImage || hkiData.image || 
+                            hkiData.images?.preprocessed || hkiData.images?.original;
+            if (thumbSrc) {
+                setThumbnails(prev => ({ ...prev, [fileId]: thumbSrc }));
+            }
+        } catch (err) {
+            console.warn('Failed to load thumbnail for', fileId, err);
+        }
+    }, [thumbnails]);
     
     // Load profile
     const loadProfile = useCallback(async () => {
@@ -35,13 +52,18 @@ const CollaboratorManager = ({
                     sharingMap[item.id] = item.collaborators || [];
                 });
                 setItemSharing(sharingMap);
+                
+                // Load thumbnails for first 10 items
+                myItems.slice(0, 10).forEach(item => {
+                    loadThumbnail(item.id);
+                });
             }
         } catch (err) {
             console.error('Failed to load profile:', err);
         } finally {
             setLoading(false);
         }
-    }, [currentUserEmail, myItems]);
+    }, [currentUserEmail, myItems, loadThumbnail]);
     
     useEffect(() => {
         if (isOpen) {
@@ -276,6 +298,7 @@ const CollaboratorManager = ({
                                                         <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
                                                             {myItems.map(item => {
                                                                 const isShared = (itemSharing[item.id] || []).includes(collab.email);
+                                                                const thumbSrc = thumbnails[item.id];
                                                                 return (
                                                                     <div
                                                                         key={item.id}
@@ -288,9 +311,9 @@ const CollaboratorManager = ({
                                                                     >
                                                                         {/* Thumbnail */}
                                                                         <div className="aspect-square bg-gray-100 relative">
-                                                                            {item.thumbnail ? (
+                                                                            {thumbSrc ? (
                                                                                 <img 
-                                                                                    src={item.thumbnail}
+                                                                                    src={thumbSrc}
                                                                                     alt={item.title}
                                                                                     className="w-full h-full object-cover"
                                                                                 />

@@ -2985,7 +2985,7 @@
                                                                             {result.isMerged && <span className="text-xs text-blue-500">🔗</span>}
                                                                             {/* Boundary indicators */}
                                                                             {wordBoundaries.has(idx) && <span className="text-xs font-bold text-stone px-1 bg-stone/20 rounded">|</span>}
-                                                                            {columnBreaks.has(idx) && <span className="text-xs font-bold text-stone-dark px-1 bg-stone/20 rounded">‖</span>}
+                                                                            {columnBreaks.has(idx) && <span className="text-xs font-bold text-amber-700 px-1 bg-stone/20 rounded">‖</span>}
                                                                             {lineBreaks.has(idx) && <span className="text-xs font-bold text-ancient-purple px-1 bg-ancient-purple/20 rounded">⏎</span>}
                                                                         </div>
                                                                         <div className="font-medium text-gray-900 text-sm truncate">{result.glyph.name}</div>
@@ -3079,7 +3079,7 @@
                                                                 }}
                                                                     className={`px-2 py-1 rounded text-xs font-bold ${
                                                                         columnBreaks.has(idx) 
-                                                                            ? 'bg-stone-dark text-white' 
+                                                                            ? 'bg-amber-700 text-white' 
                                                                             : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                                                                     }`}
                                                                     title="Toggle column break after this glyph">
@@ -3284,7 +3284,7 @@
                                         }`}
                                         title="Horizontal Left-to-Right"
                                     >
-                                        → LTR
+                                        →
                                     </button>
                                     <button
                                         onClick={() => setTranscriptionFormat('horizontal-rtl')}
@@ -3295,7 +3295,7 @@
                                         }`}
                                         title="Horizontal Right-to-Left"
                                     >
-                                        ← RTL
+                                        ←
                                     </button>
                                     <button
                                         onClick={() => setTranscriptionFormat('vertical-rtl')}
@@ -3306,7 +3306,7 @@
                                         }`}
                                         title="Vertical columns, Right-to-Left"
                                     >
-                                        ↓ R→L
+                                        ↓ L←R
                                     </button>
                                     <button
                                         onClick={() => setTranscriptionFormat('vertical-ltr')}
@@ -3328,8 +3328,8 @@
                                         <div 
                                             className="flex gap-6"
                                             style={{
-                                                flexDirection: transcriptionFormat === 'vertical-rtl' ? 'row-reverse' : 'row',
-                                                justifyContent: transcriptionFormat === 'vertical-rtl' ? 'flex-end' : 'flex-start'
+                                                direction: transcriptionFormat === 'vertical-rtl' ? 'rtl' : 'ltr',
+                                                justifyContent: 'flex-start'
                                             }}
                                         >
                                             {(() => {
@@ -3351,13 +3351,18 @@
                                                 return columns.map((column, colIdx) => (
                                                     <div 
                                                         key={colIdx}
-                                                        className="flex flex-col items-center border-l-2 border-stone/20 pl-4 first:border-l-0 first:pl-0"
+                                                        className={`flex flex-col items-center pl-4 first:pl-0 ${
+                                                            transcriptionFormat === 'vertical-rtl' 
+                                                                ? 'border-r-2 border-stone/20 pr-4 first:border-r-0 first:pr-0' 
+                                                                : 'border-l-2 border-stone/20 first:border-l-0'
+                                                        }`}
                                                         style={{
                                                             fontFamily: transcriptionScript === 'arabic'
                                                                 ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
                                                                 : '"Courier New", monospace',
                                                             fontSize: '20px',
-                                                            lineHeight: '2'
+                                                            lineHeight: '2',
+                                                            direction: 'ltr' // Keep text direction LTR within columns
                                                         }}
                                                     >
                                                         {column.map(({ result, index, actualIdx }) => (
@@ -3396,8 +3401,8 @@
                                                         }
                                                     </span>
                                                     {lineBreaks.has(readingOrder[index] ?? index) && <span className="text-ancient-purple font-bold mx-2">⏎<br/></span>}
-                                                    {!lineBreaks.has(readingOrder[index] ?? index) && columnBreaks.has(readingOrder[index] ?? index) && <span className="text-stone-dark font-bold mx-1">‖</span>}
-                                                    {!lineBreaks.has(readingOrder[index] ?? index) && !columnBreaks.has(readingOrder[index] ?? index) && wordBoundaries.has(readingOrder[index] ?? index) && <span className="text-stone-dark font-bold mx-1">|</span>}
+                                                    {!lineBreaks.has(readingOrder[index] ?? index) && columnBreaks.has(readingOrder[index] ?? index) && <span className="text-amber-700 font-bold mx-1">‖</span>}
+                                                    {!lineBreaks.has(readingOrder[index] ?? index) && !columnBreaks.has(readingOrder[index] ?? index) && wordBoundaries.has(readingOrder[index] ?? index) && <span className="text-amber-700 font-bold mx-1">|</span>}
                                                     {!lineBreaks.has(readingOrder[index] ?? index) && !columnBreaks.has(readingOrder[index] ?? index) && !wordBoundaries.has(readingOrder[index] ?? index) && index < getReadingOrderedResults().length - 1 && <span className="text-gray-400">·</span>}
                                                 </span>
                                             ))}
@@ -3407,8 +3412,8 @@
 
                                 <div className="mt-3 text-xs text-gray-600">
                                     <span className="text-ancient-purple font-bold">⏎</span> = line break · 
-                                    <span className="text-stone-dark font-bold">‖</span> = column break · 
-                                    <span className="text-stone-dark font-bold">|</span> = word boundary · 
+                                    <span className="text-amber-700 font-bold">‖</span> = column break · 
+                                    <span className="text-amber-700 font-bold">|</span> = word boundary · 
                                     <span className="text-gray-400">·</span> = glyph separator
                                     {transcriptionFormat.startsWith('vertical') && (
                                         <span className="ml-2 text-stone">(Vertical: line/column breaks split into columns)</span>
