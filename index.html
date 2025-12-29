@@ -142,7 +142,7 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251227-access';
+        const APP_VERSION = 'v251229';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Access Control & Auto-Sync)');
 
         function HakliGlyphRecognizer() {
@@ -3371,9 +3371,6 @@
                                                                     ? (result.glyph.arabic || result.glyph.name)
                                                                     : (result.glyph.transliteration || result.glyph.name)
                                                                 }
-                                                                {wordBoundaries.has(actualIdx) && (
-                                                                    <span className="text-stone font-bold"> —</span>
-                                                                )}
                                                             </span>
                                                         ))}
                                                     </div>

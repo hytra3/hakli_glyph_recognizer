@@ -516,7 +516,7 @@ const ExportPanel = ({
             ${columns.map(col => `
                 <div class="vertical-column">
                     ${col.map(g => `
-                        <span class="vertical-glyph">${g.char}${g.hasWordBoundary ? '<span class="word-boundary"> —</span>' : ''}</span>
+                        <span class="vertical-glyph">${g.char}</span>
                     `).join('')}
                 </div>
             `).join('')}
@@ -534,7 +534,7 @@ const ExportPanel = ({
             ${arabicColumns.map(col => `
                 <div class="vertical-column">
                     ${col.map(g => `
-                        <span class="vertical-glyph arabic">${g.char}${g.hasWordBoundary ? '<span class="word-boundary"> —</span>' : ''}</span>
+                        <span class="vertical-glyph arabic">${g.char}</span>
                     `).join('')}
                 </div>
             `).join('')}
@@ -579,7 +579,6 @@ const ExportPanel = ({
                     <div class="number">${readingIdx + 1}</div>
                     ${result.thumbnail ? `<img src="${result.thumbnail}" alt="${result.glyph.name}">` : ''}
                     <div class="glyph">${result.glyph.transliteration || result.glyph.name}</div>
-                    <div class="confidence">${Math.round(result.confidence * 100)}%</div>
                 </div>
             `}).join('')}
         </div>
