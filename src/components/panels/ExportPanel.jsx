@@ -20,6 +20,7 @@ const ExportPanel = ({
     inscriptionTitle,
     inscriptionNotes,
     inscriptionComplete,
+    transcriptionFormat = 'horizontal-rtl', // Added for vertical layout support
     isCollapsed,
     onToggleCollapse,
     onSaveHki,
@@ -43,6 +44,7 @@ const ExportPanel = ({
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [htmlOptions, setHtmlOptions] = useState({
         showImage: true,
+        showAnnotated: false,  // Show numbered boxes on image
         showDetections: true,
         showTranscription: true,
         showTranslation: true
@@ -119,6 +121,102 @@ const ExportPanel = ({
         }
         
         return parts.join(' ').replace(/ \n /g, '\n').trim();
+    };
+    
+    /**
+     * Get columns for vertical layout
+     */
+    const getColumns = (script = 'translit') => {
+        if (!hasData) return [];
+        
+        const orderedIndices = readingOrder && readingOrder.length > 0 
+            ? readingOrder 
+            : recognitionResults.map((_, i) => i);
+        
+        const columns = [];
+        let currentColumn = [];
+        
+        orderedIndices.forEach((idx, i) => {
+            const result = recognitionResults[idx];
+            if (!result) return;
+            
+            const char = script === 'arabic' 
+                ? (result.glyph.arabic || result.glyph.transliteration || result.glyph.name)
+                : (result.glyph.transliteration || result.glyph.name);
+            
+            currentColumn.push({
+                char,
+                hasWordBoundary: wordBoundaries && wordBoundaries.has(idx),
+                index: i + 1
+            });
+            
+            // Split column on line break or column break
+            if ((lineBreaks && lineBreaks.has(idx)) || (columnBreaks && columnBreaks.has(idx))) {
+                columns.push(currentColumn);
+                currentColumn = [];
+            }
+        });
+        
+        if (currentColumn.length > 0) {
+            columns.push(currentColumn);
+        }
+        
+        return columns;
+    };
+    
+    /**
+     * Generate annotated image as data URL with numbered boxes
+     */
+    const generateAnnotatedImageDataUrl = () => {
+        return new Promise((resolve) => {
+            if (!hasData || !imageRef || !imageRef.current) {
+                resolve(null);
+                return;
+            }
+            
+            const img = imageRef.current;
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.drawImage(img, 0, 0);
+            
+            // Get reading order
+            const orderedIndices = readingOrder && readingOrder.length > 0 
+                ? readingOrder 
+                : recognitionResults.map((_, i) => i);
+            
+            // Draw boxes with numbers
+            orderedIndices.forEach((idx, readingIdx) => {
+                const result = recognitionResults[idx];
+                if (!result) return;
+                
+                const pos = result.position;
+                const num = readingIdx + 1;
+                
+                // Box
+                ctx.strokeStyle = '#5c4d6e';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
+                
+                // Number badge
+                const badgeSize = Math.min(24, Math.max(16, pos.width * 0.3));
+                ctx.fillStyle = '#5c4d6e';
+                ctx.beginPath();
+                ctx.arc(pos.x + pos.width, pos.y, badgeSize / 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Number text
+                ctx.fillStyle = '#fff';
+                ctx.font = `bold ${badgeSize * 0.6}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(num.toString(), pos.x + pos.width, pos.y);
+            });
+            
+            resolve(canvas.toDataURL('image/png'));
+        });
     };
     
     /**
@@ -213,12 +311,27 @@ const ExportPanel = ({
     /**
      * Generate HTML report content
      */
-    const generateHtmlContent = (forPrint = false) => {
+    const generateHtmlContent = async (forPrint = false) => {
         const transcriptTranslit = getTranscription('translit');
         const transcriptArabic = getTranscription('arabic');
+        const columns = getColumns('translit');
+        const arabicColumns = getColumns('arabic');
+        const isVertical = transcriptionFormat && transcriptionFormat.startsWith('vertical');
+        const isRtl = transcriptionFormat && (transcriptionFormat.includes('rtl') || transcriptionFormat === 'vertical-rtl');
         const dateStr = new Date().toLocaleDateString('en-US', { 
             year: 'numeric', month: 'long', day: 'numeric' 
         });
+        
+        // Get annotated image if option is selected
+        let annotatedImageSrc = null;
+        if (htmlOptions.showAnnotated) {
+            annotatedImageSrc = await generateAnnotatedImageDataUrl();
+        }
+        
+        // Get reading order for numbered detections
+        const orderedIndices = readingOrder && readingOrder.length > 0 
+            ? readingOrder 
+            : recognitionResults.map((_, i) => i);
         
         return `<!DOCTYPE html>
 <html lang="en">
@@ -248,18 +361,9 @@ const ExportPanel = ({
             color: #5c4d6e;
             margin-bottom: 8px;
         }
-        .header .subtitle {
-            color: #666;
-            font-size: 14px;
-        }
-        .header .date {
-            color: #999;
-            font-size: 12px;
-            margin-top: 5px;
-        }
-        .section {
-            margin: 25px 0;
-        }
+        .header .subtitle { color: #666; font-size: 14px; }
+        .header .date { color: #999; font-size: 12px; margin-top: 5px; }
+        .section { margin: 25px 0; }
         .section-title {
             font-size: 14px;
             text-transform: uppercase;
@@ -268,10 +372,7 @@ const ExportPanel = ({
             margin-bottom: 10px;
             font-weight: bold;
         }
-        .image-container {
-            text-align: center;
-            margin: 20px 0;
-        }
+        .image-container { text-align: center; margin: 20px 0; }
         .image-container img {
             max-width: 100%;
             height: auto;
@@ -292,6 +393,36 @@ const ExportPanel = ({
             text-align: right;
             font-size: 26px;
         }
+        /* Vertical column layout */
+        .vertical-transcription {
+            display: flex;
+            gap: 30px;
+            padding: 20px;
+            background: #fff;
+            border: 1px solid #e8e4df;
+            border-radius: 4px;
+            overflow-x: auto;
+            direction: ${isRtl ? 'rtl' : 'ltr'};
+        }
+        .vertical-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 15px;
+            border-right: 1px solid #e8e4df;
+            direction: ltr;
+        }
+        .vertical-column:last-child { border-right: none; }
+        .vertical-glyph {
+            font-family: 'Courier New', monospace;
+            font-size: 22px;
+            line-height: 2;
+        }
+        .vertical-glyph.arabic {
+            font-family: 'Traditional Arabic', 'Arabic Typesetting', serif;
+            font-size: 26px;
+        }
+        .word-boundary { color: #8b7d6b; font-weight: bold; }
         .translation {
             font-style: italic;
             padding: 15px 20px;
@@ -308,31 +439,44 @@ const ExportPanel = ({
         }
         .detection-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-            gap: 10px;
+            grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+            gap: 8px;
             margin: 15px 0;
         }
         .detection-card {
             text-align: center;
-            padding: 8px;
+            padding: 8px 4px;
             background: #fff;
             border: 1px solid #e8e4df;
             border-radius: 4px;
         }
+        .detection-card .number {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            line-height: 20px;
+            background: #5c4d6e;
+            color: #fff;
+            border-radius: 50%;
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
         .detection-card img {
-            width: 50px;
-            height: 50px;
+            width: 45px;
+            height: 45px;
             object-fit: contain;
-            margin-bottom: 5px;
+            display: block;
+            margin: 4px auto;
         }
         .detection-card .glyph {
             font-family: 'Courier New', monospace;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
             color: #5c4d6e;
         }
         .detection-card .confidence {
-            font-size: 11px;
+            font-size: 10px;
             color: #999;
         }
         .metadata {
@@ -357,9 +501,9 @@ const ExportPanel = ({
     
     ${htmlOptions.showImage && (displayImage || image) ? `
     <div class="section">
-        <div class="section-title">Inscription Image</div>
+        <div class="section-title">Inscription Image${htmlOptions.showAnnotated ? ' (with numbered detections)' : ''}</div>
         <div class="image-container">
-            <img src="${displayImage || image}" alt="Inscription">
+            <img src="${htmlOptions.showAnnotated && annotatedImageSrc ? annotatedImageSrc : (displayImage || image)}" alt="Inscription">
         </div>
     </div>
     ` : ''}
@@ -367,13 +511,37 @@ const ExportPanel = ({
     ${htmlOptions.showTranscription && transcriptTranslit ? `
     <div class="section">
         <div class="section-title">Transliteration</div>
+        ${isVertical && columns.length > 0 ? `
+        <div class="vertical-transcription">
+            ${columns.map(col => `
+                <div class="vertical-column">
+                    ${col.map(g => `
+                        <span class="vertical-glyph">${g.char}${g.hasWordBoundary ? '<span class="word-boundary"> —</span>' : ''}</span>
+                    `).join('')}
+                </div>
+            `).join('')}
+        </div>
+        ` : `
         <div class="transcription">${transcriptTranslit.replace(/\n/g, '<br>')}</div>
+        `}
     </div>
     
     ${transcriptArabic ? `
     <div class="section">
         <div class="section-title">Arabic Script</div>
+        ${isVertical && arabicColumns.length > 0 ? `
+        <div class="vertical-transcription">
+            ${arabicColumns.map(col => `
+                <div class="vertical-column">
+                    ${col.map(g => `
+                        <span class="vertical-glyph arabic">${g.char}${g.hasWordBoundary ? '<span class="word-boundary"> —</span>' : ''}</span>
+                    `).join('')}
+                </div>
+            `).join('')}
+        </div>
+        ` : `
         <div class="transcription arabic">${transcriptArabic.replace(/\n/g, '<br>')}</div>
+        `}
     </div>
     ` : ''}
     ` : ''}
@@ -403,19 +571,24 @@ const ExportPanel = ({
     <div class="section">
         <div class="section-title">Detected Glyphs (${recognitionResults.length})</div>
         <div class="detection-grid">
-            ${recognitionResults.map((result, idx) => `
+            ${orderedIndices.map((idx, readingIdx) => {
+                const result = recognitionResults[idx];
+                if (!result) return '';
+                return `
                 <div class="detection-card">
+                    <div class="number">${readingIdx + 1}</div>
                     ${result.thumbnail ? `<img src="${result.thumbnail}" alt="${result.glyph.name}">` : ''}
                     <div class="glyph">${result.glyph.transliteration || result.glyph.name}</div>
                     <div class="confidence">${Math.round(result.confidence * 100)}%</div>
                 </div>
-            `).join('')}
+            `}).join('')}
         </div>
     </div>
     ` : ''}
     
     <div class="metadata">
         <strong>Reading direction:</strong> ${readingDirection || 'RTL'}<br>
+        <strong>Layout:</strong> ${isVertical ? 'Vertical columns' : 'Horizontal'} (${isRtl ? 'R→L' : 'L→R'})<br>
         <strong>Total glyphs:</strong> ${recognitionResults?.length || 0}<br>
         <strong>Generated by:</strong> Hakli Glyph Recognizer
     </div>
@@ -426,13 +599,13 @@ const ExportPanel = ({
     /**
      * Export HTML report
      */
-    const exportHtml = () => {
+    const exportHtml = async () => {
         if (!hasData) return;
         
         setIsExporting(true);
         
         try {
-            const html = generateHtmlContent(false);
+            const html = await generateHtmlContent(false);
             const blob = new Blob([html], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -451,13 +624,13 @@ const ExportPanel = ({
     /**
      * Export PDF (via print dialog)
      */
-    const exportPdf = () => {
+    const exportPdf = async () => {
         if (!hasData) return;
         
         setIsExporting(true);
         
         try {
-            const html = generateHtmlContent(true);
+            const html = await generateHtmlContent(true);
             const printWindow = window.open('', '_blank');
             printWindow.document.write(html);
             printWindow.document.close();
@@ -721,6 +894,15 @@ const ExportPanel = ({
                                         />
                                         <span>Image</span>
                                     </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer" title="Show numbered detection boxes on image">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={htmlOptions.showAnnotated}
+                                            onChange={(e) => setHtmlOptions(prev => ({...prev, showAnnotated: e.target.checked, showImage: e.target.checked ? true : prev.showImage}))}
+                                            className="rounded"
+                                        />
+                                        <span>① Numbered</span>
+                                    </label>
                                     <label className="flex items-center gap-1.5 cursor-pointer">
                                         <input 
                                             type="checkbox" 
@@ -728,7 +910,7 @@ const ExportPanel = ({
                                             onChange={(e) => setHtmlOptions(prev => ({...prev, showDetections: e.target.checked}))}
                                             className="rounded"
                                         />
-                                        <span>Detections</span>
+                                        <span>Glyph list</span>
                                     </label>
                                     <label className="flex items-center gap-1.5 cursor-pointer">
                                         <input 
