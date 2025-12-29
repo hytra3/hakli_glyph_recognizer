@@ -118,6 +118,7 @@
     <script src="src/storage/drive-sync.js"></script>
     <script src="src/storage/access-control.js"></script>
     <script src="src/storage/sync-manager.js"></script>
+    <script src="src/storage/local-autosave.js"></script>
     
     
     <!-- Recognition modules -->
@@ -244,6 +245,7 @@
             const [showWarehouse, setShowWarehouse] = useState(false);
             const [currentFileId, setCurrentFileId] = useState(null); // Drive file ID for updates
             const [fileOwner, setFileOwner] = useState(null); // Owner email of current file
+            const [localSaveTime, setLocalSaveTime] = useState(null); // Last local auto-save time
             
             // Push state to undo stack before making changes
             const pushUndo = useCallback((actionType, data) => {
@@ -448,6 +450,106 @@
                     return unsubscribe;
                 }
             }, []);
+            
+            // ========== LOCAL AUTO-SAVE SETUP ==========
+            useEffect(() => {
+                if (typeof LocalAutoSave !== 'undefined') {
+                    // Set up callback to update UI when save completes
+                    LocalAutoSave.onSave((saveTime) => {
+                        setLocalSaveTime(saveTime);
+                    });
+                    
+                    // Check for saved work on page load
+                    const checkSavedWork = async () => {
+                        try {
+                            const saved = await LocalAutoSave.loadLastWork();
+                            if (saved && saved.data && saved.data.recognitionResults && saved.data.recognitionResults.length > 0) {
+                                const savedDate = new Date(saved.timestamp);
+                                const timeAgo = Math.round((Date.now() - savedDate) / 60000);
+                                const timeStr = timeAgo < 60 ? `${timeAgo} minutes` : `${Math.round(timeAgo / 60)} hours`;
+                                
+                                const restore = confirm(
+                                    `📂 Found unsaved work from ${timeStr} ago.\n\n` +
+                                    `Title: ${saved.data.title || 'Untitled'}\n` +
+                                    `Glyphs: ${saved.data.recognitionResults.length}\n\n` +
+                                    `Would you like to restore it?`
+                                );
+                                
+                                if (restore) {
+                                    // Restore the saved data
+                                    const data = saved.data;
+                                    if (data.image) setOriginalImage(data.image);
+                                    if (data.displayImage) setDisplayImage(data.displayImage);
+                                    if (data.recognitionResults) setRecognitionResults(data.recognitionResults);
+                                    if (data.validations) setValidations(data.validations);
+                                    if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
+                                    if (data.title) setInscriptionTitle(data.title);
+                                    if (data.notes) setInscriptionNotes(data.notes);
+                                    if (data.translationEnglish) setTranslationEnglish(data.translationEnglish);
+                                    if (data.translationArabic) setTranslationArabic(data.translationArabic);
+                                    if (data.readingData) {
+                                        if (data.readingData.direction) setReadingDirection(data.readingData.direction);
+                                        if (data.readingData.order) setReadingOrder(data.readingData.order);
+                                        if (data.readingData.wordBoundaries) setWordBoundaries(new Set(data.readingData.wordBoundaries));
+                                        if (data.readingData.lineBreaks) setLineBreaks(new Set(data.readingData.lineBreaks));
+                                        if (data.readingData.columnBreaks) setColumnBreaks(new Set(data.readingData.columnBreaks));
+                                    }
+                                    if (data.preprocessing) setPreprocessing(data.preprocessing);
+                                    setLocalSaveTime(savedDate);
+                                    console.log('✅ Restored saved work');
+                                }
+                            }
+                        } catch (err) {
+                            console.warn('Could not check for saved work:', err);
+                        }
+                    };
+                    
+                    // Check after a short delay to let the app initialize
+                    setTimeout(checkSavedWork, 1000);
+                }
+            }, []);
+            
+            // ========== LOCAL AUTO-SAVE TRIGGER ==========
+            useEffect(() => {
+                if (typeof LocalAutoSave !== 'undefined' && recognitionResults && recognitionResults.length > 0) {
+                    // Schedule a save when data changes
+                    LocalAutoSave.scheduleSave(() => ({
+                        version: '2.0',
+                        inscriptionId: currentInscriptionId,
+                        title: inscriptionTitle,
+                        notes: inscriptionNotes,
+                        complete: inscriptionComplete,
+                        visibility: visibility,
+                        image: originalImage,
+                        displayImage: displayImage,
+                        recognitionResults: recognitionResults.map(r => ({
+                            glyph: {
+                                id: r.glyph?.id,
+                                name: r.glyph?.name,
+                                transliteration: r.glyph?.transliteration,
+                                arabic: r.glyph?.arabic,
+                                description: r.glyph?.description
+                            },
+                            confidence: r.confidence,
+                            position: r.position,
+                            thumbnail: r.thumbnail,
+                            corrected: r.corrected || false
+                        })),
+                        validations: validations,
+                        readingData: {
+                            direction: readingDirection,
+                            order: readingOrder,
+                            wordBoundaries: wordBoundaries ? Array.from(wordBoundaries) : [],
+                            lineBreaks: lineBreaks ? Array.from(lineBreaks) : [],
+                            columnBreaks: columnBreaks ? Array.from(columnBreaks) : []
+                        },
+                        translationEnglish: translationEnglish,
+                        translationArabic: translationArabic,
+                        preprocessing: preprocessing
+                    }));
+                }
+            }, [recognitionResults, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, 
+                translationEnglish, translationArabic, inscriptionTitle, inscriptionNotes, visibility]);
             
             // ========== LOAD CHART ==========
             useEffect(() => {
@@ -1155,12 +1257,30 @@
                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                 const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                 
-                // Convert screen coords to image coords (using clientWidth for consistency)
-                const scaleX = sourceWidth / img.clientWidth;
-                const scaleY = sourceHeight / img.clientHeight;
+                // Calculate actual rendered image size accounting for object-contain
+                const imgAspectRatio = sourceWidth / sourceHeight;
+                const elementAspectRatio = img.clientWidth / img.clientHeight;
                 
-                const x = Math.min(drawingBox.startX, drawingBox.currentX) * scaleX;
-                const y = Math.min(drawingBox.startY, drawingBox.currentY) * scaleY;
+                let renderedWidth, renderedHeight, offsetX, offsetY;
+                
+                if (imgAspectRatio > elementAspectRatio) {
+                    renderedWidth = img.clientWidth;
+                    renderedHeight = img.clientWidth / imgAspectRatio;
+                    offsetX = 0;
+                    offsetY = (img.clientHeight - renderedHeight) / 2;
+                } else {
+                    renderedHeight = img.clientHeight;
+                    renderedWidth = img.clientHeight * imgAspectRatio;
+                    offsetY = 0;
+                    offsetX = (img.clientWidth - renderedWidth) / 2;
+                }
+                
+                // Convert screen coords to image coords (accounting for object-contain offset)
+                const scaleX = sourceWidth / renderedWidth;
+                const scaleY = sourceHeight / renderedHeight;
+                
+                const x = (Math.min(drawingBox.startX, drawingBox.currentX) - offsetX) * scaleX;
+                const y = (Math.min(drawingBox.startY, drawingBox.currentY) - offsetY) * scaleY;
                 const width = Math.abs(drawingBox.currentX - drawingBox.startX) * scaleX;
                 const height = Math.abs(drawingBox.currentY - drawingBox.startY) * scaleY;
                 
@@ -2063,6 +2183,23 @@
                                                 <button
                                                     onClick={async () => {
                                                         if (typeof DriveSync !== 'undefined') {
+                                                            try {
+                                                                await DriveSync.signIn();
+                                                                setDriveSignedIn(DriveSync.isSignedIn());
+                                                                setDriveUserEmail(DriveSync.getUserEmail());
+                                                                alert('✅ Connection refreshed!');
+                                                            } catch (err) {
+                                                                console.error('Refresh failed:', err);
+                                                                alert('❌ Refresh failed. Try signing out and back in.');
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="text-white/60 hover:text-white text-xs px-1"
+                                                    title="Refresh Google connection"
+                                                >🔄</button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (typeof DriveSync !== 'undefined') {
                                                             DriveSync.signOut();
                                                             setDriveSignedIn(false);
                                                             setDriveUserEmail(null);
@@ -2649,19 +2786,34 @@
                                                 const _ = boxLayoutKey;
                                                 
                                                 // Use tracked recognition source dimensions if available
-                                                // This ensures boxes align correctly even if the display image changed
                                                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                                                 const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                                                 
-                                                // Use clientWidth/Height for consistent calculations
-                                                const scaleX = img.clientWidth / sourceWidth;
-                                                const scaleY = img.clientHeight / sourceHeight;
-                                                // Use offsetLeft/Top for actual position within container
-                                                const offsetX = img.offsetLeft;
-                                                const offsetY = img.offsetTop;
-                                                
                                                 // Skip rendering if dimensions aren't ready
-                                                if (!img.clientWidth || !img.clientHeight) return null;
+                                                if (!img.clientWidth || !img.clientHeight || !sourceWidth || !sourceHeight) return null;
+                                                
+                                                // Calculate actual rendered image size accounting for object-contain
+                                                const imgAspectRatio = sourceWidth / sourceHeight;
+                                                const elementAspectRatio = img.clientWidth / img.clientHeight;
+                                                
+                                                let renderedWidth, renderedHeight, offsetX, offsetY;
+                                                
+                                                if (imgAspectRatio > elementAspectRatio) {
+                                                    // Image is wider - constrained by width
+                                                    renderedWidth = img.clientWidth;
+                                                    renderedHeight = img.clientWidth / imgAspectRatio;
+                                                    offsetX = 0;
+                                                    offsetY = (img.clientHeight - renderedHeight) / 2;
+                                                } else {
+                                                    // Image is taller - constrained by height  
+                                                    renderedHeight = img.clientHeight;
+                                                    renderedWidth = img.clientHeight * imgAspectRatio;
+                                                    offsetY = 0;
+                                                    offsetX = (img.clientWidth - renderedWidth) / 2;
+                                                }
+                                                
+                                                const scaleX = renderedWidth / sourceWidth;
+                                                const scaleY = renderedHeight / sourceHeight;
                                                 
                                                 return (
                                                     <div key={index} className={boxClass}
@@ -3166,10 +3318,34 @@
                                                     const img = imageRef.current;
                                                     const container = imageContainerRef.current;
                                                     if (!img || !container) return null;
-                                                    const scaleX = img.clientWidth / img.naturalWidth;
-                                                    const scaleY = img.clientHeight / img.naturalHeight;
-                                                    const offsetX = (container.clientWidth - img.clientWidth) / 2;
-                                                    const offsetY = (container.clientHeight - img.clientHeight) / 2;
+                                                    
+                                                    const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
+                                                    const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
+                                                    
+                                                    // Calculate actual rendered image size accounting for object-contain
+                                                    const imgAspectRatio = sourceWidth / sourceHeight;
+                                                    const elementAspectRatio = img.clientWidth / img.clientHeight;
+                                                    
+                                                    let renderedWidth, renderedHeight, imgOffsetX, imgOffsetY;
+                                                    
+                                                    if (imgAspectRatio > elementAspectRatio) {
+                                                        renderedWidth = img.clientWidth;
+                                                        renderedHeight = img.clientWidth / imgAspectRatio;
+                                                        imgOffsetX = 0;
+                                                        imgOffsetY = (img.clientHeight - renderedHeight) / 2;
+                                                    } else {
+                                                        renderedHeight = img.clientHeight;
+                                                        renderedWidth = img.clientHeight * imgAspectRatio;
+                                                        imgOffsetY = 0;
+                                                        imgOffsetX = (img.clientWidth - renderedWidth) / 2;
+                                                    }
+                                                    
+                                                    const scaleX = renderedWidth / sourceWidth;
+                                                    const scaleY = renderedHeight / sourceHeight;
+                                                    
+                                                    // Offset for centering in container
+                                                    const containerOffsetX = (container.clientWidth - img.clientWidth) / 2;
+                                                    const containerOffsetY = (container.clientHeight - img.clientHeight) / 2;
                                                     
                                                     return recognitionResults.map((result, index) => {
                                                         if (excludedDetections.has(index)) return null;
@@ -3178,8 +3354,8 @@
                                                             <div key={index}
                                                                 className={`absolute border-2 rounded ${isSelected ? 'border-ochre bg-ochre/20' : 'border-patina bg-patina/20'}`}
                                                                 style={{
-                                                                    left: offsetX + result.position.x * scaleX,
-                                                                    top: offsetY + result.position.y * scaleY,
+                                                                    left: containerOffsetX + imgOffsetX + result.position.x * scaleX,
+                                                                    top: containerOffsetY + imgOffsetY + result.position.y * scaleY,
                                                                     width: result.position.width * scaleX,
                                                                     height: result.position.height * scaleY,
                                                                     pointerEvents: 'auto'
@@ -3526,7 +3702,30 @@
                                             alert('✅ Saved to Drive!');
                                         } catch (err) {
                                             console.error('Save failed:', err);
-                                            alert('❌ Save failed: ' + err.message);
+                                            // Check if it's an auth error
+                                            const isAuthError = err.message && (
+                                                err.message.includes('authentication') ||
+                                                err.message.includes('OAuth') ||
+                                                err.message.includes('token') ||
+                                                err.message.includes('401') ||
+                                                err.message.includes('403')
+                                            );
+                                            if (isAuthError) {
+                                                const retry = confirm('❌ Session expired. Click OK to reconnect to Google Drive.');
+                                                if (retry && typeof DriveSync !== 'undefined') {
+                                                    try {
+                                                        await DriveSync.signIn();
+                                                        setDriveSignedIn(DriveSync.isSignedIn());
+                                                        setDriveUserEmail(DriveSync.getUserEmail());
+                                                        alert('✅ Reconnected! Please try saving again.');
+                                                    } catch (e) {
+                                                        setDriveSignedIn(false);
+                                                        alert('❌ Reconnect failed. Please sign in again.');
+                                                    }
+                                                }
+                                            } else {
+                                                alert('❌ Save failed: ' + err.message);
+                                            }
                                         }
                                     }}
                                     onSaveAsNew={async () => {
@@ -3595,7 +3794,30 @@
                                             alert('✅ Saved as new inscription!');
                                         } catch (err) {
                                             console.error('Save As New failed:', err);
-                                            alert('❌ Save failed: ' + err.message);
+                                            // Check if it's an auth error
+                                            const isAuthError = err.message && (
+                                                err.message.includes('authentication') ||
+                                                err.message.includes('OAuth') ||
+                                                err.message.includes('token') ||
+                                                err.message.includes('401') ||
+                                                err.message.includes('403')
+                                            );
+                                            if (isAuthError) {
+                                                const retry = confirm('❌ Session expired. Click OK to reconnect to Google Drive.');
+                                                if (retry && typeof DriveSync !== 'undefined') {
+                                                    try {
+                                                        await DriveSync.signIn();
+                                                        setDriveSignedIn(DriveSync.isSignedIn());
+                                                        setDriveUserEmail(DriveSync.getUserEmail());
+                                                        alert('✅ Reconnected! Please try saving again.');
+                                                    } catch (e) {
+                                                        setDriveSignedIn(false);
+                                                        alert('❌ Reconnect failed. Please sign in again.');
+                                                    }
+                                                }
+                                            } else {
+                                                alert('❌ Save failed: ' + err.message);
+                                            }
                                         }
                                     }}
                                     onOpenWarehouse={() => setShowWarehouse(true)}
@@ -3654,6 +3876,7 @@
                                     visibility={visibility}
                                     onVisibilityChange={(newVis) => setVisibility(newVis)}
                                     syncStatus={syncStatus}
+                                    localSaveTime={localSaveTime}
                                     driveSignedIn={driveSignedIn}
                                     driveUserEmail={driveUserEmail}
                                     currentFileId={currentFileId}

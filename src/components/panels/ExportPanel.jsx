@@ -30,6 +30,7 @@ const ExportPanel = ({
     visibility = 'draft',
     onVisibilityChange,
     syncStatus = null,
+    localSaveTime = null,
     driveSignedIn = false,
     driveUserEmail = null,
     currentFileId = null,
@@ -77,6 +78,19 @@ const ExportPanel = ({
         if (syncStatus.isOnline === false) return 'text-gray-500';
         if (syncStatus.pending > 0) return 'text-amber-600';
         return 'text-patina';
+    };
+    
+    // Get local save time text
+    const getLocalSaveText = () => {
+        if (!localSaveTime) return null;
+        
+        const seconds = Math.floor((new Date() - new Date(localSaveTime)) / 1000);
+        
+        if (seconds < 60) return 'just now';
+        if (seconds < 120) return '1 min ago';
+        if (seconds < 3600) return Math.floor(seconds / 60) + ' min ago';
+        if (seconds < 7200) return '1 hour ago';
+        return Math.floor(seconds / 3600) + ' hours ago';
     };
     
     /**
@@ -649,6 +663,74 @@ const ExportPanel = ({
     };
     
     /**
+     * Export HKI file locally (for offline backup)
+     */
+    const exportHki = () => {
+        if (!hasData) return;
+        
+        try {
+            // Build complete HKI data (same format as Drive save)
+            const hkiData = {
+                version: '2.0',
+                inscriptionId: currentInscriptionId || `HKI-${Date.now().toString(36).toUpperCase()}`,
+                title: inscriptionTitle || 'Untitled',
+                notes: inscriptionNotes || '',
+                complete: inscriptionComplete || false,
+                visibility: visibility || 'draft',
+                created: new Date().toISOString(),
+                modified: new Date().toISOString(),
+                
+                // Images
+                image: image,
+                displayImage: displayImage,
+                
+                // Recognition data
+                recognitionResults: recognitionResults.map(r => ({
+                    glyph: {
+                        id: r.glyph?.id,
+                        name: r.glyph?.name,
+                        transliteration: r.glyph?.transliteration,
+                        arabic: r.glyph?.arabic,
+                        description: r.glyph?.description
+                    },
+                    confidence: r.confidence,
+                    position: r.position,
+                    thumbnail: r.thumbnail,
+                    corrected: r.corrected || false
+                })),
+                validations: validations || {},
+                
+                // Reading data
+                readingData: {
+                    direction: readingDirection,
+                    order: readingOrder || [],
+                    wordBoundaries: wordBoundaries ? Array.from(wordBoundaries) : [],
+                    lineBreaks: lineBreaks ? Array.from(lineBreaks) : [],
+                    columnBreaks: columnBreaks ? Array.from(columnBreaks) : []
+                },
+                
+                // Translations
+                translationEnglish: translationEnglish || '',
+                translationArabic: translationArabic || '',
+                
+                // Preprocessing settings
+                preprocessing: preprocessing || {}
+            };
+            
+            const blob = new Blob([JSON.stringify(hkiData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = (inscriptionTitle || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '.hki';
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('HKI export error:', error);
+            alert('❌ Export failed: ' + error.message);
+        }
+    };
+    
+    /**
      * Export JSON (for database/backup)
      */
     const exportJson = () => {
@@ -790,7 +872,7 @@ const ExportPanel = ({
                                             ? 'bg-stone hover:bg-stone/80 flex-1' 
                                             : 'bg-ancient-purple hover:bg-[#4a3d5a] flex-1')}
                                 >
-                                    {currentFileId && fileOwner === driveUserEmail ? '📄 Save As New' : '💾 Save to Drive'}
+                                    {currentFileId && fileOwner === driveUserEmail ? '📄 Save As New' : '☁️ Save to Cloud'}
                                 </button>
                             </div>
                         ) : (
@@ -824,12 +906,29 @@ const ExportPanel = ({
                                 />
                             </label>
                         </div>
+                        
+                        {/* Download HKI for local backup */}
+                        <button
+                            onClick={exportHki}
+                            disabled={!hasData}
+                            className="w-full px-3 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 rounded-lg transition-colors text-sm font-medium border border-gray-300"
+                            title="Download HKI file for offline backup"
+                        >
+                            ⬇️ Download HKI
+                        </button>
                     </div>
                     
                     {/* Sync status */}
                     <div className={'text-xs text-center ' + getSyncStatusClass()}>
                         {getSyncStatusText()}
                     </div>
+                    
+                    {/* Local save indicator */}
+                    {localSaveTime && (
+                        <div className="text-xs text-center text-gray-500 mt-1">
+                            💾 Saved locally {getLocalSaveText()}
+                        </div>
+                    )}
                 </div>
                 
                 {/* Share / Export Section */}
@@ -844,7 +943,7 @@ const ExportPanel = ({
                     
                     {showExportFormats && (
                         <div className="p-3 space-y-3 bg-white">
-                            {/* Primary exports */}
+                            {/* Sharing exports */}
                             <div className="grid grid-cols-2 gap-2">
                                 <button
                                     onClick={exportImage}
@@ -960,7 +1059,7 @@ const ExportPanel = ({
                 {/* Tips */}
                 {showExportFormats && (
                     <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded">
-                        💡 <strong>Image</strong> for quick sharing · <strong>PDF</strong> for printing · <strong>HTML</strong> for email
+                        💡 <strong>Image</strong> for quick sharing · <strong>PDF</strong> for printing · <strong>HTML</strong> for email · <strong>HKI</strong> files contain everything needed to resume work later
                     </div>
                 )}
             </div>
