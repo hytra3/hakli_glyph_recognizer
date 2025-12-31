@@ -277,8 +277,12 @@ const BookletGenerator = ({
     // Extract Arabic transcription from HKI data
     const extractArabicTranscription = (hki) => {
         // Try different possible locations for transcription
-        if (hki.transcription?.arabic) return hki.transcription.arabic;
-        if (hki.transcription) return hki.transcription;
+        if (hki.transcription?.arabic && typeof hki.transcription.arabic === 'string') {
+            return hki.transcription.arabic;
+        }
+        if (typeof hki.transcription === 'string') {
+            return hki.transcription;
+        }
         
         // Build from recognition results
         if (hki.recognitionResults && Array.isArray(hki.recognitionResults)) {
@@ -295,7 +299,13 @@ const BookletGenerator = ({
                     if (rowA !== rowB) return rowA - rowB;
                     return (b.bounds?.x || 0) - (a.bounds?.x || 0);
                 })
-                .map(r => r.arabic || r.glyph || '')
+                .map(r => {
+                    // Extract arabic text, handling both direct properties and nested glyph object
+                    if (typeof r.arabic === 'string') return r.arabic;
+                    if (r.glyph?.arabic && typeof r.glyph.arabic === 'string') return r.glyph.arabic;
+                    if (r.glyph?.name && typeof r.glyph.name === 'string') return r.glyph.name;
+                    return '';
+                })
                 .filter(Boolean);
             
             if (arabicChars.length > 0) {
@@ -459,8 +469,8 @@ const BookletGenerator = ({
                                 options.showDetectionBoxes ? 'bg-ancient-purple' : 'bg-gray-300'
                             }`}
                         >
-                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                                options.showDetectionBoxes ? 'translate-x-7' : 'translate-x-1'
+                            <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform shadow ${
+                                options.showDetectionBoxes ? 'translate-x-6' : 'translate-x-0'
                             }`} />
                         </button>
                     </div>
