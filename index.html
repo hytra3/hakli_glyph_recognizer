@@ -148,7 +148,7 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251231b';
+        const APP_VERSION = 'v251231c';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Access Control, Auto-Sync & Change Tracking)');
 
         function HakliGlyphRecognizer() {
@@ -2177,8 +2177,12 @@
                                     
                                     {/* Status indicators - grouped on right */}
                                     <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
-                                        <div className={`px-2 py-1 rounded-full text-xs ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-ochre'}`}>
-                                            {chartStatus === 'loaded' ? `✅ ${chartData?.glyphs?.length || 0} glyphs` : `⏳ Loading...`}
+                                        <div className={`px-3 py-1 rounded-full text-xs font-bold ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-amber-400 text-amber-900 animate-pulse'}`}>
+                                            {chartStatus === 'loaded' 
+                                                ? `✅ ${chartData?.glyphs?.length || 0} glyphs` 
+                                                : chartLoadProgress.total > 0 
+                                                    ? `⏳ ${Math.round((chartLoadProgress.loaded / chartLoadProgress.total) * 100)}%`
+                                                    : `⏳ Loading...`}
                                         </div>
                                         <div className={`px-2 py-1 rounded-full text-xs ${opencvReady ? 'bg-patina' : 'bg-ochre'}`}>
                                             {opencvReady ? '✅ CV' : '⏳ CV'}
@@ -2269,6 +2273,19 @@
                             </div>
                         </div>
                     </header>
+                    
+                    {/* Chart Loading Banner - Shows when chart is loading */}
+                    {chartStatus !== 'loaded' && (
+                        <div className="bg-amber-400 border-b-4 border-amber-600 px-4 py-4 flex items-center justify-center gap-4 animate-pulse">
+                            <div className="animate-spin w-6 h-6 border-3 border-amber-800 border-t-transparent rounded-full"></div>
+                            <span className="text-base text-amber-900 font-bold">
+                                ⏳ Loading Glyph Chart {chartLoadProgress.total > 0 ? `(${chartLoadProgress.loaded}/${chartLoadProgress.total})` : '...'}
+                            </span>
+                            <span className="text-sm text-amber-800 font-medium bg-amber-200 px-2 py-1 rounded">
+                                Please wait — buttons disabled
+                            </span>
+                        </div>
+                    )}
                     
                     {/* Read-Only Banner - Shows when viewing without edit access */}
                     {isReadOnly && recognitionResults.length > 0 && (
@@ -2395,8 +2412,9 @@
                                 <div className="p-3 space-y-2 flex-1 overflow-y-auto">
                                     {/* Recognize button */}
                                     <button onClick={() => { recognizeGlyphs(); }} disabled={isProcessing || chartStatus !== 'loaded' || !displayImage}
-                                        className="w-full px-3 py-2.5 bg-patina text-white rounded-lg text-sm font-medium disabled:bg-gray-300">
-                                        {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : '🔍 Recognize Glyphs'}
+                                        className="w-full px-3 py-2.5 bg-patina text-white rounded-lg text-sm font-medium disabled:bg-gray-300"
+                                        title={chartStatus !== 'loaded' ? 'Waiting for chart to load...' : ''}>
+                                        {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : chartStatus !== 'loaded' ? '⏳ Loading chart...' : '🔍 Recognize Glyphs'}
                                     </button>
                                     
                                     {/* Detection/Reading toggle */}
@@ -2886,8 +2904,9 @@
                                 <div className="bg-white rounded-lg shadow p-3">
                                     <div className="flex gap-2 items-center">
                                         <button onClick={recognizeGlyphs} disabled={isProcessing || chartStatus !== 'loaded' || !displayImage}
-                                            className="flex-1 px-3 py-2.5 bg-patina text-white rounded-lg hover:bg-[#5a7d6e] text-sm font-medium disabled:bg-gray-300">
-                                            {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : '🔍 Recognize Glyphs'}
+                                            className="flex-1 px-3 py-2.5 bg-patina text-white rounded-lg hover:bg-[#5a7d6e] text-sm font-medium disabled:bg-gray-300"
+                                            title={chartStatus !== 'loaded' ? 'Waiting for chart to load...' : ''}>
+                                            {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : chartStatus !== 'loaded' ? '⏳ Loading chart...' : '🔍 Recognize Glyphs'}
                                         </button>
                                         <button 
                                             onClick={() => setIsToolsCollapsed(!isToolsCollapsed)}
@@ -3337,8 +3356,9 @@
                                 {/* Mobile Recognize Button */}
                                 <div className="mb-2 flex gap-2">
                                     <button onClick={recognizeGlyphs} disabled={isProcessing || chartStatus !== 'loaded' || !displayImage}
-                                        className="flex-1 px-3 py-2 bg-patina text-white rounded-lg text-sm font-medium disabled:bg-gray-300">
-                                        {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : '🔍 Recognize'}
+                                        className="flex-1 px-3 py-2 bg-patina text-white rounded-lg text-sm font-medium disabled:bg-gray-300"
+                                        title={chartStatus !== 'loaded' ? 'Waiting for chart to load...' : ''}>
+                                        {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : chartStatus !== 'loaded' ? '⏳ Chart...' : '🔍 Recognize'}
                                     </button>
                                     {recognitionResults.length > 0 && (
                                         <button onClick={() => setMobilePanel('detections')}
