@@ -29,6 +29,57 @@ const BookletGenerator = ({
         }
     }, [currentUserEmail]);
     
+    // Helper: Draw detection boxes on an image
+    const drawDetectionBoxes = (imageSrc, recognitionResults) => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                
+                // Draw base image
+                ctx.drawImage(img, 0, 0);
+                
+                // Draw detection boxes
+                recognitionResults.forEach(result => {
+                    if (result.excluded) return;
+                    
+                    const bounds = result.bounds;
+                    if (!bounds) return;
+                    
+                    // Determine box color based on validation status
+                    let strokeColor = '#8b7d6b'; // stone - unvalidated
+                    if (result.validated === true) {
+                        strokeColor = '#6b8e7f'; // patina - correct
+                    } else if (result.validated === false) {
+                        strokeColor = '#a0674f'; // rust - incorrect
+                    }
+                    
+                    ctx.strokeStyle = strokeColor;
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+                    
+                    // Draw label background
+                    const label = result.glyph?.arabic || result.glyph?.name || result.glyph?.transliteration || '?';
+                    ctx.font = 'bold 14px sans-serif';
+                    const labelWidth = ctx.measureText(label).width + 8;
+                    ctx.fillStyle = strokeColor;
+                    ctx.fillRect(bounds.x, bounds.y - 20, labelWidth, 18);
+                    
+                    // Draw label text
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(label, bounds.x + 4, bounds.y - 6);
+                });
+                
+                resolve(canvas.toDataURL('image/jpeg', 0.9));
+            };
+            img.onerror = () => reject(new Error('Failed to load image for annotation'));
+            img.src = imageSrc;
+        });
+    };
+    
     // Generate the PDF booklet
     const generateBooklet = async () => {
         if (!selectedItems || selectedItems.length === 0) {
@@ -208,18 +259,23 @@ const BookletGenerator = ({
         doc.text(title, x + 12, currentY + 3, { maxWidth: width - 15 });
         currentY += 10;
         
-        // Image
-        const imageSrc = showBoxes 
-            ? (hki.displayImage || hki.images?.annotated || hki.images?.preprocessed || hki.image)
-            : (hki.images?.original || hki.image || hki.displayImage);
+        // Get base image
+        const baseImageSrc = hki.images?.original || hki.image || hki.displayImage || hki.images?.preprocessed;
         
-        if (imageSrc) {
+        if (baseImageSrc) {
             try {
                 const imgHeight = Math.min(height * 0.5, 80);
                 const imgWidth = width - 10;
                 
+                // If showBoxes and we have recognition results, draw boxes on the image
+                let finalImageSrc = baseImageSrc;
+                
+                if (showBoxes && hki.recognitionResults && hki.recognitionResults.length > 0) {
+                    finalImageSrc = await drawDetectionBoxes(baseImageSrc, hki.recognitionResults);
+                }
+                
                 // Add image (centered)
-                doc.addImage(imageSrc, 'JPEG', x + 5, currentY, imgWidth, imgHeight, undefined, 'MEDIUM');
+                doc.addImage(finalImageSrc, 'JPEG', x + 5, currentY, imgWidth, imgHeight, undefined, 'MEDIUM');
                 currentY += imgHeight + 5;
             } catch (imgErr) {
                 console.warn('Failed to add image:', imgErr);
