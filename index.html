@@ -38,6 +38,9 @@
         }
     </script>
     
+    <!-- jsPDF for booklet generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
     <!-- OpenCV -->
     <script>
         var isOpenCvReady = false;
@@ -140,10 +143,11 @@
     <script type="text/babel" src="src/components/common/AccessControlUI.jsx"></script>
     <script type="text/babel" src="src/components/modals/WarehouseModal.jsx"></script>
     <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251229';
+        const APP_VERSION = 'v251231';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Access Control & Auto-Sync)');
 
         function HakliGlyphRecognizer() {

@@ -557,8 +557,8 @@ const WarehouseModal = ({
             )}
             
             {/* Booklet Generator Modal */}
-            {showBookletGenerator && (
-                <BookletGenerator
+            {showBookletGenerator && window.BookletGenerator && (
+                <window.BookletGenerator
                     isOpen={showBookletGenerator}
                     onClose={() => setShowBookletGenerator(false)}
                     selectedItems={getBookletItems()}
