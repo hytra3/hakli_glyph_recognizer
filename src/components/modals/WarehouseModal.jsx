@@ -23,32 +23,52 @@ const WarehouseModal = ({
     const [showCollaborators, setShowCollaborators] = useState(false);
     const [thumbnails, setThumbnails] = useState({}); // { fileId: thumbnailDataUrl }
     
-    // Load thumbnail for a specific file
-    const loadThumbnail = useCallback(async (fileId) => {
-        if (thumbnails[fileId]) return; // Already loaded
-        
+    // Fetch thumbnail data without setting state (for batching)
+    const fetchThumbnail = useCallback(async (fileId) => {
         try {
             const hkiData = await DriveSync.loadHki(fileId);
             const thumbSrc = hkiData.displayImage || hkiData.image || 
                             hkiData.images?.preprocessed || hkiData.images?.original;
-            if (thumbSrc) {
-                setThumbnails(prev => ({ ...prev, [fileId]: thumbSrc }));
-            }
+            return thumbSrc || null;
         } catch (err) {
             console.warn('Failed to load thumbnail for', fileId, err);
+            return null;
         }
-    }, [thumbnails]);
+    }, []);
     
-    // Load thumbnails for visible items
-    const loadThumbnails = useCallback(async (items) => {
-        // Load first 10 thumbnails immediately, rest lazily
-        const toLoad = items.slice(0, 10);
-        for (const item of toLoad) {
-            if (!thumbnails[item.id]) {
-                loadThumbnail(item.id);
-            }
+    // Load single thumbnail on-demand (for click-to-select)
+    const loadThumbnail = useCallback(async (fileId) => {
+        if (thumbnails[fileId]) return;
+        const thumbSrc = await fetchThumbnail(fileId);
+        if (thumbSrc) {
+            setThumbnails(prev => ({ ...prev, [fileId]: thumbSrc }));
         }
-    }, [thumbnails, loadThumbnail]);
+    }, [thumbnails, fetchThumbnail]);
+    
+    // Load thumbnails for visible items - BATCHED to prevent flashing
+    const loadThumbnails = useCallback(async (items) => {
+        // Filter to items we don't already have thumbnails for
+        const toLoad = items.slice(0, 10).filter(item => !thumbnails[item.id]);
+        if (toLoad.length === 0) return;
+        
+        // Fetch all thumbnails in parallel
+        const results = await Promise.all(
+            toLoad.map(async (item) => ({
+                id: item.id,
+                thumbSrc: await fetchThumbnail(item.id)
+            }))
+        );
+        
+        // Single state update with all thumbnails at once
+        const newThumbnails = {};
+        results.forEach(({ id, thumbSrc }) => {
+            if (thumbSrc) newThumbnails[id] = thumbSrc;
+        });
+        
+        if (Object.keys(newThumbnails).length > 0) {
+            setThumbnails(prev => ({ ...prev, ...newThumbnails }));
+        }
+    }, [thumbnails, fetchThumbnail]);
     
     // Load warehouse contents
     const loadWarehouse = useCallback(async () => {
