@@ -33,55 +33,78 @@ const BookletGenerator = ({
     const drawDetectionBoxes = (imageSrc, recognitionResults) => {
         return new Promise((resolve, reject) => {
             const img = new Image();
+            img.crossOrigin = 'anonymous'; // Handle CORS
+            
             img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                
-                // Draw base image
-                ctx.drawImage(img, 0, 0);
-                
-                // Draw detection boxes
-                recognitionResults.forEach(result => {
-                    if (result.excluded) return;
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
                     
-                    const bounds = result.bounds;
-                    if (!bounds) return;
+                    // Draw base image
+                    ctx.drawImage(img, 0, 0);
                     
-                    // Determine box color based on validation status
-                    let strokeColor = '#8b7d6b'; // stone - unvalidated
-                    if (result.validated === true) {
-                        strokeColor = '#6b8e7f'; // patina - correct
-                    } else if (result.validated === false) {
-                        strokeColor = '#a0674f'; // rust - incorrect
-                    }
+                    console.log(`Drawing ${recognitionResults.length} detection boxes`);
                     
-                    ctx.strokeStyle = strokeColor;
-                    ctx.lineWidth = 3;
-                    ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+                    // Draw detection boxes
+                    recognitionResults.forEach((result, i) => {
+                        if (result.excluded) return;
+                        
+                        // Try both 'position' and 'bounds' property names
+                        const pos = result.position || result.bounds;
+                        if (!pos) {
+                            console.warn(`Result ${i} has no position/bounds`);
+                            return;
+                        }
+                        
+                        // Determine box color based on validation status
+                        let strokeColor = '#8b7d6b'; // stone - unvalidated
+                        if (result.validated === true) {
+                            strokeColor = '#6b8e7f'; // patina - correct
+                        } else if (result.validated === false) {
+                            strokeColor = '#a0674f'; // rust - incorrect
+                        }
+                        
+                        ctx.strokeStyle = strokeColor;
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
+                        
+                        // Draw label background
+                        const label = result.glyph?.arabic || result.glyph?.name || result.glyph?.transliteration || '?';
+                        ctx.font = 'bold 14px sans-serif';
+                        const labelWidth = ctx.measureText(label).width + 8;
+                        ctx.fillStyle = strokeColor;
+                        ctx.fillRect(pos.x, pos.y - 20, labelWidth, 18);
+                        
+                        // Draw label text
+                        ctx.fillStyle = 'white';
+                        ctx.fillText(label, pos.x + 4, pos.y - 6);
+                    });
                     
-                    // Draw label background
-                    const label = result.glyph?.arabic || result.glyph?.name || result.glyph?.transliteration || '?';
-                    ctx.font = 'bold 14px sans-serif';
-                    const labelWidth = ctx.measureText(label).width + 8;
-                    ctx.fillStyle = strokeColor;
-                    ctx.fillRect(bounds.x, bounds.y - 20, labelWidth, 18);
-                    
-                    // Draw label text
-                    ctx.fillStyle = 'white';
-                    ctx.fillText(label, bounds.x + 4, bounds.y - 6);
-                });
-                
-                resolve(canvas.toDataURL('image/jpeg', 0.9));
+                    resolve(canvas.toDataURL('image/jpeg', 0.9));
+                } catch (err) {
+                    console.error('Error drawing boxes:', err);
+                    // Return original image if drawing fails
+                    resolve(imageSrc);
+                }
             };
-            img.onerror = () => reject(new Error('Failed to load image for annotation'));
+            
+            img.onerror = (err) => {
+                console.error('Failed to load image for annotation:', err);
+                // Return original image if load fails
+                resolve(imageSrc);
+            };
+            
             img.src = imageSrc;
         });
     };
     
     // Generate the PDF booklet
     const generateBooklet = async () => {
+        console.log('generateBooklet called with options:', options);
+        console.log('showDetectionBoxes:', options.showDetectionBoxes);
+        
         if (!selectedItems || selectedItems.length === 0) {
             alert('No inscriptions selected');
             return;
@@ -270,8 +293,15 @@ const BookletGenerator = ({
                 // If showBoxes and we have recognition results, draw boxes on the image
                 let finalImageSrc = baseImageSrc;
                 
+                console.log(`renderInscription #${seqNum}: showBoxes=${showBoxes}, results=${hki.recognitionResults?.length || 0}`);
+                if (hki.recognitionResults && hki.recognitionResults.length > 0) {
+                    console.log(`First result sample:`, JSON.stringify(hki.recognitionResults[0]).substring(0, 200));
+                }
+                
                 if (showBoxes && hki.recognitionResults && hki.recognitionResults.length > 0) {
+                    console.log(`Drawing boxes for inscription #${seqNum}`);
                     finalImageSrc = await drawDetectionBoxes(baseImageSrc, hki.recognitionResults);
+                    console.log(`Boxes drawn, new image length: ${finalImageSrc?.length || 0}`);
                 }
                 
                 // Add image (centered)
