@@ -1,5 +1,5 @@
 // ============================================
-// EXPORT PANEL - Redesigned with HTML/PDF exports
+// EXPORT PANEL v260101 - Redesigned with HTML/PDF exports
 // Storage and sharing for HKI inscriptions
 // ============================================
 
@@ -35,6 +35,7 @@ const ExportPanel = ({
     driveUserEmail = null,
     currentFileId = null,
     fileOwner = null,
+    onSignIn = null,
     imageRef,
     className = ''
 }) => {
@@ -876,9 +877,12 @@ const ExportPanel = ({
                                 </button>
                             </div>
                         ) : (
-                            <div className="text-xs text-center text-gray-500 py-2 bg-gray-50 rounded">
-                                🔒 Sign in to save to cloud
-                            </div>
+                            <button 
+                                onClick={() => onSignIn && onSignIn()}
+                                className="w-full text-xs text-center text-ancient-purple py-2 bg-ancient-purple/10 hover:bg-ancient-purple/20 rounded border border-ancient-purple/30 cursor-pointer transition-colors font-medium"
+                            >
+                                🔑 Sign in to save to cloud
+                            </button>
                         )}
                         
                         {/* Load buttons */}
@@ -919,9 +923,18 @@ const ExportPanel = ({
                     </div>
                     
                     {/* Sync status */}
-                    <div className={'text-xs text-center ' + getSyncStatusClass()}>
-                        {getSyncStatusText()}
-                    </div>
+                    {driveSignedIn ? (
+                        <div className={'text-xs text-center ' + getSyncStatusClass()}>
+                            {getSyncStatusText()}
+                        </div>
+                    ) : (
+                        <button 
+                            onClick={() => onSignIn && onSignIn()}
+                            className="w-full text-xs text-center text-ancient-purple hover:underline cursor-pointer"
+                        >
+                            ☁️ Sign in to Drive to enable sync
+                        </button>
+                    )}
                     
                     {/* Local save indicator */}
                     {localSaveTime && (

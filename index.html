@@ -148,7 +148,7 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251231n';
+        const APP_VERSION = 'v260101';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Booklet, Change Tracking, Box Fix & Update Notifications)');
 
         function HakliGlyphRecognizer() {
@@ -797,8 +797,42 @@
                 const file = event.target.files[0];
                 if (!file) return;
                 
+                // Reset file input to allow selecting same file again
+                event.target.value = '';
+                
                 setIsImageLoading(true);
                 setCanvasZoom(1); // Reset zoom for new image
+                
+                // Clear LocalAutoSave so old data doesn't restore on refresh
+                if (typeof LocalAutoSave !== 'undefined') {
+                    LocalAutoSave.clearAutosave().catch(err => console.warn('Could not clear autosave:', err));
+                }
+                
+                // Clear previous state IMMEDIATELY before loading new image
+                setRecognitionResults([]);
+                setValidations({});
+                setReadingOrder([]);
+                setWordBoundaries(new Set());
+                setLineBreaks(new Set());
+                setColumnBreaks(new Set());
+                setSelectedRegions(new Set());
+                setRecognitionSourceDims(null);
+                setChangeLog([]);
+                setUndoStack([]);
+                setRedoStack([]);
+                // Reset inscription metadata for fresh start
+                setCurrentInscriptionId(null);
+                setInscriptionTitle('');
+                setInscriptionNotes('');
+                setInscriptionComplete(false);
+                setTranslationEnglish('');
+                setTranslationArabic('');
+                setCurrentFileId(null);
+                setFileOwner(null);
+                setIsReadOnly(false);
+                // Reset preprocessing to defaults
+                setPreprocessing({ rotation: 0, blur: 0, adaptiveThreshold: false, morphology: 'none', invert: false });
+                setLocalSaveTime(null);
                 
                 const reader = new FileReader();
                 reader.onload = async (e) => {
@@ -816,14 +850,6 @@
                         }
                     }
                     
-                    // Clear previous recognition state
-                    setRecognitionResults([]);
-                    setValidations({});
-                    setReadingOrder([]);
-                    setWordBoundaries(new Set());
-                    setLineBreaks(new Set());
-                    setSelectedRegions(new Set());
-                    setRecognitionSourceDims(null);
                     setIsImageLoading(false);
                 };
                 reader.onerror = () => {
@@ -2214,7 +2240,10 @@
                                     
                                     {/* Status indicators - grouped on right */}
                                     <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
-                                        <div className={`px-3 py-1 rounded-full text-xs font-bold ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-amber-400 text-amber-900 animate-pulse'}`}>
+                                        <div 
+                                            className={`px-3 py-1 rounded-full text-xs font-bold ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-amber-400 text-amber-900 animate-pulse'}`}
+                                            title={chartStatus === 'loaded' ? `${Object.keys(loadedGlyphImages).length} template images loaded for ${chartData?.glyphs?.length || 0} glyphs` : 'Loading glyph chart...'}
+                                        >
                                             {chartStatus === 'loaded' 
                                                 ? `✅ ${chartData?.glyphs?.length || 0} glyphs` 
                                                 : chartLoadProgress.total > 0 
@@ -2551,22 +2580,55 @@
                                                 reader.onload = (event) => {
                                                     try {
                                                         const data = JSON.parse(event.target.result);
-                                                        // Restore state from HKI file
+                                                        
+                                                        // Clear ALL state first (fresh start)
+                                                        setRecognitionResults([]);
+                                                        setValidations({});
+                                                        setReadingOrder([]);
+                                                        setReadingDirection('rtl');
+                                                        setWordBoundaries(new Set());
+                                                        setLineBreaks(new Set());
+                                                        setColumnBreaks(new Set());
+                                                        setSelectedRegions(new Set());
+                                                        setRecognitionSourceDims(null);
+                                                        setChangeLog([]);
+                                                        setUndoStack([]);
+                                                        setRedoStack([]);
+                                                        setCurrentInscriptionId(null);
+                                                        setInscriptionTitle('');
+                                                        setInscriptionNotes('');
+                                                        setInscriptionComplete(false);
+                                                        setTranslationEnglish('');
+                                                        setTranslationArabic('');
+                                                        setCurrentFileId(null);
+                                                        setFileOwner(null);
+                                                        setIsReadOnly(false);
+                                                        setPreprocessing({ rotation: 0, blur: 0, adaptiveThreshold: false, morphology: 'none', invert: false });
+                                                        setLocalSaveTime(null);
+                                                        setCanvasZoom(1);
+                                                        
+                                                        // Now restore state from HKI file
                                                         if (data.image) setOriginalImage(data.image);
                                                         if (data.displayImage) setDisplayImage(data.displayImage);
                                                         if (data.preprocessing) setPreprocessing(data.preprocessing);
                                                         if (data.recognitionResults) setRecognitionResults(data.recognitionResults);
+                                                        if (data.recognitionSourceDims) setRecognitionSourceDims(data.recognitionSourceDims);
                                                         if (data.validations) setValidations(data.validations);
                                                         if (data.changeLog) setChangeLog(data.changeLog);
                                                         if (data.readingOrder) setReadingOrder(data.readingOrder);
                                                         if (data.readingDirection) setReadingDirection(data.readingDirection);
                                                         if (data.wordBoundaries) setWordBoundaries(new Set(data.wordBoundaries));
                                                         if (data.lineBreaks) setLineBreaks(new Set(data.lineBreaks));
+                                                        if (data.columnBreaks) setColumnBreaks(new Set(data.columnBreaks));
                                                         if (data.translationEnglish) setTranslationEnglish(data.translationEnglish);
                                                         if (data.translationArabic) setTranslationArabic(data.translationArabic);
                                                         if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
                                                         if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                        if (data.inscriptionComplete) setInscriptionComplete(data.inscriptionComplete);
                                                         if (data.currentInscriptionId) setCurrentInscriptionId(data.currentInscriptionId);
+                                                        if (data.visibility) setVisibility(data.visibility);
+                                                        
+                                                        console.log('📂 Loaded HKI:', data.inscriptionTitle || file.name);
                                                         alert('✅ Loaded: ' + (data.inscriptionTitle || file.name));
                                                     } catch (err) {
                                                         console.error('Error loading HKI:', err);
@@ -3101,7 +3163,7 @@
                                                 </div>
                                             )}
                                             
-                                            <div className={`flex-1 overflow-y-auto ${isLeftPanelHidden && viewMode !== 'reading' ? 'grid grid-cols-2 gap-2 auto-rows-max' : 'space-y-2'}`}>
+                                            <div className={`flex-1 overflow-y-auto pb-48 ${isLeftPanelHidden && viewMode !== 'reading' ? 'grid grid-cols-2 gap-2 auto-rows-max' : 'space-y-2'}`}>
                                                 {(viewMode === 'reading' 
                                                     ? readingOrder.filter(i => !excludedDetections.has(i) && Math.round(recognitionResults[i]?.confidence * 100) >= confidenceThreshold)
                                                     : recognitionResults.map((_, i) => i).filter(i => Math.round(recognitionResults[i]?.confidence * 100) >= confidenceThreshold)
@@ -3123,7 +3185,7 @@
                                                     
                                                     return (
                                                         <div key={idx} 
-                                                            className={`border-2 ${borderColor} rounded-lg overflow-hidden ${isSelected ? 'bg-yellow-50' : ''} ${isExcluded ? 'opacity-50' : ''} ${viewMode === 'reading' ? 'cursor-grab' : ''} ${draggedCardIdx === displayIdx ? 'opacity-50' : ''} ${dragOverCardIdx === displayIdx ? 'border-ochre border-dashed' : ''}`}
+                                                            className={`border-2 ${borderColor} rounded-lg ${isSelected ? 'bg-yellow-50' : ''} ${isExcluded ? 'opacity-50' : ''} ${viewMode === 'reading' ? 'cursor-grab' : ''} ${draggedCardIdx === displayIdx ? 'opacity-50' : ''} ${dragOverCardIdx === displayIdx ? 'border-ochre border-dashed' : ''}`}
                                                             draggable={viewMode === 'reading'}
                                                             onDragStart={viewMode === 'reading' ? (e) => handleDragStart(e, displayIdx) : undefined}
                                                             onDragOver={viewMode === 'reading' ? (e) => handleDragOver(e, displayIdx) : undefined}
@@ -3262,7 +3324,7 @@
                                                                     
                                                                     {/* Edit dropdown menu */}
                                                                     {editMenuCardIdx === idx && (
-                                                                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 min-w-[140px]">
+                                                                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[140px]">
                                                                             <button onClick={(e) => { e.stopPropagation(); shrinkBox(idx, 3); setEditMenuCardIdx(null); }}
                                                                                 className="w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2">
                                                                                 ⊟ Shrink box
@@ -3982,6 +4044,13 @@
                                     driveUserEmail={driveUserEmail}
                                     currentFileId={currentFileId}
                                     fileOwner={fileOwner}
+                                    onSignIn={async () => {
+                                        if (typeof DriveSync !== 'undefined') {
+                                            await DriveSync.signIn();
+                                            setDriveSignedIn(DriveSync.isSignedIn());
+                                            setDriveUserEmail(DriveSync.getUserEmail());
+                                        }
+                                    }}
                                     imageRef={imageRef}
                                     className="bg-[#f7f3ed] border-2 border-ochre"
                                 />
@@ -4866,6 +4935,33 @@
                                 }
                             }}
                             onLoadHki={(hkiData, fileInfo) => {
+                                // Clear ALL state first (fresh start)
+                                setRecognitionResults([]);
+                                setValidations({});
+                                setReadingOrder([]);
+                                setReadingDirection('rtl');
+                                setWordBoundaries(new Set());
+                                setLineBreaks(new Set());
+                                setColumnBreaks(new Set());
+                                setSelectedRegions(new Set());
+                                setRecognitionSourceDims(null);
+                                setChangeLog([]);
+                                setUndoStack([]);
+                                setRedoStack([]);
+                                setCurrentInscriptionId(null);
+                                setInscriptionTitle('');
+                                setInscriptionNotes('');
+                                setInscriptionComplete(false);
+                                setTranslationEnglish('');
+                                setTranslationArabic('');
+                                setCurrentFileId(null);
+                                setFileOwner(null);
+                                setIsReadOnly(false);
+                                setPreprocessing({ rotation: 0, blur: 0, adaptiveThreshold: false, morphology: 'none', invert: false });
+                                setLocalSaveTime(null);
+                                setCanvasZoom(1);
+                                
+                                // Now load from HKI data
                                 // Load image
                                 if (hkiData.image) setOriginalImage(hkiData.image);
                                 if (hkiData.displayImage) setDisplayImage(hkiData.displayImage);
@@ -4878,6 +4974,7 @@
                                 
                                 // Load detections
                                 if (hkiData.recognitionResults) setRecognitionResults(hkiData.recognitionResults);
+                                if (hkiData.recognitionSourceDims) setRecognitionSourceDims(hkiData.recognitionSourceDims);
                                 if (hkiData.detections) setRecognitionResults(hkiData.detections.map(d => ({
                                     glyph: d.glyph, confidence: d.confidence, position: d.position,
                                     thumbnail: d.thumbnail, matchType: d.matchType,
@@ -4888,10 +4985,14 @@
                                 if (hkiData.validations) setValidations(hkiData.validations);
                                 if (hkiData.readingOrder) setReadingOrder(hkiData.readingOrder);
                                 if (hkiData.readingData?.readingOrder) setReadingOrder(hkiData.readingData.readingOrder);
+                                if (hkiData.readingDirection) setReadingDirection(hkiData.readingDirection);
+                                if (hkiData.readingData?.direction) setReadingDirection(hkiData.readingData.direction);
                                 if (hkiData.wordBoundaries) setWordBoundaries(new Set(hkiData.wordBoundaries));
                                 if (hkiData.readingData?.wordBoundaries) setWordBoundaries(new Set(hkiData.readingData.wordBoundaries));
                                 if (hkiData.lineBreaks) setLineBreaks(new Set(hkiData.lineBreaks));
                                 if (hkiData.readingData?.lineBreaks) setLineBreaks(new Set(hkiData.readingData.lineBreaks));
+                                if (hkiData.columnBreaks) setColumnBreaks(new Set(hkiData.columnBreaks));
+                                if (hkiData.readingData?.columnBreaks) setColumnBreaks(new Set(hkiData.readingData.columnBreaks));
                                 
                                 // Load translations
                                 if (hkiData.translationEnglish || hkiData.translations?.english)
@@ -4915,6 +5016,9 @@
                                 const isOwner = fileInfo.owner === driveUserEmail;
                                 const isCollaborator = fileInfo.collaborators?.includes(driveUserEmail);
                                 setIsReadOnly(!driveUserEmail || (!isOwner && !isCollaborator));
+                                
+                                // Close warehouse modal
+                                setShowWarehouse(false);
                                 
                                 const count = hkiData.recognitionResults?.length || hkiData.detections?.length || 0;
                                 console.log(`📂 Loaded from warehouse: ${fileInfo.title} (${count} glyphs)`);

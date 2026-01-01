@@ -1,7 +1,7 @@
 // Hakli Glyph Recognizer - Service Worker
-// Version 251231n - with update notifications
+// Version 260101 - with update notifications
 
-const CACHE_VERSION = 'v251231n';
+const CACHE_VERSION = 'v260101';
 const CACHE_NAME = `hakli-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `hakli-runtime-${CACHE_VERSION}`;
 
