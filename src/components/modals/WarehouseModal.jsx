@@ -1,7 +1,8 @@
 // ============================================
-// WAREHOUSE MODAL
+// WAREHOUSE MODAL v251231f
 // Browse and load HKI files from Google Drive
 // Public view (published) + authenticated view (drafts, shared)
+// Fixed: thumbnail blinking due to dependency cycle
 // ============================================
 
 const WarehouseModal = ({
@@ -12,7 +13,7 @@ const WarehouseModal = ({
     onSignIn,
     onSignOut
 }) => {
-    const { useState, useEffect, useCallback } = React;
+    const { useState, useEffect, useCallback, useRef } = React;
     
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -23,7 +24,22 @@ const WarehouseModal = ({
     const [showCollaborators, setShowCollaborators] = useState(false);
     const [thumbnails, setThumbnails] = useState({}); // { fileId: thumbnailDataUrl }
     
-    // Fetch thumbnail data without setting state (for batching)
+    // Booklet multi-select
+    const [bookletMode, setBookletMode] = useState(false);
+    const [bookletSelection, setBookletSelection] = useState({}); // { fileId: { id, title, hkiData } }
+    const [showBookletGenerator, setShowBookletGenerator] = useState(false);
+    const [loadingBookletData, setLoadingBookletData] = useState(false);
+    
+    // Use ref to track which thumbnails are loading to prevent duplicates
+    const loadingThumbnailsRef = useRef(new Set());
+    const thumbnailsRef = useRef({});
+    
+    // Keep ref in sync with state
+    useEffect(() => {
+        thumbnailsRef.current = thumbnails;
+    }, [thumbnails]);
+    
+    // Fetch thumbnail data
     const fetchThumbnail = useCallback(async (fileId) => {
         try {
             const hkiData = await DriveSync.loadHki(fileId);
@@ -38,18 +54,27 @@ const WarehouseModal = ({
     
     // Load single thumbnail on-demand (for click-to-select)
     const loadThumbnail = useCallback(async (fileId) => {
-        if (thumbnails[fileId]) return;
+        if (thumbnailsRef.current[fileId] || loadingThumbnailsRef.current.has(fileId)) return;
+        
+        loadingThumbnailsRef.current.add(fileId);
         const thumbSrc = await fetchThumbnail(fileId);
+        loadingThumbnailsRef.current.delete(fileId);
+        
         if (thumbSrc) {
             setThumbnails(prev => ({ ...prev, [fileId]: thumbSrc }));
         }
-    }, [thumbnails, fetchThumbnail]);
+    }, [fetchThumbnail]);
     
     // Load thumbnails for visible items - BATCHED to prevent flashing
     const loadThumbnails = useCallback(async (items) => {
-        // Filter to items we don't already have thumbnails for
-        const toLoad = items.slice(0, 10).filter(item => !thumbnails[item.id]);
+        // Filter to items we don't already have thumbnails for and aren't loading
+        const toLoad = items.slice(0, 10).filter(item => 
+            !thumbnailsRef.current[item.id] && !loadingThumbnailsRef.current.has(item.id)
+        );
         if (toLoad.length === 0) return;
+        
+        // Mark all as loading
+        toLoad.forEach(item => loadingThumbnailsRef.current.add(item.id));
         
         // Fetch all thumbnails in parallel
         const results = await Promise.all(
@@ -58,6 +83,9 @@ const WarehouseModal = ({
                 thumbSrc: await fetchThumbnail(item.id)
             }))
         );
+        
+        // Clear loading state
+        toLoad.forEach(item => loadingThumbnailsRef.current.delete(item.id));
         
         // Single state update with all thumbnails at once
         const newThumbnails = {};
@@ -68,7 +96,7 @@ const WarehouseModal = ({
         if (Object.keys(newThumbnails).length > 0) {
             setThumbnails(prev => ({ ...prev, ...newThumbnails }));
         }
-    }, [thumbnails, fetchThumbnail]);
+    }, [fetchThumbnail]);
     
     // Load warehouse contents
     const loadWarehouse = useCallback(async () => {
@@ -110,18 +138,22 @@ const WarehouseModal = ({
         }
     }, [currentUserEmail, loadThumbnails]);
     
-    // Load on open
+    // Load on open - only when isOpen changes to true
     useEffect(() => {
         if (isOpen) {
+            // Clear old thumbnails when reopening to get fresh data
+            setThumbnails({});
+            thumbnailsRef.current = {};
+            loadingThumbnailsRef.current.clear();
             loadWarehouse();
         }
-    }, [isOpen, loadWarehouse]);
+    }, [isOpen]); // Intentionally exclude loadWarehouse to prevent re-fetch loop
     
     // Handle item click
     const handleItemClick = (item) => {
         setSelectedItem(item);
-        // Load thumbnail if not already loaded
-        if (!thumbnails[item.id]) {
+        // Load thumbnail if not already loaded (using ref to avoid stale closure)
+        if (!thumbnailsRef.current[item.id]) {
             loadThumbnail(item.id);
         }
     };
@@ -143,18 +175,82 @@ const WarehouseModal = ({
         }
     };
     
+    // Toggle booklet selection for an item
+    const toggleBookletSelect = async (item, e) => {
+        e.stopPropagation();
+        
+        if (bookletSelection[item.id]) {
+            // Remove from selection
+            setBookletSelection(prev => {
+                const next = { ...prev };
+                delete next[item.id];
+                return next;
+            });
+        } else {
+            // Add to selection - need to load HKI data
+            try {
+                const hkiData = await DriveSync.loadHki(item.id);
+                setBookletSelection(prev => ({
+                    ...prev,
+                    [item.id]: {
+                        id: item.id,
+                        title: item.title || hkiData.title || item.id,
+                        hkiData
+                    }
+                }));
+            } catch (err) {
+                console.warn('Failed to load item for booklet:', err);
+            }
+        }
+    };
+    
+    // Select all items in a category for booklet
+    const selectAllForBooklet = async (items) => {
+        setLoadingBookletData(true);
+        const newSelections = {};
+        
+        for (const item of items) {
+            if (!bookletSelection[item.id]) {
+                try {
+                    const hkiData = await DriveSync.loadHki(item.id);
+                    newSelections[item.id] = {
+                        id: item.id,
+                        title: item.title || hkiData.title || item.id,
+                        hkiData
+                    };
+                } catch (err) {
+                    console.warn('Failed to load item:', item.id, err);
+                }
+            }
+        }
+        
+        setBookletSelection(prev => ({ ...prev, ...newSelections }));
+        setLoadingBookletData(false);
+    };
+    
+    // Clear booklet selection
+    const clearBookletSelection = () => {
+        setBookletSelection({});
+    };
+    
+    // Get booklet items array
+    const getBookletItems = () => Object.values(bookletSelection);
+    
     // Render thumbnail card
     const ThumbnailCard = ({ item, isOwner = false, sharedBy = null }) => {
         const isSelected = selectedItem?.id === item.id;
+        const isInBooklet = !!bookletSelection[item.id];
         const thumbSrc = thumbnails[item.id];
         
         return (
             <div
-                onClick={() => handleItemClick(item)}
+                onClick={() => bookletMode ? null : handleItemClick(item)}
                 className={`cursor-pointer rounded-lg border-2 overflow-hidden transition-all hover:shadow-lg ${
-                    isSelected 
-                        ? 'border-ancient-purple ring-2 ring-ancient-purple/30' 
-                        : 'border-gray-200 hover:border-gray-300'
+                    isInBooklet
+                        ? 'border-ochre ring-2 ring-ochre/30'
+                        : isSelected 
+                            ? 'border-ancient-purple ring-2 ring-ancient-purple/30' 
+                            : 'border-gray-200 hover:border-gray-300'
                 }`}
             >
                 {/* Thumbnail */}
@@ -171,8 +267,22 @@ const WarehouseModal = ({
                         </div>
                     )}
                     
+                    {/* Booklet checkbox */}
+                    {bookletMode && (
+                        <div 
+                            onClick={(e) => toggleBookletSelect(item, e)}
+                            className={`absolute top-1 left-1 w-6 h-6 rounded border-2 flex items-center justify-center cursor-pointer transition-colors ${
+                                isInBooklet 
+                                    ? 'bg-ochre border-ochre text-white' 
+                                    : 'bg-white/80 border-gray-400 hover:border-ochre'
+                            }`}
+                        >
+                            {isInBooklet && <span className="text-sm">✓</span>}
+                        </div>
+                    )}
+                    
                     {/* Owner badge */}
-                    {isOwner && (
+                    {isOwner && !bookletMode && (
                         <div className="absolute top-1 right-1 bg-ancient-purple text-white text-xs px-1.5 py-0.5 rounded">
                             ✏️ Yours
                         </div>
@@ -213,12 +323,36 @@ const WarehouseModal = ({
     const Section = ({ title, icon, items, emptyText, isOwner = false, showSharedBy = false }) => {
         if (items.length === 0 && !emptyText) return null;
         
+        const allSelected = items.length > 0 && items.every(item => bookletSelection[item.id]);
+        
         return (
             <div className="mb-6">
                 <h3 className="text-sm font-semibold text-gray-600 mb-3 flex items-center gap-2">
                     <span>{icon}</span>
                     <span>{title}</span>
                     <span className="text-gray-400 font-normal">({items.length})</span>
+                    
+                    {/* Select All button in booklet mode */}
+                    {bookletMode && items.length > 0 && (
+                        <button
+                            onClick={() => allSelected 
+                                ? items.forEach(item => setBookletSelection(prev => {
+                                    const next = { ...prev };
+                                    delete next[item.id];
+                                    return next;
+                                }))
+                                : selectAllForBooklet(items)
+                            }
+                            disabled={loadingBookletData}
+                            className={`ml-auto text-xs px-2 py-1 rounded transition-colors ${
+                                allSelected 
+                                    ? 'bg-ochre/20 text-ochre hover:bg-ochre/30' 
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                        >
+                            {loadingBookletData ? '⏳' : allSelected ? '✓ All Selected' : 'Select All'}
+                        </button>
+                    )}
                 </h3>
                 
                 {items.length > 0 ? (
@@ -370,7 +504,19 @@ const WarehouseModal = ({
                 {/* Footer */}
                 <div className="p-4 border-t bg-gray-50 rounded-b-xl flex items-center justify-between">
                     <div className="text-sm text-gray-500">
-                        {selectedItem ? (
+                        {bookletMode ? (
+                            <span>
+                                {Object.keys(bookletSelection).length} selected for booklet
+                                {Object.keys(bookletSelection).length > 0 && (
+                                    <button 
+                                        onClick={clearBookletSelection}
+                                        className="ml-2 text-rust hover:underline"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </span>
+                        ) : selectedItem ? (
                             <span>
                                 Selected: <strong>{selectedItem.title || selectedItem.id}</strong>
                                 {selectedItem.owner === currentUserEmail && ' (you can edit)'}
@@ -381,19 +527,46 @@ const WarehouseModal = ({
                     </div>
                     
                     <div className="flex gap-2">
+                        {/* Booklet mode toggle */}
                         <button
-                            onClick={onClose}
-                            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
+                            onClick={() => {
+                                setBookletMode(!bookletMode);
+                                if (bookletMode) clearBookletSelection();
+                            }}
+                            className={`px-3 py-2 rounded-lg transition-colors ${
+                                bookletMode 
+                                    ? 'bg-ochre text-white hover:bg-ochre/90' 
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
                         >
-                            Cancel
+                            📖 {bookletMode ? 'Exit Booklet Mode' : 'Create Booklet'}
                         </button>
-                        <button
-                            onClick={handleLoad}
-                            disabled={!selectedItem}
-                            className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] disabled:bg-gray-300 disabled:cursor-not-allowed"
-                        >
-                            📂 Load Selected
-                        </button>
+                        
+                        {bookletMode ? (
+                            <button
+                                onClick={() => setShowBookletGenerator(true)}
+                                disabled={Object.keys(bookletSelection).length === 0}
+                                className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] disabled:bg-gray-300 disabled:cursor-not-allowed"
+                            >
+                                📄 Generate PDF ({Object.keys(bookletSelection).length})
+                            </button>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={onClose}
+                                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleLoad}
+                                    disabled={!selectedItem}
+                                    className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                >
+                                    📂 Load Selected
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
@@ -406,6 +579,17 @@ const WarehouseModal = ({
                     currentUserEmail={currentUserEmail}
                     myItems={[...draftItems, ...publishedItems.filter(i => i.owner === currentUserEmail)]}
                     onUpdate={loadWarehouse}
+                />
+            )}
+            
+            {/* Booklet Generator Modal */}
+            {showBookletGenerator && window.BookletGenerator && (
+                <window.BookletGenerator
+                    isOpen={showBookletGenerator}
+                    onClose={() => setShowBookletGenerator(false)}
+                    selectedItems={getBookletItems()}
+                    currentUserEmail={currentUserEmail}
+                    equivalenceChart={window.equivalenceChart}
                 />
             )}
         </div>
