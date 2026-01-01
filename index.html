@@ -148,7 +148,7 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251231i';
+        const APP_VERSION = 'v251231j';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Booklet, Change Tracking, Box Fix & Update Notifications)');
 
         function HakliGlyphRecognizer() {
@@ -2844,11 +2844,16 @@
                                                 const scaleX = img.clientWidth / sourceWidth;
                                                 const scaleY = img.clientHeight / sourceHeight;
                                                 
+                                                // Get image position relative to its offset parent (the zoom wrapper)
+                                                // This accounts for any centering/flexbox positioning
+                                                const imgOffsetX = img.offsetLeft;
+                                                const imgOffsetY = img.offsetTop;
+                                                
                                                 return (
                                                     <div key={index} className={boxClass}
                                                         style={{
-                                                            left: result.position.x * scaleX,
-                                                            top: result.position.y * scaleY,
+                                                            left: imgOffsetX + result.position.x * scaleX,
+                                                            top: imgOffsetY + result.position.y * scaleY,
                                                             width: result.position.width * scaleX,
                                                             height: result.position.height * scaleY
                                                         }}
