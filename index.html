@@ -148,8 +148,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251231g';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Booklet, Change Tracking & Box Fix)');
+        const APP_VERSION = 'v251231h';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Booklet, Change Tracking, Box Fix & Update Notifications)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -5099,8 +5099,121 @@
     </script>
 
     <script>
+        // Service Worker with Update Detection (battery-friendly)
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').then(() => console.log('✅ SW registered')).catch(console.error);
+            let refreshing = false;
+            
+            // When a new SW takes over, reload
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (refreshing) return;
+                refreshing = true;
+                window.location.reload();
+            });
+            
+            navigator.serviceWorker.register('sw.js').then((registration) => {
+                console.log('✅ SW registered');
+                
+                // Only check for updates when:
+                // 1. Online
+                // 2. On wifi (not cellular/metered connection)
+                // 3. Page becomes visible after being hidden
+                
+                const checkForUpdates = () => {
+                    // Skip if offline
+                    if (!navigator.onLine) return;
+                    
+                    // Skip if on metered/cellular connection (battery saver)
+                    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+                    if (connection && (connection.saveData || connection.type === 'cellular')) {
+                        console.log('[SW] Skipping update check - metered connection');
+                        return;
+                    }
+                    
+                    console.log('[SW] Checking for updates...');
+                    registration.update();
+                };
+                
+                // Check when page becomes visible (user returns to app)
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        checkForUpdates();
+                    }
+                });
+                
+                // Check when coming back online
+                window.addEventListener('online', checkForUpdates);
+                
+                // Listen for new service worker
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    console.log('🔄 New service worker found');
+                    
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            // New version available - show update banner
+                            showUpdateBanner(newWorker);
+                        }
+                    });
+                });
+            }).catch(console.error);
+        }
+        
+        function showUpdateBanner(newWorker) {
+            // Create update banner
+            const banner = document.createElement('div');
+            banner.id = 'update-banner';
+            banner.innerHTML = `
+                <div style="
+                    position: fixed;
+                    bottom: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: linear-gradient(135deg, #5d4e6d 0%, #6b8e7f 100%);
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    z-index: 10000;
+                    font-family: system-ui, sans-serif;
+                    font-size: 14px;
+                ">
+                    <span>🔄 Update available</span>
+                    <button onclick="applyUpdate()" style="
+                        background: white;
+                        color: #5d4e6d;
+                        border: none;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-weight: 600;
+                    ">Refresh</button>
+                    <button onclick="dismissUpdate()" style="
+                        background: transparent;
+                        color: white;
+                        border: 1px solid rgba(255,255,255,0.5);
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                    ">Later</button>
+                </div>
+            `;
+            document.body.appendChild(banner);
+            
+            window.pendingWorker = newWorker;
+        }
+        
+        function applyUpdate() {
+            if (window.pendingWorker) {
+                window.pendingWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+        }
+        
+        function dismissUpdate() {
+            const banner = document.getElementById('update-banner');
+            if (banner) banner.remove();
         }
     </script>
 </body>

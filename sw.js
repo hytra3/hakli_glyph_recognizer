@@ -1,21 +1,24 @@
 // Hakli Glyph Recognizer - Service Worker
-// Version 251203d
+// Version 251231h - with update notifications
 
-const CACHE_NAME = 'hakli-v251203d';
-const RUNTIME_CACHE = 'hakli-runtime-v251203d';
+const CACHE_VERSION = 'v251231h';
+const CACHE_NAME = `hakli-${CACHE_VERSION}`;
+const RUNTIME_CACHE = `hakli-runtime-${CACHE_VERSION}`;
 
 // Critical files to cache on install
 const CORE_ASSETS = [
-  '/hakli_glyph_recognizer/',
-  '/hakli_glyph_recognizer/index.html',
-  '/hakli_glyph_recognizer/favicon.svg',
-  '/hakli_glyph_recognizer/Hakli_glyphs.JSON',
-  'https://docs.opencv.org/4.5.2/opencv.js'
+  './',
+  './index.html',
+  './favicon.svg',
+  './favicon.png',
+  './hh-logo.png',
+  './Hakli_glyphs.JSON',
+  './manifest.json'
 ];
 
 // Install event - cache core assets
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker...');
+  console.log(`[SW] Installing service worker ${CACHE_VERSION}...`);
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
@@ -24,7 +27,7 @@ self.addEventListener('install', (event) => {
       })
       .then(() => {
         console.log('[SW] Core assets cached successfully');
-        return self.skipWaiting(); // Activate immediately
+        // Don't skip waiting - let users choose when to update
       })
       .catch((error) => {
         console.error('[SW] Failed to cache core assets:', error);
@@ -32,16 +35,19 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate event - clean up old caches
+// Activate event - clean up old caches and notify about update
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker...');
+  console.log(`[SW] Activating service worker ${CACHE_VERSION}...`);
   event.waitUntil(
     caches.keys()
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
             .filter((cacheName) => {
-              return cacheName !== CACHE_NAME && cacheName !== RUNTIME_CACHE;
+              // Delete any cache that doesn't match current version
+              return cacheName.startsWith('hakli-') && 
+                     cacheName !== CACHE_NAME && 
+                     cacheName !== RUNTIME_CACHE;
             })
             .map((cacheName) => {
               console.log('[SW] Deleting old cache:', cacheName);
@@ -51,61 +57,69 @@ self.addEventListener('activate', (event) => {
       })
       .then(() => {
         console.log('[SW] Service worker activated');
-        return self.clients.claim(); // Take control immediately
+        return self.clients.claim();
       })
   );
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - Network First for HTML, Cache First for assets
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
   // Skip non-GET requests
-  if (request.method !== 'GET') {
-    return;
-  }
+  if (request.method !== 'GET') return;
 
   // Skip Chrome extensions
-  if (url.protocol === 'chrome-extension:') {
-    return;
-  }
+  if (url.protocol === 'chrome-extension:') return;
 
-  // Skip Google APIs (Drive, etc.) - always use network
+  // Skip Google APIs (Drive, OAuth, etc.) - always use network
   if (url.hostname.includes('googleapis.com') || 
       url.hostname.includes('google.com') ||
-      url.hostname.includes('gstatic.com')) {
-    event.respondWith(fetch(request));
+      url.hostname.includes('gstatic.com') ||
+      url.hostname.includes('accounts.google')) {
     return;
   }
 
-  // Strategy: Cache First, falling back to Network
+  // Network First strategy for HTML (to get updates)
+  if (request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          // Cache the new version
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // Offline - serve from cache
+          return caches.match(request);
+        })
+    );
+    return;
+  }
+
+  // Cache First strategy for other assets
   event.respondWith(
     caches.match(request)
       .then((cachedResponse) => {
         if (cachedResponse) {
-          console.log('[SW] Serving from cache:', url.pathname);
           return cachedResponse;
         }
 
-        // Not in cache, fetch from network
-        console.log('[SW] Fetching from network:', url.pathname);
         return fetch(request)
           .then((networkResponse) => {
-            // Cache successful responses for later
             if (networkResponse && networkResponse.status === 200) {
               const responseToCache = networkResponse.clone();
-              caches.open(RUNTIME_CACHE)
-                .then((cache) => {
-                  cache.put(request, responseToCache);
-                });
+              caches.open(RUNTIME_CACHE).then((cache) => {
+                cache.put(request, responseToCache);
+              });
             }
             return networkResponse;
-          })
-          .catch((error) => {
-            console.error('[SW] Fetch failed:', error);
-            // Could return a custom offline page here
-            throw error;
           });
       })
   );
@@ -114,23 +128,21 @@ self.addEventListener('fetch', (event) => {
 // Message event - handle messages from the main app
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('[SW] Skip waiting requested');
     self.skipWaiting();
   }
   
+  if (event.data && event.data.type === 'GET_VERSION') {
+    event.ports[0].postMessage({ version: CACHE_VERSION });
+  }
+  
   if (event.data && event.data.type === 'CACHE_GLYPH_IMAGES') {
-    // Cache all glyph images for offline use
     const imageUrls = event.data.urls;
     caches.open(CACHE_NAME)
-      .then((cache) => {
-        return cache.addAll(imageUrls);
-      })
-      .then(() => {
-        console.log('[SW] Cached', imageUrls.length, 'glyph images');
-      })
-      .catch((error) => {
-        console.error('[SW] Failed to cache glyph images:', error);
-      });
+      .then((cache) => cache.addAll(imageUrls))
+      .then(() => console.log('[SW] Cached', imageUrls.length, 'glyph images'))
+      .catch((error) => console.error('[SW] Failed to cache glyph images:', error));
   }
 });
 
-console.log('[SW] Service worker script loaded');
+console.log(`[SW] Service worker script loaded - ${CACHE_VERSION}`);
