@@ -148,7 +148,7 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251231L';
+        const APP_VERSION = 'v251231n';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Booklet, Change Tracking, Box Fix & Update Notifications)');
 
         function HakliGlyphRecognizer() {
@@ -503,8 +503,15 @@
                                         if (data.readingData.columnBreaks) setColumnBreaks(new Set(data.readingData.columnBreaks));
                                     }
                                     if (data.preprocessing) setPreprocessing(data.preprocessing);
+                                    if (data.recognitionSourceDims) setRecognitionSourceDims(data.recognitionSourceDims);
                                     setLocalSaveTime(savedDate);
                                     console.log('✅ Restored saved work');
+                                    
+                                    // Force box recalculation after image settles
+                                    // Multiple delays to catch different settling times
+                                    [100, 300, 600, 1000].forEach(delay => {
+                                        setTimeout(() => setBoxLayoutKey(k => k + 1), delay);
+                                    });
                                 }
                             }
                         } catch (err) {
@@ -530,6 +537,7 @@
                         visibility: visibility,
                         image: originalImage,
                         displayImage: displayImage,
+                        recognitionSourceDims: recognitionSourceDims,
                         recognitionResults: recognitionResults.map(r => ({
                             glyph: {
                                 id: r.glyph?.id,
@@ -556,7 +564,7 @@
                         preprocessing: preprocessing
                     }));
                 }
-            }, [recognitionResults, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, 
+            }, [recognitionResults, recognitionSourceDims, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, 
                 translationEnglish, translationArabic, inscriptionTitle, inscriptionNotes, visibility]);
             
             // ========== LOAD CHART ==========
@@ -1273,37 +1281,33 @@
             const handleManualBoxStart = useCallback((e) => {
                 if (!manualBoxMode || !imageRef.current || !imageContainerRef.current) return;
                 
-                const container = imageContainerRef.current;
                 const img = imageRef.current;
-                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
                 
-                // Use offsetLeft/Top for actual image position within container
-                const offsetX = img.offsetLeft;
-                const offsetY = img.offsetTop;
-                const x = e.clientX - containerRect.left - offsetX;
-                const y = e.clientY - containerRect.top - offsetY;
+                // Calculate position relative to the image element directly
+                // Account for zoom transform
+                const x = (e.clientX - imgRect.left) / canvasZoom;
+                const y = (e.clientY - imgRect.top) / canvasZoom;
                 
                 // Only start if click is within image bounds
                 if (x >= 0 && x <= img.clientWidth && y >= 0 && y <= img.clientHeight) {
                     setDrawingBox({ startX: x, startY: y, currentX: x, currentY: y });
                 }
-            }, [manualBoxMode]);
+            }, [manualBoxMode, canvasZoom]);
             
             const handleManualBoxMove = useCallback((e) => {
-                if (!drawingBox || !imageContainerRef.current) return;
+                if (!drawingBox || !imageRef.current) return;
                 
-                const container = imageContainerRef.current;
                 const img = imageRef.current;
-                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
                 
-                // Use offsetLeft/Top for actual image position
-                const offsetX = img.offsetLeft;
-                const offsetY = img.offsetTop;
-                const x = e.clientX - containerRect.left - offsetX;
-                const y = e.clientY - containerRect.top - offsetY;
+                // Calculate position relative to the image element directly
+                // Account for zoom transform
+                const x = (e.clientX - imgRect.left) / canvasZoom;
+                const y = (e.clientY - imgRect.top) / canvasZoom;
                 
                 setDrawingBox(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
-            }, [drawingBox]);
+            }, [drawingBox, canvasZoom]);
             
             const handleManualBoxEnd = useCallback((e) => {
                 if (!drawingBox || !imageRef.current) return;
@@ -2861,21 +2865,18 @@
                                                 // Force recalculation by using boxLayoutKey (referenced but not directly used)
                                                 const _ = boxLayoutKey;
                                                 
-                                                // Use getBoundingClientRect for accurate rendered dimensions
-                                                const imgRect = img.getBoundingClientRect();
-                                                
                                                 // Use tracked recognition source dimensions if available
                                                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                                                 const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                                                 
-                                                // Account for zoom in the rect dimensions
-                                                const displayWidth = imgRect.width / canvasZoom;
-                                                const displayHeight = imgRect.height / canvasZoom;
+                                                // Use clientWidth/Height for display dimensions (stable, not affected by transforms)
+                                                const displayWidth = img.clientWidth;
+                                                const displayHeight = img.clientHeight;
                                                 
                                                 // Skip rendering if dimensions aren't ready
                                                 if (!displayWidth || !displayHeight || !sourceWidth || !sourceHeight) return null;
                                                 
-                                                // Scale calculation using actual rendered size (adjusted for zoom)
+                                                // Scale calculation
                                                 const scaleX = displayWidth / sourceWidth;
                                                 const scaleY = displayHeight / sourceHeight;
                                                 
