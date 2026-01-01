@@ -148,7 +148,7 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251231j';
+        const APP_VERSION = 'v251231L';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Booklet, Change Tracking, Box Fix & Update Notifications)');
 
         function HakliGlyphRecognizer() {
@@ -676,10 +676,15 @@
             }, []);
             
             // ========== TRACK IMAGE DIMENSIONS FOR BOX ALIGNMENT ==========
+            const [imageReady, setImageReady] = useState(false);
+            const lastImageSize = useRef({ width: 0, height: 0 });
+            
             useEffect(() => {
                 const img = imageRef.current;
                 const container = imageContainerRef.current;
                 if (!img || !container) return;
+                
+                setImageReady(false);
                 
                 // Update dimensions when image loads
                 const handleImageLoad = () => {
@@ -687,40 +692,68 @@
                         width: img.naturalWidth, 
                         height: img.naturalHeight 
                     });
-                    setBoxLayoutKey(k => k + 1);
+                    
+                    // Wait for layout to settle, then mark ready
+                    const checkSettled = () => {
+                        const rect = img.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
+                            if (rect.width === lastImageSize.current.width && 
+                                rect.height === lastImageSize.current.height) {
+                                // Dimensions stable - we're ready
+                                setImageReady(true);
+                                setBoxLayoutKey(k => k + 1);
+                            } else {
+                                // Still changing, check again
+                                lastImageSize.current = { width: rect.width, height: rect.height };
+                                requestAnimationFrame(checkSettled);
+                            }
+                        } else {
+                            requestAnimationFrame(checkSettled);
+                        }
+                    };
+                    
+                    requestAnimationFrame(checkSettled);
                 };
                 
                 img.addEventListener('load', handleImageLoad);
                 
-                // Also observe container resize (debounced to handle CSS transitions)
+                // Observe BOTH container and image for resize
                 let resizeTimeout;
-                const resizeObserver = new ResizeObserver(() => {
+                const triggerRecalc = () => {
                     clearTimeout(resizeTimeout);
                     resizeTimeout = setTimeout(() => {
+                        const rect = img.getBoundingClientRect();
+                        lastImageSize.current = { width: rect.width, height: rect.height };
                         setBoxLayoutKey(k => k + 1);
-                    }, 100);
-                });
-                resizeObserver.observe(container);
+                    }, 50);
+                };
+                
+                const containerObserver = new ResizeObserver(triggerRecalc);
+                const imageObserver = new ResizeObserver(triggerRecalc);
+                
+                containerObserver.observe(container);
+                imageObserver.observe(img);
                 
                 // If image is already loaded, trigger immediately
-                if (img.complete) {
+                if (img.complete && img.naturalWidth > 0) {
                     handleImageLoad();
                 }
                 
                 return () => {
                     img.removeEventListener('load', handleImageLoad);
-                    resizeObserver.disconnect();
+                    containerObserver.disconnect();
+                    imageObserver.disconnect();
                     clearTimeout(resizeTimeout);
                 };
             }, [displayImage]);
             
             // ========== UPDATE BOX LAYOUT WHEN PANELS TOGGLE ==========
             useEffect(() => {
-                // Small delay to let CSS transitions complete
-                const timer = setTimeout(() => {
-                    setBoxLayoutKey(k => k + 1);
-                }, 200);
-                return () => clearTimeout(timer);
+                // Multiple recalcs to catch CSS transitions settling
+                const timers = [100, 200, 350].map(delay => 
+                    setTimeout(() => setBoxLayoutKey(k => k + 1), delay)
+                );
+                return () => timers.forEach(clearTimeout);
             }, [isLeftPanelHidden, isRightPanelHidden]);
             
             // ========== IMAGE HANDLING ==========
@@ -2768,10 +2801,6 @@
                                                     <img ref={imageRef} src={displayImage} alt="Inscription" 
                                                         className={`max-w-full max-h-full object-contain block ${eraserMode ? 'hidden' : ''}`}
                                                         style={{ pointerEvents: manualBoxMode ? 'none' : 'auto' }}
-                                                        onLoad={() => {
-                                                            // Force box recalculation once image dimensions are available
-                                                            setTimeout(() => setBoxLayoutKey(k => k + 1), 50);
-                                                        }}
                                                     />
                                             
                                             {/* Manual Box Drawing Overlay */}
@@ -2832,17 +2861,23 @@
                                                 // Force recalculation by using boxLayoutKey (referenced but not directly used)
                                                 const _ = boxLayoutKey;
                                                 
+                                                // Use getBoundingClientRect for accurate rendered dimensions
+                                                const imgRect = img.getBoundingClientRect();
+                                                
                                                 // Use tracked recognition source dimensions if available
                                                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                                                 const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                                                 
-                                                // Skip rendering if dimensions aren't ready
-                                                if (!img.clientWidth || !img.clientHeight || !sourceWidth || !sourceHeight) return null;
+                                                // Account for zoom in the rect dimensions
+                                                const displayWidth = imgRect.width / canvasZoom;
+                                                const displayHeight = imgRect.height / canvasZoom;
                                                 
-                                                // Simple scale calculation
-                                                // With max-w-full max-h-full, the img element sizes to the rendered content
-                                                const scaleX = img.clientWidth / sourceWidth;
-                                                const scaleY = img.clientHeight / sourceHeight;
+                                                // Skip rendering if dimensions aren't ready
+                                                if (!displayWidth || !displayHeight || !sourceWidth || !sourceHeight) return null;
+                                                
+                                                // Scale calculation using actual rendered size (adjusted for zoom)
+                                                const scaleX = displayWidth / sourceWidth;
+                                                const scaleY = displayHeight / sourceHeight;
                                                 
                                                 // Get image position relative to its offset parent (the zoom wrapper)
                                                 // This accounts for any centering/flexbox positioning
