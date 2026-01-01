@@ -148,7 +148,7 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251231h';
+        const APP_VERSION = 'v251231i';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Booklet, Change Tracking, Box Fix & Update Notifications)');
 
         function HakliGlyphRecognizer() {
@@ -2768,6 +2768,10 @@
                                                     <img ref={imageRef} src={displayImage} alt="Inscription" 
                                                         className={`max-w-full max-h-full object-contain block ${eraserMode ? 'hidden' : ''}`}
                                                         style={{ pointerEvents: manualBoxMode ? 'none' : 'auto' }}
+                                                        onLoad={() => {
+                                                            // Force box recalculation once image dimensions are available
+                                                            setTimeout(() => setBoxLayoutKey(k => k + 1), 50);
+                                                        }}
                                                     />
                                             
                                             {/* Manual Box Drawing Overlay */}

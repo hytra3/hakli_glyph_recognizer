@@ -1,8 +1,9 @@
 // ============================================
-// WAREHOUSE MODAL v251231f
+// WAREHOUSE MODAL v251231i
 // Browse and load HKI files from Google Drive
 // Public view (published) + authenticated view (drafts, shared)
 // Fixed: thumbnail blinking due to dependency cycle
+// Added: Delete functionality for owned inscriptions
 // ============================================
 
 const WarehouseModal = ({
@@ -23,6 +24,10 @@ const WarehouseModal = ({
     const [selectedItem, setSelectedItem] = useState(null);
     const [showCollaborators, setShowCollaborators] = useState(false);
     const [thumbnails, setThumbnails] = useState({}); // { fileId: thumbnailDataUrl }
+    
+    // Delete confirmation
+    const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, title } or null
+    const [deleting, setDeleting] = useState(false);
     
     // Booklet multi-select
     const [bookletMode, setBookletMode] = useState(false);
@@ -233,6 +238,53 @@ const WarehouseModal = ({
         setBookletSelection({});
     };
     
+    // Handle delete confirmation
+    const handleDeleteClick = (item, e) => {
+        e.stopPropagation();
+        setDeleteConfirm({ id: item.id, title: item.title || item.id });
+    };
+    
+    // Execute delete
+    const executeDelete = async () => {
+        if (!deleteConfirm) return;
+        
+        setDeleting(true);
+        try {
+            await DriveSync.deleteHki(deleteConfirm.id);
+            
+            // Remove from lists
+            setDraftItems(prev => prev.filter(i => i.id !== deleteConfirm.id));
+            setPublishedItems(prev => prev.filter(i => i.id !== deleteConfirm.id));
+            setSharedItems(prev => prev.filter(i => i.id !== deleteConfirm.id));
+            
+            // Clear thumbnail cache
+            setThumbnails(prev => {
+                const next = { ...prev };
+                delete next[deleteConfirm.id];
+                return next;
+            });
+            
+            // Clear selection if deleted item was selected
+            if (selectedItem?.id === deleteConfirm.id) {
+                setSelectedItem(null);
+            }
+            
+            // Clear from booklet selection
+            setBookletSelection(prev => {
+                const next = { ...prev };
+                delete next[deleteConfirm.id];
+                return next;
+            });
+            
+            setDeleteConfirm(null);
+        } catch (err) {
+            console.error('Failed to delete:', err);
+            setError(`Failed to delete: ${err.message}`);
+        } finally {
+            setDeleting(false);
+        }
+    };
+    
     // Get booklet items array
     const getBookletItems = () => Object.values(bookletSelection);
     
@@ -245,7 +297,7 @@ const WarehouseModal = ({
         return (
             <div
                 onClick={() => bookletMode ? null : handleItemClick(item)}
-                className={`cursor-pointer rounded-lg border-2 overflow-hidden transition-all hover:shadow-lg ${
+                className={`group cursor-pointer rounded-lg border-2 overflow-hidden transition-all hover:shadow-lg ${
                     isInBooklet
                         ? 'border-ochre ring-2 ring-ochre/30'
                         : isSelected 
@@ -286,6 +338,17 @@ const WarehouseModal = ({
                         <div className="absolute top-1 right-1 bg-ancient-purple text-white text-xs px-1.5 py-0.5 rounded">
                             ✏️ Yours
                         </div>
+                    )}
+                    
+                    {/* Delete button (appears on hover for owner items) */}
+                    {isOwner && !bookletMode && (
+                        <button
+                            onClick={(e) => handleDeleteClick(item, e)}
+                            className="absolute top-1 left-1 w-6 h-6 rounded bg-rust/80 text-white opacity-0 hover:opacity-100 group-hover:opacity-70 transition-opacity flex items-center justify-center text-sm hover:bg-rust"
+                            title="Delete inscription"
+                        >
+                            🗑️
+                        </button>
                     )}
                     
                     {/* Visibility badge */}
@@ -580,6 +643,51 @@ const WarehouseModal = ({
                     myItems={[...draftItems, ...publishedItems.filter(i => i.owner === currentUserEmail)]}
                     onUpdate={loadWarehouse}
                 />
+            )}
+            
+            {/* Delete Confirmation Dialog */}
+            {deleteConfirm && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+                    <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm mx-4">
+                        <div className="text-center mb-4">
+                            <div className="text-4xl mb-2">🗑️</div>
+                            <h3 className="font-semibold text-lg text-gray-800">Delete Inscription?</h3>
+                        </div>
+                        
+                        <p className="text-gray-600 text-center mb-4">
+                            Are you sure you want to delete<br/>
+                            <span className="font-medium text-gray-800">"{deleteConfirm.title}"</span>?
+                        </p>
+                        
+                        <p className="text-sm text-rust text-center mb-6">
+                            This cannot be undone.
+                        </p>
+                        
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeleteConfirm(null)}
+                                disabled={deleting}
+                                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={executeDelete}
+                                disabled={deleting}
+                                className="flex-1 px-4 py-2 bg-rust text-white rounded-lg hover:bg-rust/90 transition-colors flex items-center justify-center gap-2"
+                            >
+                                {deleting ? (
+                                    <>
+                                        <span className="animate-spin">⏳</span>
+                                        Deleting...
+                                    </>
+                                ) : (
+                                    <>🗑️ Delete</>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
             
             {/* Booklet Generator Modal */}

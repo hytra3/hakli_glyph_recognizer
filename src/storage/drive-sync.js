@@ -526,6 +526,24 @@ const DriveSync = {
     },
 
     /**
+     * Delete an HKI file from Google Drive
+     * Only the owner can delete their files
+     */
+    deleteHki: async (fileId) => {
+        if (!DriveSync.isSignedIn()) {
+            throw new Error('Must be signed in to delete files');
+        }
+
+        const url = `https://www.googleapis.com/drive/v3/files/${fileId}`;
+        await DriveSync._apiRequest(url, {
+            method: 'DELETE'
+        });
+        
+        console.log('🗑️ Deleted file:', fileId);
+        return true;
+    },
+
+    /**
      * Generate thumbnail from base64 image
      */
     _generateThumbnail: async (imageData) => {
