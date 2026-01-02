@@ -831,7 +831,7 @@
                 setFileOwner(null);
                 setIsReadOnly(false);
                 // Reset preprocessing to defaults
-                setPreprocessing({ rotation: 0, blur: 0, adaptiveThreshold: false, morphology: 'none', invert: false });
+                setPreprocessing({ rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false, blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invertColors: false });
                 setLocalSaveTime(null);
                 
                 const reader = new FileReader();
@@ -1047,15 +1047,20 @@
                 const ctx = canvas.getContext('2d');
                 const rect = canvas.getBoundingClientRect();
                 
-                // Calculate position relative to canvas (accounting for scaling)
+                // Calculate position relative to canvas (accounting for scaling and zoom)
                 const scaleX = canvas.width / rect.width;
                 const scaleY = canvas.height / rect.height;
                 const x = (e.clientX - rect.left) * scaleX;
                 const y = (e.clientY - rect.top) * scaleY;
                 
-                // Draw white circle (erase) - scale the brush to match cursor visually
+                // The cursor is displayed at eraserSize CSS pixels
+                // The canvas is displayed with CSS transform, so rect includes zoom
+                // Scale the brush to match what the user sees (cursor size in canvas coords)
+                const brushRadius = eraserSize * scaleX;
+                
+                // Draw white circle (erase)
                 ctx.beginPath();
-                ctx.arc(x, y, eraserSize * scaleX, 0, Math.PI * 2);
+                ctx.arc(x, y, brushRadius, 0, Math.PI * 2);
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fill();
             }, [eraserMode, eraserSize]);
@@ -2493,6 +2498,43 @@
                                         </div>
                                     )}
                                     
+                                    {/* Reading mode sort controls - mobile */}
+                                    {viewMode === 'reading' && recognitionResults.length > 0 && (
+                                        <div className="flex gap-1 flex-wrap">
+                                            <select 
+                                                value={readingDirection}
+                                                onChange={(e) => setReadingDirection(e.target.value)}
+                                                className="text-xs px-2 py-1 rounded border border-gray-300 bg-white flex-1"
+                                            >
+                                                <option value="rtl">RTL</option>
+                                                <option value="ltr">LTR</option>
+                                                <option value="ttb-rtl">TTB-RTL</option>
+                                                <option value="ttb-ltr">TTB-LTR</option>
+                                            </select>
+                                            <button 
+                                                onClick={() => {
+                                                    if (typeof ReadingOrder !== 'undefined' && ReadingOrder.generateOrder) {
+                                                        pushUndo('readingOrder', [...readingOrder]);
+                                                        const newOrder = ReadingOrder.generateOrder(recognitionResults, readingDirection);
+                                                        setReadingOrder(newOrder);
+                                                    }
+                                                }}
+                                                className="px-2 py-1 bg-ancient-purple text-white rounded text-xs"
+                                            >
+                                                🔄 Sort
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    pushUndo('readingOrder', [...readingOrder]);
+                                                    setReadingOrder([...readingOrder].reverse());
+                                                }}
+                                                className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs"
+                                            >
+                                                ⇅
+                                            </button>
+                                        </div>
+                                    )}
+                                    
                                     {/* Detection cards - simplified for mobile */}
                                     {recognitionResults.length === 0 ? (
                                         <div className="text-center text-gray-400 py-8">
@@ -2603,7 +2645,7 @@
                                                         setCurrentFileId(null);
                                                         setFileOwner(null);
                                                         setIsReadOnly(false);
-                                                        setPreprocessing({ rotation: 0, blur: 0, adaptiveThreshold: false, morphology: 'none', invert: false });
+                                                        setPreprocessing({ rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false, blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invertColors: false });
                                                         setLocalSaveTime(null);
                                                         setCanvasZoom(1);
                                                         
@@ -2893,16 +2935,21 @@
                                             })()}
                                             
                                             {/* Eraser canvas (shown when eraser active) */}
-                                            {eraserMode && (
-                                                <canvas ref={eraserCanvasRef}
-                                                    className="max-w-full max-h-full object-contain"
-                                                    style={{ cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${eraserSize * 2 + 2}" height="${eraserSize * 2 + 2}" viewBox="0 0 ${eraserSize * 2 + 2} ${eraserSize * 2 + 2}"><circle cx="${eraserSize + 1}" cy="${eraserSize + 1}" r="${eraserSize}" fill="none" stroke="black" stroke-width="1.5"/><circle cx="${eraserSize + 1}" cy="${eraserSize + 1}" r="${eraserSize}" fill="none" stroke="white" stroke-width="0.5"/><line x1="${eraserSize + 1}" y1="${eraserSize - 4}" x2="${eraserSize + 1}" y2="${eraserSize + 7}" stroke="black" stroke-width="1"/><line x1="${eraserSize - 4}" y1="${eraserSize + 1}" x2="${eraserSize + 7}" y2="${eraserSize + 1}" stroke="black" stroke-width="1"/></svg>') ${eraserSize + 1} ${eraserSize + 1}, crosshair` }}
-                                                    onMouseDown={handleEraserStart}
-                                                    onMouseMove={handleEraserDraw}
-                                                    onMouseUp={handleEraserEnd}
-                                                    onMouseLeave={handleEraserEnd}
-                                                />
-                                            )}
+                                            {eraserMode && (() => {
+                                                // Cursor radius is slightly smaller to account for stroke width
+                                                const cursorRadius = eraserSize - 1;
+                                                const cursorSize = cursorRadius * 2 + 2;
+                                                return (
+                                                    <canvas ref={eraserCanvasRef}
+                                                        className="max-w-full max-h-full object-contain"
+                                                        style={{ cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair` }}
+                                                        onMouseDown={handleEraserStart}
+                                                        onMouseMove={handleEraserDraw}
+                                                        onMouseUp={handleEraserEnd}
+                                                        onMouseLeave={handleEraserEnd}
+                                                    />
+                                                );
+                                            })()}
                                             
                                             {/* Detection boxes (hidden during eraser mode) */}
                                             {!eraserMode && recognitionResults.map((result, index) => {
@@ -3103,6 +3150,50 @@
                                                 <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); setExcludedDetections(new Set()); setExpandedCards(new Set()); }}}
                                                     className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200" title="Clear all detections">🗑</button>
                                             </div>
+                                            
+                                            {/* Reading mode sorting controls */}
+                                            {viewMode === 'reading' && recognitionResults.length > 0 && (
+                                                <div className="mb-2 p-2 bg-ancient-purple/10 rounded-lg border border-ancient-purple/30">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-xs text-gray-600">Order:</span>
+                                                        <select 
+                                                            value={readingDirection}
+                                                            onChange={(e) => setReadingDirection(e.target.value)}
+                                                            className="text-xs px-2 py-1 rounded border border-gray-300 bg-white"
+                                                        >
+                                                            <option value="rtl">→ RTL (Right to Left)</option>
+                                                            <option value="ltr">← LTR (Left to Right)</option>
+                                                            <option value="ttb-rtl">↓ TTB-RTL (Top to Bottom, RTL columns)</option>
+                                                            <option value="ttb-ltr">↓ TTB-LTR (Top to Bottom, LTR columns)</option>
+                                                            <option value="boustrophedon">↔ Boustrophedon</option>
+                                                        </select>
+                                                        <button 
+                                                            onClick={() => {
+                                                                if (typeof ReadingOrder !== 'undefined' && ReadingOrder.generateOrder) {
+                                                                    pushUndo('readingOrder', [...readingOrder]);
+                                                                    const newOrder = ReadingOrder.generateOrder(recognitionResults, readingDirection);
+                                                                    setReadingOrder(newOrder);
+                                                                    console.log(`🔄 Re-sorted ${newOrder.length} glyphs by position (${readingDirection})`);
+                                                                }
+                                                            }}
+                                                            className="px-2 py-1 bg-ancient-purple text-white rounded text-xs hover:bg-[#4a3d5a]"
+                                                            title="Re-sort all glyphs by their position on the image"
+                                                        >
+                                                            🔄 Sort by Position
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => {
+                                                                pushUndo('readingOrder', [...readingOrder]);
+                                                                setReadingOrder([...readingOrder].reverse());
+                                                            }}
+                                                            className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                                                            title="Reverse the current order"
+                                                        >
+                                                            ⇅ Reverse
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                             
                                             {/* Selection actions */}
                                             {selectedRegions.size > 0 && (
@@ -4957,7 +5048,7 @@
                                 setCurrentFileId(null);
                                 setFileOwner(null);
                                 setIsReadOnly(false);
-                                setPreprocessing({ rotation: 0, blur: 0, adaptiveThreshold: false, morphology: 'none', invert: false });
+                                setPreprocessing({ rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false, blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invertColors: false });
                                 setLocalSaveTime(null);
                                 setCanvasZoom(1);
                                 
