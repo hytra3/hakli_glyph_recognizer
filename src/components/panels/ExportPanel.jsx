@@ -1,7 +1,7 @@
 // ============================================
-// EXPORT PANEL v260101c - Redesigned with HTML/PDF exports
+// EXPORT PANEL v260101d - Redesigned with HTML/PDF exports
 // Storage and sharing for HKI inscriptions
-// Fixed: UTF-8 encoding, fonts, word break indicators
+// Fixed: UTF-8 encoding, fonts, word break indicators (vertical)
 // ============================================
 
 const ExportPanel = ({
@@ -439,9 +439,17 @@ const ExportPanel = ({
             font-size: 26px;
         }
         .vertical-glyph.word-end {
-            padding-bottom: 8px;
-            margin-bottom: 8px;
-            border-bottom: 2px solid #c4b8a8;
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+            border-bottom: 3px solid #8b7d6b;
+        }
+        .vertical-glyph.word-end::after {
+            content: '·';
+            display: block;
+            text-align: center;
+            color: #8b7d6b;
+            font-size: 14px;
+            margin-top: 4px;
         }
         .word-boundary { color: #8b7d6b; font-weight: bold; }
         .translation {
