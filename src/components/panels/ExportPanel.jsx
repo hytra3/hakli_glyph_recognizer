@@ -1,7 +1,8 @@
 // ============================================
-// EXPORT PANEL v260101d - Redesigned with HTML/PDF exports
+// EXPORT PANEL v260101e - Redesigned with HTML/PDF exports
 // Storage and sharing for HKI inscriptions
-// Fixed: UTF-8 encoding, fonts, word break indicators (vertical)
+// Fixed: UTF-8 encoding, fonts, word break indicators
+// Added: Link to booklet generator
 // ============================================
 
 const ExportPanel = ({
@@ -1089,8 +1090,19 @@ const ExportPanel = ({
                 
                 {/* Tips */}
                 {showExportFormats && (
-                    <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded">
-                        💡 <strong>Image</strong> for quick sharing · <strong>PDF</strong> for printing · <strong>HTML</strong> for email · <strong>HKI</strong> files contain everything needed to resume work later
+                    <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded space-y-1">
+                        <div>💡 <strong>Image</strong> for quick sharing · <strong>PDF</strong> for printing · <strong>HTML</strong> for email · <strong>HKI</strong> files contain everything needed to resume work later</div>
+                        {onOpenWarehouse && (
+                            <div className="pt-1 border-t border-gray-200">
+                                📚 Need a <strong>multi-inscription booklet</strong> for elders?{' '}
+                                <button 
+                                    onClick={onOpenWarehouse}
+                                    className="text-ancient-purple hover:underline font-medium"
+                                >
+                                    Open Warehouse → select items → Generate Booklet
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

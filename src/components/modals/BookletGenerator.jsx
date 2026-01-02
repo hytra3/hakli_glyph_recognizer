@@ -1,7 +1,8 @@
 // ============================================
-// BOOKLET GENERATOR v251231
+// BOOKLET GENERATOR v260101
 // Generate PDF booklets from HKI inscriptions
 // For tribal elders and review discussions
+// Added: word boundaries, transliteration support
 // ============================================
 
 const BookletGenerator = ({
@@ -336,6 +337,21 @@ const BookletGenerator = ({
             currentY += 3;
         }
         
+        // Transliteration (LTR)
+        const transliteration = extractTransliteration(hki);
+        if (transliteration) {
+            doc.setFont('courier', 'normal');
+            doc.setFontSize(11);
+            doc.setTextColor(93, 78, 109);  // ancient-purple
+            
+            const lines = doc.splitTextToSize(transliteration, width - 10);
+            lines.forEach(line => {
+                doc.text(line, x + 5, currentY);
+                currentY += 5;
+            });
+            currentY += 3;
+        }
+        
         // Notes
         const notes = hki.notes || hki.metadata?.notes || '';
         if (notes) {
@@ -396,8 +412,56 @@ const BookletGenerator = ({
                 .filter(Boolean);
             
             if (arabicChars.length > 0) {
+                // Get word boundaries from HKI
+                const wordBoundaries = new Set(hki.wordBoundaries || hki.readingData?.wordBoundaries || []);
+                const readingOrder = hki.readingOrder || hki.readingData?.order || [];
+                
+                // Build text with word breaks
+                if (wordBoundaries.size > 0 && readingOrder.length > 0) {
+                    let result = '';
+                    readingOrder.forEach((idx, i) => {
+                        const r = hki.recognitionResults[idx];
+                        if (!r || r.excluded) return;
+                        const char = r.glyph?.arabic || r.arabic || r.glyph?.name || '';
+                        result += char;
+                        if (wordBoundaries.has(idx)) {
+                            result += ' ';
+                        }
+                    });
+                    return result.trim();
+                }
+                
                 return arabicChars.join('');
             }
+        }
+        
+        return '';
+    };
+    
+    // Extract transliteration from HKI data  
+    const extractTransliteration = (hki) => {
+        // Try direct property first
+        if (hki.transcription?.transliteration && typeof hki.transcription.transliteration === 'string') {
+            return hki.transcription.transliteration;
+        }
+        
+        // Build from recognition results
+        if (hki.recognitionResults && Array.isArray(hki.recognitionResults)) {
+            const wordBoundaries = new Set(hki.wordBoundaries || hki.readingData?.wordBoundaries || []);
+            const readingOrder = hki.readingOrder || hki.readingData?.order || 
+                hki.recognitionResults.map((_, i) => i);
+            
+            let result = '';
+            readingOrder.forEach((idx) => {
+                const r = hki.recognitionResults[idx];
+                if (!r || r.excluded) return;
+                const char = r.glyph?.transliteration || r.transliteration || r.glyph?.name || '';
+                result += char;
+                if (wordBoundaries.has(idx)) {
+                    result += ' ';
+                }
+            });
+            return result.trim();
         }
         
         return '';
