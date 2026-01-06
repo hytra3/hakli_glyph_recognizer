@@ -337,6 +337,81 @@ const BookletGenerator = ({
             currentY += 3;
         }
         
+        // Transliteration (LTR)
+        const transliteration = extractTransliteration(hki);
+        if (transliteration) {
+            doc.setFont('courier', 'normal');
+            doc.setFontSize(11);
+            doc.setTextColor(93, 78, 109);  // ancient-purple
+            
+            const lines = doc.splitTextToSize(transliteration, width - 10);
+            lines.forEach(line => {
+                doc.text(line, x + 5, currentY);
+                currentY += 5;
+            });
+            currentY += 3;
+        }
+        
+        // Notes
+        const notes = hki.notes || hki.metadata?.notes || '';
+        if (notes) {
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(9);
+            doc.setTextColor(120, 120, 120);
+            const noteLines = doc.splitTextToSize(`Notes: ${notes}`, width - 10);
+            noteLines.slice(0, 3).forEach(line => {  // Max 3 lines of notes
+                doc.text(line, x + 5, currentY);
+                currentY += 4;
+            });
+        }
+        
+        // Location/metadata footer
+        const location = hki.metadata?.location || hki.location || '';
+        const date = hki.metadata?.date || '';
+        if (location || date) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(150, 150, 150);
+            const metaText = [location, date].filter(Boolean).join(' • ');
+            doc.text(metaText, x + 5, y + height - 5, { maxWidth: width - 10 });
+        }
+    };
+    
+    // Extract Arabic transcription from HKI data
+    const extractArabicTranscription = (hki) => {
+        // Try different possible locations for transcription
+        if (hki.transcription?.arabic && typeof hki.transcription.arabic === 'string') {
+            return hki.transcription.arabic;
+        }
+        if (typeof hki.transcription === 'string') {
+            return hki.transcription;
+        }
+        
+        // Build from recognition results
+        if (hki.recognitionResults && Array.isArray(hki.recognitionResults)) {
+            const arabicChars = hki.recognitionResults
+                .filter(r => r.validated !== false && !r.excluded)
+                .sort((a, b) => {
+                    // Sort by reading order if available, otherwise by position
+                    if (a.readingOrder !== undefined && b.readingOrder !== undefined) {
+                        return a.readingOrder - b.readingOrder;
+                    }
+                    // Default: right-to-left, top-to-bottom
+                    const rowA = Math.floor((a.bounds?.y || 0) / 30);
+                    const rowB = Math.floor((b.bounds?.y || 0) / 30);
+                    if (rowA !== rowB) return rowA - rowB;
+                    return (b.bounds?.x || 0) - (a.bounds?.x || 0);
+                })
+                .map(r => {
+                    // Extract arabic text, handling both direct properties and nested glyph object
+                    if (typeof r.arabic === 'string') return r.arabic;
+                    if (r.glyph?.arabic && typeof r.glyph.arabic === 'string') return r.glyph.arabic;
+                    if (r.glyph?.name && typeof r.glyph.name === 'string') return r.glyph.name;
+                    return '';
+                })
+                .filter(Boolean);
+            
+            if (arabicChars.length > 0) {
                 // Get word boundaries from HKI
                 const wordBoundaries = new Set(hki.wordBoundaries || hki.readingData?.wordBoundaries || []);
                 const readingOrder = hki.readingOrder || hki.readingData?.order || [];

@@ -25,6 +25,16 @@ const WarehouseModal = ({
     const [showCollaborators, setShowCollaborators] = useState(false);
     const [thumbnails, setThumbnails] = useState({}); // { fileId: thumbnailDataUrl }
     
+    // Delete confirmation
+    const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, title } or null
+    const [deleting, setDeleting] = useState(false);
+    
+    // Booklet multi-select
+    const [bookletMode, setBookletMode] = useState(false);
+    const [bookletSelection, setBookletSelection] = useState({}); // { fileId: { id, title, hkiData } }
+    const [showBookletGenerator, setShowBookletGenerator] = useState(false);
+    const [loadingBookletData, setLoadingBookletData] = useState(false);
+    
     // Use ref to track which thumbnails are loading to prevent duplicates
     const loadingThumbnailsRef = useRef(new Set());
     const thumbnailsRef = useRef({});
@@ -228,6 +238,65 @@ const WarehouseModal = ({
         setBookletSelection({});
     };
     
+    // Handle delete confirmation
+    const handleDeleteClick = (item, e) => {
+        e.stopPropagation();
+        setDeleteConfirm({ id: item.id, title: item.title || item.id });
+    };
+    
+    // Execute delete
+    const executeDelete = async () => {
+        if (!deleteConfirm) return;
+        
+        setDeleting(true);
+        try {
+            await DriveSync.deleteHki(deleteConfirm.id);
+            
+            // Remove from lists
+            setDraftItems(prev => prev.filter(i => i.id !== deleteConfirm.id));
+            setPublishedItems(prev => prev.filter(i => i.id !== deleteConfirm.id));
+            setSharedItems(prev => prev.filter(i => i.id !== deleteConfirm.id));
+            
+            // Clear thumbnail cache
+            setThumbnails(prev => {
+                const next = { ...prev };
+                delete next[deleteConfirm.id];
+                return next;
+            });
+            
+            // Clear selection if deleted item was selected
+            if (selectedItem?.id === deleteConfirm.id) {
+                setSelectedItem(null);
+            }
+            
+            // Clear from booklet selection
+            setBookletSelection(prev => {
+                const next = { ...prev };
+                delete next[deleteConfirm.id];
+                return next;
+            });
+            
+            setDeleteConfirm(null);
+        } catch (err) {
+            console.error('Failed to delete:', err);
+            setError(`Failed to delete: ${err.message}`);
+        } finally {
+            setDeleting(false);
+        }
+    };
+    
+    // Get booklet items array
+    const getBookletItems = () => Object.values(bookletSelection);
+    
+    // Render thumbnail card
+    const ThumbnailCard = ({ item, isOwner = false, sharedBy = null }) => {
+        const isSelected = selectedItem?.id === item.id;
+        const isInBooklet = !!bookletSelection[item.id];
+        const thumbSrc = thumbnails[item.id];
+        
+        return (
+            <div
+                onClick={() => bookletMode ? null : handleItemClick(item)}
                 className={`group cursor-pointer rounded-lg border-2 overflow-hidden transition-all hover:shadow-lg ${
                     isInBooklet
                         ? 'border-ochre ring-2 ring-ochre/30'
