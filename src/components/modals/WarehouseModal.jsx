@@ -1,9 +1,5 @@
 // ============================================
-<<<<<<< HEAD
-// WAREHOUSE MODAL v251231
-=======
 // WAREHOUSE MODAL v251231i
->>>>>>> 6e24c266f6e57eacc5b7687e38a3bb0381a4f19e
 // Browse and load HKI files from Google Drive
 // Public view (published) + authenticated view (drafts, shared)
 // Fixed: thumbnail blinking due to dependency cycle
@@ -29,22 +25,6 @@ const WarehouseModal = ({
     const [showCollaborators, setShowCollaborators] = useState(false);
     const [thumbnails, setThumbnails] = useState({}); // { fileId: thumbnailDataUrl }
     
-<<<<<<< HEAD
-=======
-    // Delete confirmation
-    const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, title } or null
-    const [deleting, setDeleting] = useState(false);
-    
->>>>>>> 6e24c266f6e57eacc5b7687e38a3bb0381a4f19e
-    // Booklet multi-select
-    const [bookletMode, setBookletMode] = useState(false);
-    const [bookletSelection, setBookletSelection] = useState({}); // { fileId: { id, title, hkiData } }
-    const [showBookletGenerator, setShowBookletGenerator] = useState(false);
-    const [loadingBookletData, setLoadingBookletData] = useState(false);
-    
-<<<<<<< HEAD
-    // Fetch thumbnail data without setting state (for batching)
-=======
     // Use ref to track which thumbnails are loading to prevent duplicates
     const loadingThumbnailsRef = useRef(new Set());
     const thumbnailsRef = useRef({});
@@ -55,7 +35,6 @@ const WarehouseModal = ({
     }, [thumbnails]);
     
     // Fetch thumbnail data
->>>>>>> 6e24c266f6e57eacc5b7687e38a3bb0381a4f19e
     const fetchThumbnail = useCallback(async (fileId) => {
         try {
             const hkiData = await DriveSync.loadHki(fileId);
@@ -249,73 +228,7 @@ const WarehouseModal = ({
         setBookletSelection({});
     };
     
-<<<<<<< HEAD
-=======
-    // Handle delete confirmation
-    const handleDeleteClick = (item, e) => {
-        e.stopPropagation();
-        setDeleteConfirm({ id: item.id, title: item.title || item.id });
-    };
-    
-    // Execute delete
-    const executeDelete = async () => {
-        if (!deleteConfirm) return;
-        
-        setDeleting(true);
-        try {
-            await DriveSync.deleteHki(deleteConfirm.id);
-            
-            // Remove from lists
-            setDraftItems(prev => prev.filter(i => i.id !== deleteConfirm.id));
-            setPublishedItems(prev => prev.filter(i => i.id !== deleteConfirm.id));
-            setSharedItems(prev => prev.filter(i => i.id !== deleteConfirm.id));
-            
-            // Clear thumbnail cache
-            setThumbnails(prev => {
-                const next = { ...prev };
-                delete next[deleteConfirm.id];
-                return next;
-            });
-            
-            // Clear selection if deleted item was selected
-            if (selectedItem?.id === deleteConfirm.id) {
-                setSelectedItem(null);
-            }
-            
-            // Clear from booklet selection
-            setBookletSelection(prev => {
-                const next = { ...prev };
-                delete next[deleteConfirm.id];
-                return next;
-            });
-            
-            setDeleteConfirm(null);
-        } catch (err) {
-            console.error('Failed to delete:', err);
-            setError(`Failed to delete: ${err.message}`);
-        } finally {
-            setDeleting(false);
-        }
-    };
-    
->>>>>>> 6e24c266f6e57eacc5b7687e38a3bb0381a4f19e
-    // Get booklet items array
-    const getBookletItems = () => Object.values(bookletSelection);
-    
-    // Render thumbnail card
-    const ThumbnailCard = ({ item, isOwner = false, sharedBy = null }) => {
-        const isSelected = selectedItem?.id === item.id;
-        const isInBooklet = !!bookletSelection[item.id];
-        const thumbSrc = thumbnails[item.id];
-        
-        return (
-            <div
-                onClick={() => bookletMode ? null : handleItemClick(item)}
-<<<<<<< HEAD
-                className={`cursor-pointer rounded-lg border-2 overflow-hidden transition-all hover:shadow-lg ${
-=======
                 className={`group cursor-pointer rounded-lg border-2 overflow-hidden transition-all hover:shadow-lg ${
->>>>>>> 6e24c266f6e57eacc5b7687e38a3bb0381a4f19e
                     isInBooklet
                         ? 'border-ochre ring-2 ring-ochre/30'
                         : isSelected 
@@ -663,8 +576,6 @@ const WarehouseModal = ({
                 />
             )}
             
-<<<<<<< HEAD
-=======
             {/* Delete Confirmation Dialog */}
             {deleteConfirm && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
@@ -710,7 +621,6 @@ const WarehouseModal = ({
                 </div>
             )}
             
->>>>>>> 6e24c266f6e57eacc5b7687e38a3bb0381a4f19e
             {/* Booklet Generator Modal */}
             {showBookletGenerator && window.BookletGenerator && (
                 <window.BookletGenerator

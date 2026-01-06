@@ -2451,14 +2451,10 @@
                                     
                                     {/* Status indicators - grouped on right */}
                                     <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
-<<<<<<< HEAD
-                                        <div className={`px-3 py-1 rounded-full text-xs font-bold ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-amber-400 text-amber-900 animate-pulse'}`}>
-=======
                                         <div 
                                             className={`px-3 py-1 rounded-full text-xs font-bold ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-amber-400 text-amber-900 animate-pulse'}`}
                                             title={chartStatus === 'loaded' ? `${Object.keys(loadedGlyphImages).length} template images loaded for ${chartData?.glyphs?.length || 0} glyphs` : 'Loading glyph chart...'}
                                         >
->>>>>>> 6e24c266f6e57eacc5b7687e38a3bb0381a4f19e
                                             {chartStatus === 'loaded' 
                                                 ? `✅ ${chartData?.glyphs?.length || 0} glyphs` 
                                                 : chartLoadProgress.total > 0 
@@ -3623,11 +3619,7 @@
                                                                     
                                                                     {/* Edit dropdown menu */}
                                                                     {editMenuCardIdx === idx && (
-<<<<<<< HEAD
-                                                                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 min-w-[140px]">
-=======
                                                                         <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[140px]">
->>>>>>> 6e24c266f6e57eacc5b7687e38a3bb0381a4f19e
                                                                             <button onClick={(e) => { e.stopPropagation(); shrinkBox(idx, 3); setEditMenuCardIdx(null); }}
                                                                                 className="w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2">
                                                                                 ⊟ Shrink box
