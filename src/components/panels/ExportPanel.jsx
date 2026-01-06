@@ -1,6 +1,8 @@
 // ============================================
-// EXPORT PANEL - Redesigned with HTML/PDF exports
+// EXPORT PANEL v260101e - Redesigned with HTML/PDF exports
 // Storage and sharing for HKI inscriptions
+// Fixed: UTF-8 encoding, fonts, word break indicators
+// Added: Link to booklet generator
 // ============================================
 
 const ExportPanel = ({
@@ -35,6 +37,7 @@ const ExportPanel = ({
     driveUserEmail = null,
     currentFileId = null,
     fileOwner = null,
+    onSignIn = null,
     imageRef,
     className = ''
 }) => {
@@ -282,27 +285,26 @@ const ExportPanel = ({
                 
                 // Glyph label
                 ctx.fillStyle = ctx.strokeStyle;
-                ctx.font = 'bold 12px Arial';
+                ctx.font = 'bold 12px Arial, sans-serif';
                 ctx.fillText(result.glyph.transliteration || result.glyph.name, pos.x + padding, pos.y + padding - 3);
             });
             
             // Draw transcription below image
             if (transcription) {
                 ctx.fillStyle = '#333';
-                ctx.font = '16px "Courier New", monospace';
                 const textY = img.naturalHeight + padding * 2 + 20;
                 
                 // Title
-                ctx.font = 'bold 14px Arial';
+                ctx.font = 'bold 14px Arial, sans-serif';
                 ctx.fillText(inscriptionTitle || currentInscriptionId || 'Inscription', padding, textY);
                 
-                // Transcription
-                ctx.font = '18px "Courier New", monospace';
+                // Transcription - use serif for better Unicode support
+                ctx.font = '18px Georgia, "Times New Roman", serif';
                 ctx.fillText(transcription.replace(/\n/g, ' | '), padding, textY + 25);
                 
                 // Translation if available
                 if (translationEnglish) {
-                    ctx.font = 'italic 14px Arial';
+                    ctx.font = 'italic 14px Arial, sans-serif';
                     ctx.fillStyle = '#666';
                     ctx.fillText('"' + translationEnglish.substring(0, 80) + (translationEnglish.length > 80 ? '...' : '') + '"', padding, textY + 50);
                 }
@@ -394,7 +396,7 @@ const ExportPanel = ({
             border-radius: 4px;
         }
         .transcription {
-            font-family: 'Courier New', monospace;
+            font-family: 'Gentium Plus', 'Charis SIL', 'DejaVu Sans', 'Lucida Sans Unicode', 'Arial Unicode MS', Georgia, serif;
             font-size: 22px;
             padding: 20px;
             background: #fff;
@@ -428,13 +430,27 @@ const ExportPanel = ({
         }
         .vertical-column:last-child { border-right: none; }
         .vertical-glyph {
-            font-family: 'Courier New', monospace;
+            font-family: 'Gentium Plus', 'Charis SIL', 'DejaVu Sans', Georgia, serif;
             font-size: 22px;
             line-height: 2;
+            position: relative;
         }
         .vertical-glyph.arabic {
             font-family: 'Traditional Arabic', 'Arabic Typesetting', serif;
             font-size: 26px;
+        }
+        .vertical-glyph.word-end {
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+            border-bottom: 3px solid #8b7d6b;
+        }
+        .vertical-glyph.word-end::after {
+            content: '·';
+            display: block;
+            text-align: center;
+            color: #8b7d6b;
+            font-size: 14px;
+            margin-top: 4px;
         }
         .word-boundary { color: #8b7d6b; font-weight: bold; }
         .translation {
@@ -530,7 +546,7 @@ const ExportPanel = ({
             ${columns.map(col => `
                 <div class="vertical-column">
                     ${col.map(g => `
-                        <span class="vertical-glyph">${g.char}</span>
+                        <span class="vertical-glyph${g.hasWordBoundary ? ' word-end' : ''}">${g.char}</span>
                     `).join('')}
                 </div>
             `).join('')}
@@ -548,7 +564,7 @@ const ExportPanel = ({
             ${arabicColumns.map(col => `
                 <div class="vertical-column">
                     ${col.map(g => `
-                        <span class="vertical-glyph arabic">${g.char}</span>
+                        <span class="vertical-glyph arabic${g.hasWordBoundary ? ' word-end' : ''}">${g.char}</span>
                     `).join('')}
                 </div>
             `).join('')}
@@ -619,7 +635,7 @@ const ExportPanel = ({
         
         try {
             const html = await generateHtmlContent(false);
-            const blob = new Blob([html], { type: 'text/html' });
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -644,14 +660,18 @@ const ExportPanel = ({
         
         try {
             const html = await generateHtmlContent(true);
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write(html);
-            printWindow.document.close();
             
-            // Wait for images to load then print
+            // Use Blob URL for proper UTF-8 encoding (document.write can mangle Unicode)
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            const blobUrl = URL.createObjectURL(blob);
+            const printWindow = window.open(blobUrl, '_blank');
+            
+            // Wait for window to load then print
             printWindow.onload = () => {
                 setTimeout(() => {
                     printWindow.print();
+                    // Clean up blob URL after a delay
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
                     setIsExporting(false);
                 }, 500);
             };
@@ -876,9 +896,12 @@ const ExportPanel = ({
                                 </button>
                             </div>
                         ) : (
-                            <div className="text-xs text-center text-gray-500 py-2 bg-gray-50 rounded">
-                                🔒 Sign in to save to cloud
-                            </div>
+                            <button 
+                                onClick={() => onSignIn && onSignIn()}
+                                className="w-full text-xs text-center text-ancient-purple py-2 bg-ancient-purple/10 hover:bg-ancient-purple/20 rounded border border-ancient-purple/30 cursor-pointer transition-colors font-medium"
+                            >
+                                🔑 Sign in to save to cloud
+                            </button>
                         )}
                         
                         {/* Load buttons */}
@@ -919,9 +942,18 @@ const ExportPanel = ({
                     </div>
                     
                     {/* Sync status */}
-                    <div className={'text-xs text-center ' + getSyncStatusClass()}>
-                        {getSyncStatusText()}
-                    </div>
+                    {driveSignedIn ? (
+                        <div className={'text-xs text-center ' + getSyncStatusClass()}>
+                            {getSyncStatusText()}
+                        </div>
+                    ) : (
+                        <button 
+                            onClick={() => onSignIn && onSignIn()}
+                            className="w-full text-xs text-center text-ancient-purple hover:underline cursor-pointer"
+                        >
+                            ☁️ Sign in to Drive to enable sync
+                        </button>
+                    )}
                     
                     {/* Local save indicator */}
                     {localSaveTime && (
@@ -1058,8 +1090,19 @@ const ExportPanel = ({
                 
                 {/* Tips */}
                 {showExportFormats && (
-                    <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded">
-                        💡 <strong>Image</strong> for quick sharing · <strong>PDF</strong> for printing · <strong>HTML</strong> for email · <strong>HKI</strong> files contain everything needed to resume work later
+                    <div className="text-xs text-gray-500 p-2 bg-gray-50 rounded space-y-1">
+                        <div>💡 <strong>Image</strong> for quick sharing · <strong>PDF</strong> for printing · <strong>HTML</strong> for email · <strong>HKI</strong> files contain everything needed to resume work later</div>
+                        {onOpenWarehouse && (
+                            <div className="pt-1 border-t border-gray-200">
+                                📚 Need a <strong>multi-inscription booklet</strong> for elders?{' '}
+                                <button 
+                                    onClick={onOpenWarehouse}
+                                    className="text-ancient-purple hover:underline font-medium"
+                                >
+                                    Open Warehouse → select items → Generate Booklet
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

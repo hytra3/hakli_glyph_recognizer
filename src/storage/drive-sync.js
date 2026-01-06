@@ -526,6 +526,24 @@ const DriveSync = {
     },
 
     /**
+     * Delete an HKI file from Google Drive
+     * Only the owner can delete their files
+     */
+    deleteHki: async (fileId) => {
+        if (!DriveSync.isSignedIn()) {
+            throw new Error('Must be signed in to delete files');
+        }
+
+        const url = `https://www.googleapis.com/drive/v3/files/${fileId}`;
+        await DriveSync._apiRequest(url, {
+            method: 'DELETE'
+        });
+        
+        console.log('🗑️ Deleted file:', fileId);
+        return true;
+    },
+
+    /**
      * Generate thumbnail from base64 image
      */
     _generateThumbnail: async (imageData) => {
@@ -637,6 +655,209 @@ const DriveSync = {
         });
         
         console.log('☁️ Profile saved');
+    },
+
+    // ==========================================
+    // CHART MANAGEMENT (Cloud Chart Feature)
+    // ==========================================
+
+    CHART_FILENAME: 'chart-hakli.json',
+    
+    /**
+     * Load chart from Google Drive
+     * @returns {Object|null} Chart data or null if not found
+     */
+    loadChartFromDrive: async () => {
+        if (!DriveSync.isSignedIn()) {
+            console.log('Not signed in, cannot load chart from Drive');
+            return null;
+        }
+
+        try {
+            // Use shared folder for chart
+            const folderId = DriveSync.CONFIG.SHARED_FOLDER_ID;
+            
+            // Search for chart file
+            const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${DriveSync.CHART_FILENAME}' and '${folderId}' in parents and trashed=false&fields=files(id,name,modifiedTime,size)`;
+            
+            const searchResponse = await DriveSync._apiRequest(searchUrl);
+            const searchData = await searchResponse.json();
+            
+            if (!searchData.files || searchData.files.length === 0) {
+                console.log('No chart file found in Drive');
+                return null;
+            }
+
+            const chartFile = searchData.files[0];
+            console.log(`Found chart file: ${chartFile.id}, modified: ${chartFile.modifiedTime}`);
+
+            // Store metadata for conflict detection
+            localStorage.setItem('driveChartId', chartFile.id);
+            localStorage.setItem('driveChartModified', chartFile.modifiedTime);
+
+            // Download file content
+            const contentUrl = `https://www.googleapis.com/drive/v3/files/${chartFile.id}?alt=media`;
+            const contentResponse = await DriveSync._apiRequest(contentUrl);
+            const chartData = await contentResponse.json();
+
+            console.log(`✅ Loaded chart with ${chartData.glyphs?.length || 0} glyphs from Drive`);
+            
+            return chartData;
+
+        } catch (error) {
+            console.error('Error loading chart from Drive:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Save chart to Google Drive (create or update)
+     * @param {Object} chartData - The chart data to save
+     * @param {Object} metadata - Optional metadata about the save operation
+     * @returns {Object} Result with fileId and status
+     */
+    saveChartToDrive: async (chartData, metadata = {}) => {
+        if (!DriveSync.isSignedIn()) {
+            throw new Error('Not signed in');
+        }
+
+        try {
+            // Add save metadata
+            const enrichedChart = {
+                ...chartData,
+                _metadata: {
+                    lastModified: new Date().toISOString(),
+                    modifiedBy: DriveSync._userEmail,
+                    ...metadata
+                }
+            };
+
+            const chartJson = JSON.stringify(enrichedChart, null, 2);
+            const existingFileId = localStorage.getItem('driveChartId');
+            const folderId = DriveSync.CONFIG.SHARED_FOLDER_ID;
+
+            if (existingFileId) {
+                // Update existing file
+                console.log(`Updating chart file: ${existingFileId}`);
+                
+                const url = `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=media`;
+                await DriveSync._apiRequest(url, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: chartJson
+                });
+
+                // Get updated modified time
+                const fileUrl = `https://www.googleapis.com/drive/v3/files/${existingFileId}?fields=modifiedTime`;
+                const fileResponse = await DriveSync._apiRequest(fileUrl);
+                const fileData = await fileResponse.json();
+                localStorage.setItem('driveChartModified', fileData.modifiedTime);
+
+                return {
+                    success: true,
+                    fileId: existingFileId,
+                    action: 'updated',
+                    modifiedTime: fileData.modifiedTime
+                };
+
+            } else {
+                // Create new file
+                console.log('Creating new chart file in Drive');
+
+                const metadataObj = {
+                    name: DriveSync.CHART_FILENAME,
+                    mimeType: 'application/json',
+                    parents: [folderId]
+                };
+
+                const boundary = '-------HakliChartBoundary';
+                const body = [
+                    `--${boundary}`,
+                    'Content-Type: application/json; charset=UTF-8',
+                    '',
+                    JSON.stringify(metadataObj),
+                    `--${boundary}`,
+                    'Content-Type: application/json',
+                    '',
+                    chartJson,
+                    `--${boundary}--`
+                ].join('\r\n');
+
+                const url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime';
+                const response = await DriveSync._apiRequest(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': `multipart/related; boundary=${boundary}`
+                    },
+                    body
+                });
+
+                const result = await response.json();
+                
+                // Store for future updates
+                localStorage.setItem('driveChartId', result.id);
+                localStorage.setItem('driveChartModified', result.modifiedTime);
+
+                return {
+                    success: true,
+                    fileId: result.id,
+                    action: 'created',
+                    modifiedTime: result.modifiedTime
+                };
+            }
+
+        } catch (error) {
+            console.error('Error saving chart to Drive:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Check if Drive chart exists and get metadata
+     * @returns {Object|null} File metadata or null if not found
+     */
+    getChartMetadata: async () => {
+        if (!DriveSync.isSignedIn()) return null;
+
+        const fileId = localStorage.getItem('driveChartId');
+        if (!fileId) return null;
+
+        try {
+            const url = `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,modifiedTime,size,version`;
+            const response = await DriveSync._apiRequest(url);
+            return await response.json();
+        } catch (error) {
+            console.error('Error getting chart metadata:', error);
+            return null;
+        }
+    },
+
+    /**
+     * Check if Drive chart has been modified elsewhere
+     * @returns {boolean} True if conflict detected
+     */
+    checkChartConflict: async () => {
+        const localModified = localStorage.getItem('driveChartModified');
+        if (!localModified) return false;
+
+        const metadata = await DriveSync.getChartMetadata();
+        if (!metadata) return false;
+
+        return metadata.modifiedTime !== localModified;
+    },
+
+    /**
+     * Initialize Drive chart from static file
+     * @param {Object} staticChartData - The static chart to upload
+     */
+    initializeDriveChart: async (staticChartData) => {
+        console.log('Initializing Drive chart from static file');
+        const result = await DriveSync.saveChartToDrive(staticChartData, {
+            action: 'initial_creation',
+            source: 'static_chart'
+        });
+        console.log('Drive chart initialized:', result);
+        return result;
     },
 
     // ==========================================

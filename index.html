@@ -105,6 +105,26 @@
             color: white;
             z-index: 20;
         }
+        
+        /* Chart Status Badge Animations */
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .bg-green-500 {
+            animation: pulse-slow 3s infinite;
+        }
+        
+        /* Disabled Button States */
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed !important;
+        }
+        
+        button:disabled:hover {
+            transform: none !important;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -148,8 +168,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v251231e';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Booklet, Change Tracking & Box Fix)');
+        const APP_VERSION = 'v260106-cloud';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Cloud Chart, Booklet, Change Tracking & Box Fix)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -166,6 +186,13 @@
             const [chartLoadProgress, setChartLoadProgress] = useState({ loaded: 0, total: 0 });
             const [chartModified, setChartModified] = useState(false); // Track unsaved changes
             const [lastSavedTime, setLastSavedTime] = useState(null); // When chart was last saved
+            
+            // Cloud chart state
+            const [chartSource, setChartSource] = useState('static'); // 'static', 'drive', 'localStorage', 'error'
+            const [isDriveChart, setIsDriveChart] = useState(false);
+            const [isOfflineMode, setIsOfflineMode] = useState(false);
+            const [localChangesCount, setLocalChangesCount] = useState(0);
+            const [showDeletedVariants, setShowDeletedVariants] = useState(false);
             
             const [confidenceThreshold, setConfidenceThreshold] = useState(0); // 0-100, filter detections
             
@@ -503,8 +530,15 @@
                                         if (data.readingData.columnBreaks) setColumnBreaks(new Set(data.readingData.columnBreaks));
                                     }
                                     if (data.preprocessing) setPreprocessing(data.preprocessing);
+                                    if (data.recognitionSourceDims) setRecognitionSourceDims(data.recognitionSourceDims);
                                     setLocalSaveTime(savedDate);
                                     console.log('✅ Restored saved work');
+                                    
+                                    // Force box recalculation after image settles
+                                    // Multiple delays to catch different settling times
+                                    [100, 300, 600, 1000].forEach(delay => {
+                                        setTimeout(() => setBoxLayoutKey(k => k + 1), delay);
+                                    });
                                 }
                             }
                         } catch (err) {
@@ -530,6 +564,7 @@
                         visibility: visibility,
                         image: originalImage,
                         displayImage: displayImage,
+                        recognitionSourceDims: recognitionSourceDims,
                         recognitionResults: recognitionResults.map(r => ({
                             glyph: {
                                 id: r.glyph?.id,
@@ -556,85 +591,179 @@
                         preprocessing: preprocessing
                     }));
                 }
-            }, [recognitionResults, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, 
+            }, [recognitionResults, recognitionSourceDims, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, 
                 translationEnglish, translationArabic, inscriptionTitle, inscriptionNotes, visibility]);
             
-            // ========== LOAD CHART ==========
+            // ========== LOAD CHART (WITH CLOUD SUPPORT) ==========
             useEffect(() => {
                 const loadChart = async () => {
                     setChartStatus('loading');
+                    let data = null;
+                    
+                    // Try loading from Drive if signed in
+                    if (driveSignedIn && typeof DriveSync !== 'undefined') {
+                        try {
+                            // Check for conflicts first
+                            const hasConflict = await DriveSync.checkChartConflict();
+                            if (hasConflict && localChangesCount > 0) {
+                                const choice = confirm(
+                                    `⚠️ Chart Conflict Detected\n\n` +
+                                    `The cloud chart has been modified elsewhere.\n` +
+                                    `You have ${localChangesCount} unsaved local changes.\n\n` +
+                                    `OK: Use cloud version (lose local changes)\n` +
+                                    `Cancel: Keep local version (will overwrite cloud)`
+                                );
+                                if (!choice) {
+                                    // Keep local, will overwrite on next save
+                                    console.log('Using local version');
+                                }
+                            }
+
+                            const driveChart = await DriveSync.loadChartFromDrive();
+                            
+                            if (driveChart) {
+                                data = driveChart;
+                                setChartSource('drive');
+                                setIsDriveChart(true);
+                                console.log('✅ Loaded chart from Drive');
+                            } else {
+                                // No Drive chart exists - create one from static
+                                const response = await fetch('Hakli_glyphs.JSON');
+                                data = await response.json();
+                                await DriveSync.initializeDriveChart(data);
+                                setChartSource('drive');
+                                setIsDriveChart(true);
+                                console.log('✅ Created new Drive chart from static file');
+                            }
+                        } catch (error) {
+                            console.error('Drive chart load failed:', error);
+                            // Fall back to static
+                            const response = await fetch('Hakli_glyphs.JSON');
+                            data = await response.json();
+                            setChartSource('error');
+                            setIsDriveChart(false);
+                        }
+                    } else {
+                        // Not signed in - use static chart
+                        try {
+                            const response = await fetch('Hakli_glyphs.JSON');
+                            data = await response.json();
+                            setChartSource('static');
+                            setIsDriveChart(false);
+                            console.log('Using static chart (not signed in)');
+                        } catch (error) {
+                            console.error('Failed to load static chart:', error);
+                            setChartStatus('error');
+                            return;
+                        }
+                    }
+
+                    if (!data) {
+                        setChartStatus('error');
+                        return;
+                    }
+
+                    setChartData(data);
+                    console.log(`📜 Loaded chart with ${data.glyphs.length} glyphs`);
+                    
+                    // Cache to localStorage
                     try {
-                        const response = await fetch('Hakli_glyphs.JSON');
-                        const data = await response.json();
-                        setChartData(data);
-                        console.log(`📜 Loaded chart with ${data.glyphs.length} glyphs`);
-                        
-                        // Count total templates to load
-                        let totalTemplates = 0;
-                        for (const glyph of data.glyphs) {
-                            if (glyph.images?.primary) totalTemplates++;
-                            if (glyph.images?.variants) totalTemplates += glyph.images.variants.length;
+                        localStorage.setItem('cachedChart', JSON.stringify(data));
+                        localStorage.setItem('cachedChartTime', new Date().toISOString());
+                    } catch (e) {
+                        console.warn('Failed to cache chart:', e);
+                    }
+                    
+                    // Count total templates to load
+                    let totalTemplates = 0;
+                    for (const glyph of data.glyphs) {
+                        if (glyph.images?.primary) totalTemplates++;
+                        if (glyph.images?.variants) totalTemplates += glyph.images.variants.length;
+                    }
+                    
+                    let loaded = 0;
+                    const newImages = {};
+                    const newThumbnails = {};
+                    
+                    for (const glyph of data.glyphs) {
+                        // Load primary template
+                        if (glyph.images?.primary) {
+                            try {
+                                const img = new Image();
+                                img.crossOrigin = 'anonymous';
+                                await new Promise((resolve, reject) => {
+                                    img.onload = resolve;
+                                    img.onerror = reject;
+                                    img.src = glyph.images.primary;
+                                });
+                                newImages[glyph.id] = img;
+                                newThumbnails[glyph.id] = img.src;
+                            } catch (e) {
+                                console.debug(`Skipped glyph ${glyph.id} primary (image not available)`);
+                            }
+                            loaded++;
+                            setChartLoadProgress({ loaded, total: totalTemplates });
                         }
                         
-                        let loaded = 0;
-                        const newImages = {};
-                        const newThumbnails = {};
-                        
-                        for (const glyph of data.glyphs) {
-                            // Load primary template
-                            if (glyph.images?.primary) {
+                        // Load variant templates
+                        if (glyph.images?.variants) {
+                            for (let i = 0; i < glyph.images.variants.length; i++) {
                                 try {
                                     const img = new Image();
                                     img.crossOrigin = 'anonymous';
                                     await new Promise((resolve, reject) => {
                                         img.onload = resolve;
                                         img.onerror = reject;
-                                        img.src = glyph.images.primary;
+                                        img.src = glyph.images.variants[i];
                                     });
-                                    newImages[glyph.id] = img;
-                                    newThumbnails[glyph.id] = img.src;
+                                    const key = `${glyph.id}_variant_${i}`;
+                                    newImages[key] = img;
+                                    newThumbnails[key] = img.src;
                                 } catch (e) {
-                                    console.debug(`Skipped glyph ${glyph.id} primary (image not available)`);
+                                    console.debug(`Skipped glyph ${glyph.id} variant ${i}`);
                                 }
                                 loaded++;
                                 setChartLoadProgress({ loaded, total: totalTemplates });
                             }
-                            
-                            // Load variant templates
-                            if (glyph.images?.variants) {
-                                for (let i = 0; i < glyph.images.variants.length; i++) {
-                                    try {
-                                        const img = new Image();
-                                        img.crossOrigin = 'anonymous';
-                                        await new Promise((resolve, reject) => {
-                                            img.onload = resolve;
-                                            img.onerror = reject;
-                                            img.src = glyph.images.variants[i];
-                                        });
-                                        const key = `${glyph.id}_variant_${i}`;
-                                        newImages[key] = img;
-                                        newThumbnails[key] = img.src;
-                                    } catch (e) {
-                                        console.debug(`Skipped glyph ${glyph.id} variant ${i}`);
-                                    }
-                                    loaded++;
-                                    setChartLoadProgress({ loaded, total: totalTemplates });
-                                }
-                            }
                         }
-                        
-                        setLoadedGlyphImages(newImages);
-                        setGlyphThumbnails(newThumbnails);
-                        setChartStatus('loaded');
-                        console.log(`✅ Loaded ${Object.keys(newImages).length} template images`);
-                    } catch (error) {
-                        console.error('Failed to load chart:', error);
-                        setChartStatus('error');
                     }
+                    
+                    setLoadedGlyphImages(newImages);
+                    setGlyphThumbnails(newThumbnails);
+                    setChartStatus('loaded');
+                    console.log(`✅ Loaded ${Object.keys(newImages).length} template images`);
                 };
                 loadChart();
-            }, []);
+            }, [driveSignedIn]); // Re-run when sign-in status changes
             
+            
+            // ========== ONLINE/OFFLINE DETECTION ==========
+            useEffect(() => {
+                const handleOnline = () => {
+                    console.log('Back online');
+                    setIsOfflineMode(false);
+                    // Reload chart if signed in
+                    if (driveSignedIn) {
+                        window.location.reload();
+                    }
+                };
+                
+                const handleOffline = () => {
+                    console.log('Gone offline');
+                    setIsOfflineMode(true);
+                };
+                
+                window.addEventListener('online', handleOnline);
+                window.addEventListener('offline', handleOffline);
+                
+                // Set initial state
+                setIsOfflineMode(!navigator.onLine);
+                
+                return () => {
+                    window.removeEventListener('online', handleOnline);
+                    window.removeEventListener('offline', handleOffline);
+                };
+            }, [driveSignedIn]);
             // ========== AUTO-SAVE TO LOCALSTORAGE ==========
             useEffect(() => {
                 if (!chartData || !chartModified) return;
@@ -676,10 +805,15 @@
             }, []);
             
             // ========== TRACK IMAGE DIMENSIONS FOR BOX ALIGNMENT ==========
+            const [imageReady, setImageReady] = useState(false);
+            const lastImageSize = useRef({ width: 0, height: 0 });
+            
             useEffect(() => {
                 const img = imageRef.current;
                 const container = imageContainerRef.current;
                 if (!img || !container) return;
+                
+                setImageReady(false);
                 
                 // Update dimensions when image loads
                 const handleImageLoad = () => {
@@ -687,40 +821,68 @@
                         width: img.naturalWidth, 
                         height: img.naturalHeight 
                     });
-                    setBoxLayoutKey(k => k + 1);
+                    
+                    // Wait for layout to settle, then mark ready
+                    const checkSettled = () => {
+                        const rect = img.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
+                            if (rect.width === lastImageSize.current.width && 
+                                rect.height === lastImageSize.current.height) {
+                                // Dimensions stable - we're ready
+                                setImageReady(true);
+                                setBoxLayoutKey(k => k + 1);
+                            } else {
+                                // Still changing, check again
+                                lastImageSize.current = { width: rect.width, height: rect.height };
+                                requestAnimationFrame(checkSettled);
+                            }
+                        } else {
+                            requestAnimationFrame(checkSettled);
+                        }
+                    };
+                    
+                    requestAnimationFrame(checkSettled);
                 };
                 
                 img.addEventListener('load', handleImageLoad);
                 
-                // Also observe container resize (debounced to handle CSS transitions)
+                // Observe BOTH container and image for resize
                 let resizeTimeout;
-                const resizeObserver = new ResizeObserver(() => {
+                const triggerRecalc = () => {
                     clearTimeout(resizeTimeout);
                     resizeTimeout = setTimeout(() => {
+                        const rect = img.getBoundingClientRect();
+                        lastImageSize.current = { width: rect.width, height: rect.height };
                         setBoxLayoutKey(k => k + 1);
-                    }, 100);
-                });
-                resizeObserver.observe(container);
+                    }, 50);
+                };
+                
+                const containerObserver = new ResizeObserver(triggerRecalc);
+                const imageObserver = new ResizeObserver(triggerRecalc);
+                
+                containerObserver.observe(container);
+                imageObserver.observe(img);
                 
                 // If image is already loaded, trigger immediately
-                if (img.complete) {
+                if (img.complete && img.naturalWidth > 0) {
                     handleImageLoad();
                 }
                 
                 return () => {
                     img.removeEventListener('load', handleImageLoad);
-                    resizeObserver.disconnect();
+                    containerObserver.disconnect();
+                    imageObserver.disconnect();
                     clearTimeout(resizeTimeout);
                 };
             }, [displayImage]);
             
             // ========== UPDATE BOX LAYOUT WHEN PANELS TOGGLE ==========
             useEffect(() => {
-                // Small delay to let CSS transitions complete
-                const timer = setTimeout(() => {
-                    setBoxLayoutKey(k => k + 1);
-                }, 200);
-                return () => clearTimeout(timer);
+                // Multiple recalcs to catch CSS transitions settling
+                const timers = [100, 200, 350].map(delay => 
+                    setTimeout(() => setBoxLayoutKey(k => k + 1), delay)
+                );
+                return () => timers.forEach(clearTimeout);
             }, [isLeftPanelHidden, isRightPanelHidden]);
             
             // ========== IMAGE HANDLING ==========
@@ -756,8 +918,42 @@
                 const file = event.target.files[0];
                 if (!file) return;
                 
+                // Reset file input to allow selecting same file again
+                event.target.value = '';
+                
                 setIsImageLoading(true);
                 setCanvasZoom(1); // Reset zoom for new image
+                
+                // Clear LocalAutoSave so old data doesn't restore on refresh
+                if (typeof LocalAutoSave !== 'undefined') {
+                    LocalAutoSave.clearAutosave().catch(err => console.warn('Could not clear autosave:', err));
+                }
+                
+                // Clear previous state IMMEDIATELY before loading new image
+                setRecognitionResults([]);
+                setValidations({});
+                setReadingOrder([]);
+                setWordBoundaries(new Set());
+                setLineBreaks(new Set());
+                setColumnBreaks(new Set());
+                setSelectedRegions(new Set());
+                setRecognitionSourceDims(null);
+                setChangeLog([]);
+                setUndoStack([]);
+                setRedoStack([]);
+                // Reset inscription metadata for fresh start
+                setCurrentInscriptionId(null);
+                setInscriptionTitle('');
+                setInscriptionNotes('');
+                setInscriptionComplete(false);
+                setTranslationEnglish('');
+                setTranslationArabic('');
+                setCurrentFileId(null);
+                setFileOwner(null);
+                setIsReadOnly(false);
+                // Reset preprocessing to defaults
+                setPreprocessing({ rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false, blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invertColors: false });
+                setLocalSaveTime(null);
                 
                 const reader = new FileReader();
                 reader.onload = async (e) => {
@@ -775,14 +971,6 @@
                         }
                     }
                     
-                    // Clear previous recognition state
-                    setRecognitionResults([]);
-                    setValidations({});
-                    setReadingOrder([]);
-                    setWordBoundaries(new Set());
-                    setLineBreaks(new Set());
-                    setSelectedRegions(new Set());
-                    setRecognitionSourceDims(null);
                     setIsImageLoading(false);
                 };
                 reader.onerror = () => {
@@ -980,15 +1168,20 @@
                 const ctx = canvas.getContext('2d');
                 const rect = canvas.getBoundingClientRect();
                 
-                // Calculate position relative to canvas (accounting for scaling)
+                // Calculate position relative to canvas (accounting for scaling and zoom)
                 const scaleX = canvas.width / rect.width;
                 const scaleY = canvas.height / rect.height;
                 const x = (e.clientX - rect.left) * scaleX;
                 const y = (e.clientY - rect.top) * scaleY;
                 
-                // Draw white circle (erase) - scale the brush to match cursor visually
+                // The cursor is displayed at eraserSize CSS pixels
+                // The canvas is displayed with CSS transform, so rect includes zoom
+                // Scale the brush to match what the user sees (cursor size in canvas coords)
+                const brushRadius = eraserSize * scaleX;
+                
+                // Draw white circle (erase)
                 ctx.beginPath();
-                ctx.arc(x, y, eraserSize * scaleX, 0, Math.PI * 2);
+                ctx.arc(x, y, brushRadius, 0, Math.PI * 2);
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fill();
             }, [eraserMode, eraserSize]);
@@ -1240,37 +1433,33 @@
             const handleManualBoxStart = useCallback((e) => {
                 if (!manualBoxMode || !imageRef.current || !imageContainerRef.current) return;
                 
-                const container = imageContainerRef.current;
                 const img = imageRef.current;
-                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
                 
-                // Use offsetLeft/Top for actual image position within container
-                const offsetX = img.offsetLeft;
-                const offsetY = img.offsetTop;
-                const x = e.clientX - containerRect.left - offsetX;
-                const y = e.clientY - containerRect.top - offsetY;
+                // Calculate position relative to the image element directly
+                // Account for zoom transform
+                const x = (e.clientX - imgRect.left) / canvasZoom;
+                const y = (e.clientY - imgRect.top) / canvasZoom;
                 
                 // Only start if click is within image bounds
                 if (x >= 0 && x <= img.clientWidth && y >= 0 && y <= img.clientHeight) {
                     setDrawingBox({ startX: x, startY: y, currentX: x, currentY: y });
                 }
-            }, [manualBoxMode]);
+            }, [manualBoxMode, canvasZoom]);
             
             const handleManualBoxMove = useCallback((e) => {
-                if (!drawingBox || !imageContainerRef.current) return;
+                if (!drawingBox || !imageRef.current) return;
                 
-                const container = imageContainerRef.current;
                 const img = imageRef.current;
-                const containerRect = container.getBoundingClientRect();
+                const imgRect = img.getBoundingClientRect();
                 
-                // Use offsetLeft/Top for actual image position
-                const offsetX = img.offsetLeft;
-                const offsetY = img.offsetTop;
-                const x = e.clientX - containerRect.left - offsetX;
-                const y = e.clientY - containerRect.top - offsetY;
+                // Calculate position relative to the image element directly
+                // Account for zoom transform
+                const x = (e.clientX - imgRect.left) / canvasZoom;
+                const y = (e.clientY - imgRect.top) / canvasZoom;
                 
                 setDrawingBox(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
-            }, [drawingBox]);
+            }, [drawingBox, canvasZoom]);
             
             const handleManualBoxEnd = useCallback((e) => {
                 if (!drawingBox || !imageRef.current) return;
@@ -1440,7 +1629,18 @@
             }, [getReadingOrderedResults, wordBoundaries, lineBreaks, inscriptionTitle, translationEnglish, translationArabic]);
             
             // ========== TEMPLATE TRAINING ==========
-            const saveAsTemplate = useCallback((detectionIndex, templateType) => {
+            const saveAsTemplate = useCallback(async (detectionIndex, templateType) => {
+                // Guard: Must be signed in and have Drive chart for saving
+                if (!driveSignedIn || !isDriveChart) {
+                    alert('⚠️ Training Mode Requires Sign-In\n\nPlease sign in to save templates to cloud chart');
+                    return;
+                }
+                
+                if (isOfflineMode) {
+                    alert('⚠️ Cannot Save While Offline\n\nTemplates cannot be saved while offline');
+                    return;
+                }
+                
                 const detection = recognitionResults[detectionIndex];
                 if (!detection || !detection.thumbnail) {
                     alert('No detection thumbnail available');
@@ -1486,6 +1686,22 @@
 
                 setChartData(updatedChart);
                 setChartModified(true);
+                
+                // Save to Drive
+                try {
+                    if (typeof DriveSync !== 'undefined') {
+                        await DriveSync.saveChartToDrive(updatedChart, {
+                            action: 'add_template',
+                            glyphId: glyph.id,
+                            templateType: templateType,
+                            user: driveUserEmail
+                        });
+                        console.log('✅ Saved template to Drive');
+                    }
+                } catch (error) {
+                    console.error('Failed to save to Drive:', error);
+                    alert('⚠️ Failed to save to Drive\n\nChanges saved locally only. Check console for details.');
+                }
 
                 // Reload the image in the cache
                 const img = new Image();
@@ -1511,7 +1727,7 @@
 
                 setSelectedForTemplate(null);
                 console.log(`✅ Saved ${templateType} template for ${glyph.name}`);
-            }, [recognitionResults, chartData, loadedGlyphImages, glyphThumbnails]);
+            }, [recognitionResults, chartData, loadedGlyphImages, glyphThumbnails, driveSignedIn, isDriveChart, isOfflineMode, driveUserEmail]);
             
             // Delete a template from a glyph
             const deleteTemplate = useCallback((glyphId, templateType, index = null) => {
@@ -2143,11 +2359,69 @@
                 });
             }, []);
 
+            
+            // ========== CHART STATUS BADGE ==========
+            const ChartStatusBadge = () => {
+                const getStatusConfig = () => {
+                    if (chartStatus === 'loading') {
+                        return { icon: '⏳', class: 'bg-gray-600', text: 'Loading chart...' };
+                    } else if (isOfflineMode) {
+                        return { icon: '📴', class: 'bg-orange-500', text: 'Offline Mode' };
+                    } else if (chartSource === 'drive') {
+                        return { icon: '☁️', class: 'bg-green-500', text: 'Cloud Chart' };
+                    } else if (chartSource === 'static') {
+                        return { icon: '📄', class: 'bg-gray-500', text: 'Static Chart' };
+                    } else if (chartSource === 'error') {
+                        return { icon: '⚠️', class: 'bg-red-500', text: 'Error' };
+                    }
+                    return { icon: '?', class: 'bg-gray-500', text: 'Unknown' };
+                };
+                
+                const config = getStatusConfig();
+                const modifiedTime = localStorage.getItem('driveChartModified');
+                
+                return (
+                    <div className={`fixed top-16 right-4 ${config.class} text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg z-50`}>
+                        <span>{config.icon}</span>
+                        <span>{config.text}</span>
+                        {chartSource === 'drive' && modifiedTime && (
+                            <span className="text-white/80 text-[10px] border-l border-white/30 pl-2 ml-1">
+                                {new Date(modifiedTime).toLocaleTimeString()}
+                            </span>
+                        )}
+                    </div>
+                );
+            };
+            
+            // ========== OFFLINE WARNING BANNER ==========
+            const OfflineWarningBanner = () => {
+                if (!isOfflineMode) return null;
+                
+                return (
+                    <div className="fixed top-0 left-0 right-0 bg-orange-500 text-white px-4 py-2 flex items-center justify-between z-[100]">
+                        <div className="flex items-center gap-3">
+                            <span className="text-xl">📴</span>
+                            <span className="text-sm font-medium">
+                                You are offline. Changes will be saved locally and synced when connection is restored.
+                            </span>
+                        </div>
+                        <button 
+                            onClick={() => setIsOfflineMode(false)}
+                            className="text-white hover:text-white/80 text-lg font-bold"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                );
+            };
+            
             // ============================================
             // RENDER
             // ============================================
             return (
                 <div className="min-h-screen bg-gray-100 flex flex-col">
+                    <ChartStatusBadge />
+                    <OfflineWarningBanner />
                     {/* Header */}
                     <header className="bg-ancient-purple text-white shadow-lg flex-shrink-0">
                         <div className="max-w-7xl mx-auto px-4 py-2">
@@ -2177,7 +2451,14 @@
                                     
                                     {/* Status indicators - grouped on right */}
                                     <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
+<<<<<<< HEAD
                                         <div className={`px-3 py-1 rounded-full text-xs font-bold ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-amber-400 text-amber-900 animate-pulse'}`}>
+=======
+                                        <div 
+                                            className={`px-3 py-1 rounded-full text-xs font-bold ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-amber-400 text-amber-900 animate-pulse'}`}
+                                            title={chartStatus === 'loaded' ? `${Object.keys(loadedGlyphImages).length} template images loaded for ${chartData?.glyphs?.length || 0} glyphs` : 'Loading glyph chart...'}
+                                        >
+>>>>>>> 6e24c266f6e57eacc5b7687e38a3bb0381a4f19e
                                             {chartStatus === 'loaded' 
                                                 ? `✅ ${chartData?.glyphs?.length || 0} glyphs` 
                                                 : chartLoadProgress.total > 0 
@@ -2427,6 +2708,43 @@
                                         </div>
                                     )}
                                     
+                                    {/* Reading mode sort controls - mobile */}
+                                    {viewMode === 'reading' && recognitionResults.length > 0 && (
+                                        <div className="flex gap-1 flex-wrap">
+                                            <select 
+                                                value={readingDirection}
+                                                onChange={(e) => setReadingDirection(e.target.value)}
+                                                className="text-xs px-2 py-1 rounded border border-gray-300 bg-white flex-1"
+                                            >
+                                                <option value="rtl">RTL</option>
+                                                <option value="ltr">LTR</option>
+                                                <option value="ttb-rtl">TTB-RTL</option>
+                                                <option value="ttb-ltr">TTB-LTR</option>
+                                            </select>
+                                            <button 
+                                                onClick={() => {
+                                                    if (typeof ReadingOrder !== 'undefined' && ReadingOrder.generateOrder) {
+                                                        pushUndo('readingOrder', [...readingOrder]);
+                                                        const newOrder = ReadingOrder.generateOrder(recognitionResults, readingDirection);
+                                                        setReadingOrder(newOrder);
+                                                    }
+                                                }}
+                                                className="px-2 py-1 bg-ancient-purple text-white rounded text-xs"
+                                            >
+                                                🔄 Sort
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    pushUndo('readingOrder', [...readingOrder]);
+                                                    setReadingOrder([...readingOrder].reverse());
+                                                }}
+                                                className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs"
+                                            >
+                                                ⇅
+                                            </button>
+                                        </div>
+                                    )}
+                                    
                                     {/* Detection cards - simplified for mobile */}
                                     {recognitionResults.length === 0 ? (
                                         <div className="text-center text-gray-400 py-8">
@@ -2514,22 +2832,55 @@
                                                 reader.onload = (event) => {
                                                     try {
                                                         const data = JSON.parse(event.target.result);
-                                                        // Restore state from HKI file
+                                                        
+                                                        // Clear ALL state first (fresh start)
+                                                        setRecognitionResults([]);
+                                                        setValidations({});
+                                                        setReadingOrder([]);
+                                                        setReadingDirection('rtl');
+                                                        setWordBoundaries(new Set());
+                                                        setLineBreaks(new Set());
+                                                        setColumnBreaks(new Set());
+                                                        setSelectedRegions(new Set());
+                                                        setRecognitionSourceDims(null);
+                                                        setChangeLog([]);
+                                                        setUndoStack([]);
+                                                        setRedoStack([]);
+                                                        setCurrentInscriptionId(null);
+                                                        setInscriptionTitle('');
+                                                        setInscriptionNotes('');
+                                                        setInscriptionComplete(false);
+                                                        setTranslationEnglish('');
+                                                        setTranslationArabic('');
+                                                        setCurrentFileId(null);
+                                                        setFileOwner(null);
+                                                        setIsReadOnly(false);
+                                                        setPreprocessing({ rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false, blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invertColors: false });
+                                                        setLocalSaveTime(null);
+                                                        setCanvasZoom(1);
+                                                        
+                                                        // Now restore state from HKI file
                                                         if (data.image) setOriginalImage(data.image);
                                                         if (data.displayImage) setDisplayImage(data.displayImage);
                                                         if (data.preprocessing) setPreprocessing(data.preprocessing);
                                                         if (data.recognitionResults) setRecognitionResults(data.recognitionResults);
+                                                        if (data.recognitionSourceDims) setRecognitionSourceDims(data.recognitionSourceDims);
                                                         if (data.validations) setValidations(data.validations);
                                                         if (data.changeLog) setChangeLog(data.changeLog);
                                                         if (data.readingOrder) setReadingOrder(data.readingOrder);
                                                         if (data.readingDirection) setReadingDirection(data.readingDirection);
                                                         if (data.wordBoundaries) setWordBoundaries(new Set(data.wordBoundaries));
                                                         if (data.lineBreaks) setLineBreaks(new Set(data.lineBreaks));
+                                                        if (data.columnBreaks) setColumnBreaks(new Set(data.columnBreaks));
                                                         if (data.translationEnglish) setTranslationEnglish(data.translationEnglish);
                                                         if (data.translationArabic) setTranslationArabic(data.translationArabic);
                                                         if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
                                                         if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                        if (data.inscriptionComplete) setInscriptionComplete(data.inscriptionComplete);
                                                         if (data.currentInscriptionId) setCurrentInscriptionId(data.currentInscriptionId);
+                                                        if (data.visibility) setVisibility(data.visibility);
+                                                        
+                                                        console.log('📂 Loaded HKI:', data.inscriptionTitle || file.name);
                                                         alert('✅ Loaded: ' + (data.inscriptionTitle || file.name));
                                                     } catch (err) {
                                                         console.error('Error loading HKI:', err);
@@ -2794,16 +3145,21 @@
                                             })()}
                                             
                                             {/* Eraser canvas (shown when eraser active) */}
-                                            {eraserMode && (
-                                                <canvas ref={eraserCanvasRef}
-                                                    className="max-w-full max-h-full object-contain"
-                                                    style={{ cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${eraserSize * 2 + 2}" height="${eraserSize * 2 + 2}" viewBox="0 0 ${eraserSize * 2 + 2} ${eraserSize * 2 + 2}"><circle cx="${eraserSize + 1}" cy="${eraserSize + 1}" r="${eraserSize}" fill="none" stroke="black" stroke-width="1.5"/><circle cx="${eraserSize + 1}" cy="${eraserSize + 1}" r="${eraserSize}" fill="none" stroke="white" stroke-width="0.5"/><line x1="${eraserSize + 1}" y1="${eraserSize - 4}" x2="${eraserSize + 1}" y2="${eraserSize + 7}" stroke="black" stroke-width="1"/><line x1="${eraserSize - 4}" y1="${eraserSize + 1}" x2="${eraserSize + 7}" y2="${eraserSize + 1}" stroke="black" stroke-width="1"/></svg>') ${eraserSize + 1} ${eraserSize + 1}, crosshair` }}
-                                                    onMouseDown={handleEraserStart}
-                                                    onMouseMove={handleEraserDraw}
-                                                    onMouseUp={handleEraserEnd}
-                                                    onMouseLeave={handleEraserEnd}
-                                                />
-                                            )}
+                                            {eraserMode && (() => {
+                                                // Cursor radius is slightly smaller to account for stroke width
+                                                const cursorRadius = eraserSize - 1;
+                                                const cursorSize = cursorRadius * 2 + 2;
+                                                return (
+                                                    <canvas ref={eraserCanvasRef}
+                                                        className="max-w-full max-h-full object-contain"
+                                                        style={{ cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair` }}
+                                                        onMouseDown={handleEraserStart}
+                                                        onMouseMove={handleEraserDraw}
+                                                        onMouseUp={handleEraserEnd}
+                                                        onMouseLeave={handleEraserEnd}
+                                                    />
+                                                );
+                                            })()}
                                             
                                             {/* Detection boxes (hidden during eraser mode) */}
                                             {!eraserMode && recognitionResults.map((result, index) => {
@@ -2832,19 +3188,27 @@
                                                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                                                 const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                                                 
-                                                // Skip rendering if dimensions aren't ready
-                                                if (!img.clientWidth || !img.clientHeight || !sourceWidth || !sourceHeight) return null;
+                                                // Use clientWidth/Height for display dimensions (stable, not affected by transforms)
+                                                const displayWidth = img.clientWidth;
+                                                const displayHeight = img.clientHeight;
                                                 
-                                                // Simple scale calculation
-                                                // With max-w-full max-h-full, the img element sizes to the rendered content
-                                                const scaleX = img.clientWidth / sourceWidth;
-                                                const scaleY = img.clientHeight / sourceHeight;
+                                                // Skip rendering if dimensions aren't ready
+                                                if (!displayWidth || !displayHeight || !sourceWidth || !sourceHeight) return null;
+                                                
+                                                // Scale calculation
+                                                const scaleX = displayWidth / sourceWidth;
+                                                const scaleY = displayHeight / sourceHeight;
+                                                
+                                                // Get image position relative to its offset parent (the zoom wrapper)
+                                                // This accounts for any centering/flexbox positioning
+                                                const imgOffsetX = img.offsetLeft;
+                                                const imgOffsetY = img.offsetTop;
                                                 
                                                 return (
                                                     <div key={index} className={boxClass}
                                                         style={{
-                                                            left: result.position.x * scaleX,
-                                                            top: result.position.y * scaleY,
+                                                            left: imgOffsetX + result.position.x * scaleX,
+                                                            top: imgOffsetY + result.position.y * scaleY,
                                                             width: result.position.width * scaleX,
                                                             height: result.position.height * scaleY
                                                         }}
@@ -2997,6 +3361,48 @@
                                                     className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200" title="Clear all detections">🗑</button>
                                             </div>
                                             
+                                            {/* Reading mode sorting controls - compact collapsible */}
+                                            {viewMode === 'reading' && recognitionResults.length > 0 && (
+                                                <div className="mb-2 flex items-center gap-1 text-xs">
+                                                    <select 
+                                                        value={readingDirection}
+                                                        onChange={(e) => setReadingDirection(e.target.value)}
+                                                        className="px-1 py-1 rounded border border-gray-300 bg-white text-xs max-w-[90px]"
+                                                        title="Reading direction"
+                                                    >
+                                                        <option value="rtl">→ RTL</option>
+                                                        <option value="ltr">← LTR</option>
+                                                        <option value="ttb-rtl">↓ TTB-R</option>
+                                                        <option value="ttb-ltr">↓ TTB-L</option>
+                                                        <option value="boustrophedon">↔ Boust</option>
+                                                    </select>
+                                                    <button 
+                                                        onClick={() => {
+                                                            if (typeof ReadingOrder !== 'undefined' && ReadingOrder.generateOrder) {
+                                                                pushUndo('readingOrder', [...readingOrder]);
+                                                                const newOrder = ReadingOrder.generateOrder(recognitionResults, readingDirection);
+                                                                setReadingOrder(newOrder);
+                                                                console.log(`🔄 Re-sorted ${newOrder.length} glyphs by position (${readingDirection})`);
+                                                            }
+                                                        }}
+                                                        className="px-2 py-1 bg-ancient-purple text-white rounded text-xs hover:bg-[#4a3d5a]"
+                                                        title="Re-sort all glyphs by their position on the image"
+                                                    >
+                                                        🔄 Sort
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            pushUndo('readingOrder', [...readingOrder]);
+                                                            setReadingOrder([...readingOrder].reverse());
+                                                        }}
+                                                        className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                                                        title="Reverse the current order"
+                                                    >
+                                                        ⇅
+                                                    </button>
+                                                </div>
+                                            )}
+                                            
                                             {/* Selection actions */}
                                             {selectedRegions.size > 0 && (
                                                 <div className="mb-2 p-2 bg-ochre/10 rounded-lg border border-ochre/30">
@@ -3056,7 +3462,7 @@
                                                 </div>
                                             )}
                                             
-                                            <div className={`flex-1 overflow-y-auto ${isLeftPanelHidden && viewMode !== 'reading' ? 'grid grid-cols-2 gap-2 auto-rows-max' : 'space-y-2'}`}>
+                                            <div className={`flex-1 overflow-y-auto pb-48 ${isLeftPanelHidden && viewMode !== 'reading' ? 'grid grid-cols-2 gap-2 auto-rows-max' : 'space-y-2'}`}>
                                                 {(viewMode === 'reading' 
                                                     ? readingOrder.filter(i => !excludedDetections.has(i) && Math.round(recognitionResults[i]?.confidence * 100) >= confidenceThreshold)
                                                     : recognitionResults.map((_, i) => i).filter(i => Math.round(recognitionResults[i]?.confidence * 100) >= confidenceThreshold)
@@ -3078,7 +3484,7 @@
                                                     
                                                     return (
                                                         <div key={idx} 
-                                                            className={`border-2 ${borderColor} rounded-lg overflow-hidden ${isSelected ? 'bg-yellow-50' : ''} ${isExcluded ? 'opacity-50' : ''} ${viewMode === 'reading' ? 'cursor-grab' : ''} ${draggedCardIdx === displayIdx ? 'opacity-50' : ''} ${dragOverCardIdx === displayIdx ? 'border-ochre border-dashed' : ''}`}
+                                                            className={`border-2 ${borderColor} rounded-lg ${isSelected ? 'bg-yellow-50' : ''} ${isExcluded ? 'opacity-50' : ''} ${viewMode === 'reading' ? 'cursor-grab' : ''} ${draggedCardIdx === displayIdx ? 'opacity-50' : ''} ${dragOverCardIdx === displayIdx ? 'border-ochre border-dashed' : ''}`}
                                                             draggable={viewMode === 'reading'}
                                                             onDragStart={viewMode === 'reading' ? (e) => handleDragStart(e, displayIdx) : undefined}
                                                             onDragOver={viewMode === 'reading' ? (e) => handleDragOver(e, displayIdx) : undefined}
@@ -3217,7 +3623,11 @@
                                                                     
                                                                     {/* Edit dropdown menu */}
                                                                     {editMenuCardIdx === idx && (
+<<<<<<< HEAD
                                                                         <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 min-w-[140px]">
+=======
+                                                                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[140px]">
+>>>>>>> 6e24c266f6e57eacc5b7687e38a3bb0381a4f19e
                                                                             <button onClick={(e) => { e.stopPropagation(); shrinkBox(idx, 3); setEditMenuCardIdx(null); }}
                                                                                 className="w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2">
                                                                                 ⊟ Shrink box
@@ -3568,7 +3978,8 @@
                                                 const results = getReadingOrderedResults();
                                                 results.forEach((result, index) => {
                                                     const actualIdx = readingOrder[index] ?? index;
-                                                    currentColumn.push({ result, index, actualIdx });
+                                                    const hasWordBoundary = wordBoundaries.has(actualIdx);
+                                                    currentColumn.push({ result, index, actualIdx, hasWordBoundary });
                                                     // Split column on LINE break or COLUMN break
                                                     if (lineBreaks.has(actualIdx) || columnBreaks.has(actualIdx)) {
                                                         columns.push(currentColumn);
@@ -3594,8 +4005,11 @@
                                                             direction: 'ltr' // Keep text direction LTR within columns
                                                         }}
                                                     >
-                                                        {column.map(({ result, index, actualIdx }) => (
-                                                            <span key={index} className="text-gray-900">
+                                                        {column.map(({ result, index, actualIdx, hasWordBoundary }) => (
+                                                            <span 
+                                                                key={index} 
+                                                                className={`text-gray-900 ${hasWordBoundary ? 'pb-2 mb-2 border-b-2 border-amber-600/50' : ''}`}
+                                                            >
                                                                 {transcriptionScript === 'arabic'
                                                                     ? (result.glyph.arabic || result.glyph.name)
                                                                     : (result.glyph.transliteration || result.glyph.name)
@@ -3937,6 +4351,13 @@
                                     driveUserEmail={driveUserEmail}
                                     currentFileId={currentFileId}
                                     fileOwner={fileOwner}
+                                    onSignIn={async () => {
+                                        if (typeof DriveSync !== 'undefined') {
+                                            await DriveSync.signIn();
+                                            setDriveSignedIn(DriveSync.isSignedIn());
+                                            setDriveUserEmail(DriveSync.getUserEmail());
+                                        }
+                                    }}
                                     imageRef={imageRef}
                                     className="bg-[#f7f3ed] border-2 border-ochre"
                                 />
@@ -4079,16 +4500,37 @@
                                     {recognitionResults.length > 0 && (
                                         <button
                                             onClick={() => {
+                                                // Check prerequisites for training mode
+                                                if (!templateTrainingMode) {
+                                                    if (!driveSignedIn) {
+                                                        alert('⚠️ Training Mode Requires Sign-In\n\nYou must sign in with Google to use training mode.\nChanges are saved to your Google Drive for team collaboration.');
+                                                        return;
+                                                    }
+                                                    if (!isDriveChart) {
+                                                        alert('⚠️ Training Mode Requires Cloud Chart\n\nTraining mode needs a cloud chart in Google Drive.\nSign in to enable this feature.');
+                                                        return;
+                                                    }
+                                                    if (isOfflineMode) {
+                                                        alert('⚠️ Training Mode Not Available Offline\n\nYou are currently offline. Training mode requires an active\ninternet connection to save changes to Google Drive.');
+                                                        return;
+                                                    }
+                                                }
+                                                
                                                 if (templateTrainingMode) {
                                                     setFocusedGlyphId(null);
                                                 }
                                                 setTemplateTrainingMode(!templateTrainingMode);
                                             }}
+                                            disabled={!driveSignedIn || !isDriveChart || isOfflineMode}
+                                            title={!driveSignedIn ? 'Sign in to enable training mode' : 
+                                                   !isDriveChart ? 'Drive chart required' : 
+                                                   isOfflineMode ? 'Not available offline' : 
+                                                   'Add and modify glyph variants'}
                                             className={`px-4 py-2 rounded-lg font-medium ${
                                                 templateTrainingMode 
                                                     ? 'bg-ochre text-white' 
                                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                            }`}
+                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
                                         >
                                             🎓 {templateTrainingMode ? 'Hide' : 'Show'} Training ({recognitionResults.length})
                                         </button>
@@ -4821,6 +5263,33 @@
                                 }
                             }}
                             onLoadHki={(hkiData, fileInfo) => {
+                                // Clear ALL state first (fresh start)
+                                setRecognitionResults([]);
+                                setValidations({});
+                                setReadingOrder([]);
+                                setReadingDirection('rtl');
+                                setWordBoundaries(new Set());
+                                setLineBreaks(new Set());
+                                setColumnBreaks(new Set());
+                                setSelectedRegions(new Set());
+                                setRecognitionSourceDims(null);
+                                setChangeLog([]);
+                                setUndoStack([]);
+                                setRedoStack([]);
+                                setCurrentInscriptionId(null);
+                                setInscriptionTitle('');
+                                setInscriptionNotes('');
+                                setInscriptionComplete(false);
+                                setTranslationEnglish('');
+                                setTranslationArabic('');
+                                setCurrentFileId(null);
+                                setFileOwner(null);
+                                setIsReadOnly(false);
+                                setPreprocessing({ rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false, blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invertColors: false });
+                                setLocalSaveTime(null);
+                                setCanvasZoom(1);
+                                
+                                // Now load from HKI data
                                 // Load image
                                 if (hkiData.image) setOriginalImage(hkiData.image);
                                 if (hkiData.displayImage) setDisplayImage(hkiData.displayImage);
@@ -4833,6 +5302,7 @@
                                 
                                 // Load detections
                                 if (hkiData.recognitionResults) setRecognitionResults(hkiData.recognitionResults);
+                                if (hkiData.recognitionSourceDims) setRecognitionSourceDims(hkiData.recognitionSourceDims);
                                 if (hkiData.detections) setRecognitionResults(hkiData.detections.map(d => ({
                                     glyph: d.glyph, confidence: d.confidence, position: d.position,
                                     thumbnail: d.thumbnail, matchType: d.matchType,
@@ -4843,10 +5313,14 @@
                                 if (hkiData.validations) setValidations(hkiData.validations);
                                 if (hkiData.readingOrder) setReadingOrder(hkiData.readingOrder);
                                 if (hkiData.readingData?.readingOrder) setReadingOrder(hkiData.readingData.readingOrder);
+                                if (hkiData.readingDirection) setReadingDirection(hkiData.readingDirection);
+                                if (hkiData.readingData?.direction) setReadingDirection(hkiData.readingData.direction);
                                 if (hkiData.wordBoundaries) setWordBoundaries(new Set(hkiData.wordBoundaries));
                                 if (hkiData.readingData?.wordBoundaries) setWordBoundaries(new Set(hkiData.readingData.wordBoundaries));
                                 if (hkiData.lineBreaks) setLineBreaks(new Set(hkiData.lineBreaks));
                                 if (hkiData.readingData?.lineBreaks) setLineBreaks(new Set(hkiData.readingData.lineBreaks));
+                                if (hkiData.columnBreaks) setColumnBreaks(new Set(hkiData.columnBreaks));
+                                if (hkiData.readingData?.columnBreaks) setColumnBreaks(new Set(hkiData.readingData.columnBreaks));
                                 
                                 // Load translations
                                 if (hkiData.translationEnglish || hkiData.translations?.english)
@@ -4870,6 +5344,9 @@
                                 const isOwner = fileInfo.owner === driveUserEmail;
                                 const isCollaborator = fileInfo.collaborators?.includes(driveUserEmail);
                                 setIsReadOnly(!driveUserEmail || (!isOwner && !isCollaborator));
+                                
+                                // Close warehouse modal
+                                setShowWarehouse(false);
                                 
                                 const count = hkiData.recognitionResults?.length || hkiData.detections?.length || 0;
                                 console.log(`📂 Loaded from warehouse: ${fileInfo.title} (${count} glyphs)`);
@@ -5099,8 +5576,121 @@
     </script>
 
     <script>
+        // Service Worker with Update Detection (battery-friendly)
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').then(() => console.log('✅ SW registered')).catch(console.error);
+            let refreshing = false;
+            
+            // When a new SW takes over, reload
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (refreshing) return;
+                refreshing = true;
+                window.location.reload();
+            });
+            
+            navigator.serviceWorker.register('sw.js').then((registration) => {
+                console.log('✅ SW registered');
+                
+                // Only check for updates when:
+                // 1. Online
+                // 2. On wifi (not cellular/metered connection)
+                // 3. Page becomes visible after being hidden
+                
+                const checkForUpdates = () => {
+                    // Skip if offline
+                    if (!navigator.onLine) return;
+                    
+                    // Skip if on metered/cellular connection (battery saver)
+                    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+                    if (connection && (connection.saveData || connection.type === 'cellular')) {
+                        console.log('[SW] Skipping update check - metered connection');
+                        return;
+                    }
+                    
+                    console.log('[SW] Checking for updates...');
+                    registration.update();
+                };
+                
+                // Check when page becomes visible (user returns to app)
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        checkForUpdates();
+                    }
+                });
+                
+                // Check when coming back online
+                window.addEventListener('online', checkForUpdates);
+                
+                // Listen for new service worker
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    console.log('🔄 New service worker found');
+                    
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            // New version available - show update banner
+                            showUpdateBanner(newWorker);
+                        }
+                    });
+                });
+            }).catch(console.error);
+        }
+        
+        function showUpdateBanner(newWorker) {
+            // Create update banner
+            const banner = document.createElement('div');
+            banner.id = 'update-banner';
+            banner.innerHTML = `
+                <div style="
+                    position: fixed;
+                    bottom: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: linear-gradient(135deg, #5d4e6d 0%, #6b8e7f 100%);
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    z-index: 10000;
+                    font-family: system-ui, sans-serif;
+                    font-size: 14px;
+                ">
+                    <span>🔄 Update available</span>
+                    <button onclick="applyUpdate()" style="
+                        background: white;
+                        color: #5d4e6d;
+                        border: none;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-weight: 600;
+                    ">Refresh</button>
+                    <button onclick="dismissUpdate()" style="
+                        background: transparent;
+                        color: white;
+                        border: 1px solid rgba(255,255,255,0.5);
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                    ">Later</button>
+                </div>
+            `;
+            document.body.appendChild(banner);
+            
+            window.pendingWorker = newWorker;
+        }
+        
+        function applyUpdate() {
+            if (window.pendingWorker) {
+                window.pendingWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+        }
+        
+        function dismissUpdate() {
+            const banner = document.getElementById('update-banner');
+            if (banner) banner.remove();
         }
     </script>
 </body>
