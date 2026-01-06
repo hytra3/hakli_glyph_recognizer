@@ -112,6 +112,10 @@
             50% { opacity: 0.7; }
         }
         
+        .animate-pulse-slow {
+            animation: pulse-slow 3s infinite;
+        }
+        
         .bg-green-500 {
             animation: pulse-slow 3s infinite;
         }
@@ -2360,39 +2364,6 @@
             }, []);
 
             
-            // ========== CHART STATUS BADGE ==========
-            const ChartStatusBadge = () => {
-                const getStatusConfig = () => {
-                    if (chartStatus === 'loading') {
-                        return { icon: '⏳', class: 'bg-gray-600', text: 'Loading chart...' };
-                    } else if (isOfflineMode) {
-                        return { icon: '📴', class: 'bg-orange-500', text: 'Offline Mode' };
-                    } else if (chartSource === 'drive') {
-                        return { icon: '☁️', class: 'bg-green-500', text: 'Cloud Chart' };
-                    } else if (chartSource === 'static') {
-                        return { icon: '📄', class: 'bg-gray-500', text: 'Static Chart' };
-                    } else if (chartSource === 'error') {
-                        return { icon: '⚠️', class: 'bg-red-500', text: 'Error' };
-                    }
-                    return { icon: '?', class: 'bg-gray-500', text: 'Unknown' };
-                };
-                
-                const config = getStatusConfig();
-                const modifiedTime = localStorage.getItem('driveChartModified');
-                
-                return (
-                    <div className={`fixed top-16 right-4 ${config.class} text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg z-50`}>
-                        <span>{config.icon}</span>
-                        <span>{config.text}</span>
-                        {chartSource === 'drive' && modifiedTime && (
-                            <span className="text-white/80 text-[10px] border-l border-white/30 pl-2 ml-1">
-                                {new Date(modifiedTime).toLocaleTimeString()}
-                            </span>
-                        )}
-                    </div>
-                );
-            };
-            
             // ========== OFFLINE WARNING BANNER ==========
             const OfflineWarningBanner = () => {
                 if (!isOfflineMode) return null;
@@ -2420,7 +2391,6 @@
             // ============================================
             return (
                 <div className="min-h-screen bg-gray-100 flex flex-col">
-                    <ChartStatusBadge />
                     <OfflineWarningBanner />
                     {/* Header */}
                     <header className="bg-ancient-purple text-white shadow-lg flex-shrink-0">
@@ -2451,15 +2421,36 @@
                                     
                                     {/* Status indicators - grouped on right */}
                                     <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
+                                        {/* Chart Status with Cloud indicator */}
                                         <div 
-                                            className={`px-3 py-1 rounded-full text-xs font-bold ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-amber-400 text-amber-900 animate-pulse'}`}
-                                            title={chartStatus === 'loaded' ? `${Object.keys(loadedGlyphImages).length} template images loaded for ${chartData?.glyphs?.length || 0} glyphs` : 'Loading glyph chart...'}
+                                            className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+                                                chartStatus === 'loaded' 
+                                                    ? chartSource === 'drive' 
+                                                        ? 'bg-green-600 animate-pulse-slow' 
+                                                        : 'bg-patina' 
+                                                    : 'bg-amber-400 text-amber-900 animate-pulse'
+                                            }`}
+                                            title={
+                                                chartStatus === 'loaded' 
+                                                    ? `${chartData?.glyphs?.length || 0} glyphs (${Object.keys(loadedGlyphImages).length} templates loaded)\n${
+                                                        chartSource === 'drive' ? '☁️ Cloud Chart - synced to Drive' : 
+                                                        chartSource === 'static' ? '📄 Static Chart - sign in for cloud sync' :
+                                                        chartSource === 'error' ? '⚠️ Error loading chart' :
+                                                        'Unknown source'
+                                                    }` 
+                                                    : 'Loading glyph chart...'
+                                            }
                                         >
-                                            {chartStatus === 'loaded' 
-                                                ? `✅ ${chartData?.glyphs?.length || 0} glyphs` 
-                                                : chartLoadProgress.total > 0 
+                                            {chartStatus === 'loaded' ? (
+                                                <>
+                                                    <span>{chartSource === 'drive' ? '☁️' : chartSource === 'static' ? '📄' : '⚠️'}</span>
+                                                    <span>{chartData?.glyphs?.length || 0} glyphs</span>
+                                                </>
+                                            ) : (
+                                                chartLoadProgress.total > 0 
                                                     ? `⏳ ${Math.round((chartLoadProgress.loaded / chartLoadProgress.total) * 100)}%`
-                                                    : `⏳ Loading...`}
+                                                    : `⏳ Loading...`
+                                            )}
                                         </div>
                                         <div className={`px-2 py-1 rounded-full text-xs ${opencvReady ? 'bg-patina' : 'bg-ochre'}`}>
                                             {opencvReady ? '✅ CV' : '⏳ CV'}

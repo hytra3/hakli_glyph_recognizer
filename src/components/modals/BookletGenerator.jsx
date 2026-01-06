@@ -452,13 +452,18 @@ const BookletGenerator = ({
                 hki.recognitionResults.map((_, i) => i);
             
             let result = '';
-            readingOrder.forEach((idx) => {
+            readingOrder.forEach((idx, i) => {
                 const r = hki.recognitionResults[idx];
-                if (!r || r.excluded) return;
-                const char = r.glyph?.transliteration || r.transliteration || r.glyph?.name || '';
-                result += char;
-                if (wordBoundaries.has(idx)) {
-                    result += ' ';
+                if (!r || r.excluded || r.validated === false) return;
+                
+                // Get transliteration - prefer glyph.name for Latin script
+                const char = r.glyph?.name || r.transliteration || '';
+                if (char) {
+                    result += char;
+                    // Add space after word boundaries
+                    if (wordBoundaries.has(idx)) {
+                        result += ' ';
+                    }
                 }
             });
             return result.trim();
