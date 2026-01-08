@@ -105,30 +105,6 @@
             color: white;
             z-index: 20;
         }
-        
-        /* Chart Status Badge Animations */
-        @keyframes pulse-slow {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        
-        .animate-pulse-slow {
-            animation: pulse-slow 3s infinite;
-        }
-        
-        .bg-green-500 {
-            animation: pulse-slow 3s infinite;
-        }
-        
-        /* Disabled Button States */
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed !important;
-        }
-        
-        button:disabled:hover {
-            transform: none !important;
-        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -172,8 +148,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260106-cloud';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Cloud Chart, Booklet, Change Tracking & Box Fix)');
+        const APP_VERSION = 'v260101';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (with Booklet, Change Tracking, Box Fix & Update Notifications)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -190,13 +166,6 @@
             const [chartLoadProgress, setChartLoadProgress] = useState({ loaded: 0, total: 0 });
             const [chartModified, setChartModified] = useState(false); // Track unsaved changes
             const [lastSavedTime, setLastSavedTime] = useState(null); // When chart was last saved
-            
-            // Cloud chart state
-            const [chartSource, setChartSource] = useState('static'); // 'static', 'drive', 'localStorage', 'error'
-            const [isDriveChart, setIsDriveChart] = useState(false);
-            const [isOfflineMode, setIsOfflineMode] = useState(false);
-            const [localChangesCount, setLocalChangesCount] = useState(0);
-            const [showDeletedVariants, setShowDeletedVariants] = useState(false);
             
             const [confidenceThreshold, setConfidenceThreshold] = useState(0); // 0-100, filter detections
             
@@ -598,176 +567,82 @@
             }, [recognitionResults, recognitionSourceDims, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, 
                 translationEnglish, translationArabic, inscriptionTitle, inscriptionNotes, visibility]);
             
-            // ========== LOAD CHART (WITH CLOUD SUPPORT) ==========
+            // ========== LOAD CHART ==========
             useEffect(() => {
                 const loadChart = async () => {
                     setChartStatus('loading');
-                    let data = null;
-                    
-                    // Try loading from Drive if signed in
-                    if (driveSignedIn && typeof DriveSync !== 'undefined') {
-                        try {
-                            // Check for conflicts first
-                            const hasConflict = await DriveSync.checkChartConflict();
-                            if (hasConflict && localChangesCount > 0) {
-                                const choice = confirm(
-                                    `⚠️ Chart Conflict Detected\n\n` +
-                                    `The cloud chart has been modified elsewhere.\n` +
-                                    `You have ${localChangesCount} unsaved local changes.\n\n` +
-                                    `OK: Use cloud version (lose local changes)\n` +
-                                    `Cancel: Keep local version (will overwrite cloud)`
-                                );
-                                if (!choice) {
-                                    // Keep local, will overwrite on next save
-                                    console.log('Using local version');
-                                }
-                            }
-
-                            const driveChart = await DriveSync.loadChartFromDrive();
-                            
-                            if (driveChart) {
-                                data = driveChart;
-                                setChartSource('drive');
-                                setIsDriveChart(true);
-                                console.log('✅ Loaded chart from Drive');
-                            } else {
-                                // No Drive chart exists - create one from static
-                                const response = await fetch('Hakli_glyphs.JSON');
-                                data = await response.json();
-                                await DriveSync.initializeDriveChart(data);
-                                setChartSource('drive');
-                                setIsDriveChart(true);
-                                console.log('✅ Created new Drive chart from static file');
-                            }
-                        } catch (error) {
-                            console.error('Drive chart load failed:', error);
-                            // Fall back to static
-                            const response = await fetch('Hakli_glyphs.JSON');
-                            data = await response.json();
-                            setChartSource('error');
-                            setIsDriveChart(false);
-                        }
-                    } else {
-                        // Not signed in - use static chart
-                        try {
-                            const response = await fetch('Hakli_glyphs.JSON');
-                            data = await response.json();
-                            setChartSource('static');
-                            setIsDriveChart(false);
-                            console.log('Using static chart (not signed in)');
-                        } catch (error) {
-                            console.error('Failed to load static chart:', error);
-                            setChartStatus('error');
-                            return;
-                        }
-                    }
-
-                    if (!data) {
-                        setChartStatus('error');
-                        return;
-                    }
-
-                    setChartData(data);
-                    console.log(`📜 Loaded chart with ${data.glyphs.length} glyphs`);
-                    
-                    // Cache to localStorage
                     try {
-                        localStorage.setItem('cachedChart', JSON.stringify(data));
-                        localStorage.setItem('cachedChartTime', new Date().toISOString());
-                    } catch (e) {
-                        console.warn('Failed to cache chart:', e);
-                    }
-                    
-                    // Count total templates to load
-                    let totalTemplates = 0;
-                    for (const glyph of data.glyphs) {
-                        if (glyph.images?.primary) totalTemplates++;
-                        if (glyph.images?.variants) totalTemplates += glyph.images.variants.length;
-                    }
-                    
-                    let loaded = 0;
-                    const newImages = {};
-                    const newThumbnails = {};
-                    
-                    for (const glyph of data.glyphs) {
-                        // Load primary template
-                        if (glyph.images?.primary) {
-                            try {
-                                const img = new Image();
-                                img.crossOrigin = 'anonymous';
-                                await new Promise((resolve, reject) => {
-                                    img.onload = resolve;
-                                    img.onerror = reject;
-                                    img.src = glyph.images.primary;
-                                });
-                                newImages[glyph.id] = img;
-                                newThumbnails[glyph.id] = img.src;
-                            } catch (e) {
-                                console.debug(`Skipped glyph ${glyph.id} primary (image not available)`);
-                            }
-                            loaded++;
-                            setChartLoadProgress({ loaded, total: totalTemplates });
+                        const response = await fetch('Hakli_glyphs.JSON');
+                        const data = await response.json();
+                        setChartData(data);
+                        console.log(`📜 Loaded chart with ${data.glyphs.length} glyphs`);
+                        
+                        // Count total templates to load
+                        let totalTemplates = 0;
+                        for (const glyph of data.glyphs) {
+                            if (glyph.images?.primary) totalTemplates++;
+                            if (glyph.images?.variants) totalTemplates += glyph.images.variants.length;
                         }
                         
-                        // Load variant templates
-                        if (glyph.images?.variants) {
-                            for (let i = 0; i < glyph.images.variants.length; i++) {
+                        let loaded = 0;
+                        const newImages = {};
+                        const newThumbnails = {};
+                        
+                        for (const glyph of data.glyphs) {
+                            // Load primary template
+                            if (glyph.images?.primary) {
                                 try {
                                     const img = new Image();
                                     img.crossOrigin = 'anonymous';
                                     await new Promise((resolve, reject) => {
                                         img.onload = resolve;
                                         img.onerror = reject;
-                                        img.src = glyph.images.variants[i];
+                                        img.src = glyph.images.primary;
                                     });
-                                    const key = `${glyph.id}_variant_${i}`;
-                                    newImages[key] = img;
-                                    newThumbnails[key] = img.src;
+                                    newImages[glyph.id] = img;
+                                    newThumbnails[glyph.id] = img.src;
                                 } catch (e) {
-                                    console.debug(`Skipped glyph ${glyph.id} variant ${i}`);
+                                    console.debug(`Skipped glyph ${glyph.id} primary (image not available)`);
                                 }
                                 loaded++;
                                 setChartLoadProgress({ loaded, total: totalTemplates });
                             }
+                            
+                            // Load variant templates
+                            if (glyph.images?.variants) {
+                                for (let i = 0; i < glyph.images.variants.length; i++) {
+                                    try {
+                                        const img = new Image();
+                                        img.crossOrigin = 'anonymous';
+                                        await new Promise((resolve, reject) => {
+                                            img.onload = resolve;
+                                            img.onerror = reject;
+                                            img.src = glyph.images.variants[i];
+                                        });
+                                        const key = `${glyph.id}_variant_${i}`;
+                                        newImages[key] = img;
+                                        newThumbnails[key] = img.src;
+                                    } catch (e) {
+                                        console.debug(`Skipped glyph ${glyph.id} variant ${i}`);
+                                    }
+                                    loaded++;
+                                    setChartLoadProgress({ loaded, total: totalTemplates });
+                                }
+                            }
                         }
+                        
+                        setLoadedGlyphImages(newImages);
+                        setGlyphThumbnails(newThumbnails);
+                        setChartStatus('loaded');
+                        console.log(`✅ Loaded ${Object.keys(newImages).length} template images`);
+                    } catch (error) {
+                        console.error('Failed to load chart:', error);
+                        setChartStatus('error');
                     }
-                    
-                    setLoadedGlyphImages(newImages);
-                    setGlyphThumbnails(newThumbnails);
-                    setChartStatus('loaded');
-                    console.log(`✅ Loaded ${Object.keys(newImages).length} template images`);
                 };
                 loadChart();
-            }, [driveSignedIn]); // Re-run when sign-in status changes
+            }, []);
             
-            
-            // ========== ONLINE/OFFLINE DETECTION ==========
-            useEffect(() => {
-                const handleOnline = () => {
-                    console.log('Back online');
-                    setIsOfflineMode(false);
-                    // Reload chart if signed in
-                    if (driveSignedIn) {
-                        window.location.reload();
-                    }
-                };
-                
-                const handleOffline = () => {
-                    console.log('Gone offline');
-                    setIsOfflineMode(true);
-                };
-                
-                window.addEventListener('online', handleOnline);
-                window.addEventListener('offline', handleOffline);
-                
-                // Set initial state
-                setIsOfflineMode(!navigator.onLine);
-                
-                return () => {
-                    window.removeEventListener('online', handleOnline);
-                    window.removeEventListener('offline', handleOffline);
-                };
-            }, [driveSignedIn]);
             // ========== AUTO-SAVE TO LOCALSTORAGE ==========
             useEffect(() => {
                 if (!chartData || !chartModified) return;
@@ -1633,18 +1508,7 @@
             }, [getReadingOrderedResults, wordBoundaries, lineBreaks, inscriptionTitle, translationEnglish, translationArabic]);
             
             // ========== TEMPLATE TRAINING ==========
-            const saveAsTemplate = useCallback(async (detectionIndex, templateType) => {
-                // Guard: Must be signed in and have Drive chart for saving
-                if (!driveSignedIn || !isDriveChart) {
-                    alert('⚠️ Training Mode Requires Sign-In\n\nPlease sign in to save templates to cloud chart');
-                    return;
-                }
-                
-                if (isOfflineMode) {
-                    alert('⚠️ Cannot Save While Offline\n\nTemplates cannot be saved while offline');
-                    return;
-                }
-                
+            const saveAsTemplate = useCallback((detectionIndex, templateType) => {
                 const detection = recognitionResults[detectionIndex];
                 if (!detection || !detection.thumbnail) {
                     alert('No detection thumbnail available');
@@ -1690,22 +1554,6 @@
 
                 setChartData(updatedChart);
                 setChartModified(true);
-                
-                // Save to Drive
-                try {
-                    if (typeof DriveSync !== 'undefined') {
-                        await DriveSync.saveChartToDrive(updatedChart, {
-                            action: 'add_template',
-                            glyphId: glyph.id,
-                            templateType: templateType,
-                            user: driveUserEmail
-                        });
-                        console.log('✅ Saved template to Drive');
-                    }
-                } catch (error) {
-                    console.error('Failed to save to Drive:', error);
-                    alert('⚠️ Failed to save to Drive\n\nChanges saved locally only. Check console for details.');
-                }
 
                 // Reload the image in the cache
                 const img = new Image();
@@ -1731,7 +1579,7 @@
 
                 setSelectedForTemplate(null);
                 console.log(`✅ Saved ${templateType} template for ${glyph.name}`);
-            }, [recognitionResults, chartData, loadedGlyphImages, glyphThumbnails, driveSignedIn, isDriveChart, isOfflineMode, driveUserEmail]);
+            }, [recognitionResults, chartData, loadedGlyphImages, glyphThumbnails]);
             
             // Delete a template from a glyph
             const deleteTemplate = useCallback((glyphId, templateType, index = null) => {
@@ -2363,35 +2211,11 @@
                 });
             }, []);
 
-            
-            // ========== OFFLINE WARNING BANNER ==========
-            const OfflineWarningBanner = () => {
-                if (!isOfflineMode) return null;
-                
-                return (
-                    <div className="fixed top-0 left-0 right-0 bg-orange-500 text-white px-4 py-2 flex items-center justify-between z-[100]">
-                        <div className="flex items-center gap-3">
-                            <span className="text-xl">📴</span>
-                            <span className="text-sm font-medium">
-                                You are offline. Changes will be saved locally and synced when connection is restored.
-                            </span>
-                        </div>
-                        <button 
-                            onClick={() => setIsOfflineMode(false)}
-                            className="text-white hover:text-white/80 text-lg font-bold"
-                        >
-                            ✕
-                        </button>
-                    </div>
-                );
-            };
-            
             // ============================================
             // RENDER
             // ============================================
             return (
                 <div className="min-h-screen bg-gray-100 flex flex-col">
-                    <OfflineWarningBanner />
                     {/* Header */}
                     <header className="bg-ancient-purple text-white shadow-lg flex-shrink-0">
                         <div className="max-w-7xl mx-auto px-4 py-2">
@@ -2421,36 +2245,15 @@
                                     
                                     {/* Status indicators - grouped on right */}
                                     <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
-                                        {/* Chart Status with Cloud indicator */}
                                         <div 
-                                            className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
-                                                chartStatus === 'loaded' 
-                                                    ? chartSource === 'drive' 
-                                                        ? 'bg-green-600 animate-pulse-slow' 
-                                                        : 'bg-patina' 
-                                                    : 'bg-amber-400 text-amber-900 animate-pulse'
-                                            }`}
-                                            title={
-                                                chartStatus === 'loaded' 
-                                                    ? `${chartData?.glyphs?.length || 0} glyphs (${Object.keys(loadedGlyphImages).length} templates loaded)\n${
-                                                        chartSource === 'drive' ? '☁️ Cloud Chart - synced to Drive' : 
-                                                        chartSource === 'static' ? '📄 Static Chart - sign in for cloud sync' :
-                                                        chartSource === 'error' ? '⚠️ Error loading chart' :
-                                                        'Unknown source'
-                                                    }` 
-                                                    : 'Loading glyph chart...'
-                                            }
+                                            className={`px-3 py-1 rounded-full text-xs font-bold ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-amber-400 text-amber-900 animate-pulse'}`}
+                                            title={chartStatus === 'loaded' ? `${Object.keys(loadedGlyphImages).length} template images loaded for ${chartData?.glyphs?.length || 0} glyphs` : 'Loading glyph chart...'}
                                         >
-                                            {chartStatus === 'loaded' ? (
-                                                <>
-                                                    <span>{chartSource === 'drive' ? '☁️' : chartSource === 'static' ? '📄' : '⚠️'}</span>
-                                                    <span>{chartData?.glyphs?.length || 0} glyphs</span>
-                                                </>
-                                            ) : (
-                                                chartLoadProgress.total > 0 
+                                            {chartStatus === 'loaded' 
+                                                ? `✅ ${chartData?.glyphs?.length || 0} glyphs` 
+                                                : chartLoadProgress.total > 0 
                                                     ? `⏳ ${Math.round((chartLoadProgress.loaded / chartLoadProgress.total) * 100)}%`
-                                                    : `⏳ Loading...`
-                                            )}
+                                                    : `⏳ Loading...`}
                                         </div>
                                         <div className={`px-2 py-1 rounded-full text-xs ${opencvReady ? 'bg-patina' : 'bg-ochre'}`}>
                                             {opencvReady ? '✅ CV' : '⏳ CV'}
@@ -2647,20 +2450,84 @@
                                                     <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${preprocessing.useAdaptiveThreshold ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                 </button>
                                             </div>
+                                            {preprocessing.useAdaptiveThreshold && (
+                                                <>
+                                                    <div>
+                                                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                                            <span>Block Size</span><span>{preprocessing.blockSize}</span>
+                                                        </div>
+                                                        <input type="range" min="3" max="51" step="2" value={preprocessing.blockSize}
+                                                            onChange={(e) => setPreprocessing(p => ({ ...p, blockSize: parseInt(e.target.value) }))}
+                                                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                                            <span>Offset</span><span>{preprocessing.constantOffset}</span>
+                                                        </div>
+                                                        <input type="range" min="-20" max="20" value={preprocessing.constantOffset}
+                                                            onChange={(e) => setPreprocessing(p => ({ ...p, constantOffset: parseInt(e.target.value) }))}
+                                                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                                                    </div>
+                                                </>
+                                            )}
+                                            <div>
+                                                <span className="text-xs text-gray-600 block mb-1">Morphology</span>
+                                                <select value={preprocessing.morphologyOperation}
+                                                    onChange={(e) => setPreprocessing(p => ({ ...p, morphologyOperation: e.target.value }))}
+                                                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                                                    <option value="none">None</option>
+                                                    <option value="erode">Erode</option>
+                                                    <option value="dilate">Dilate</option>
+                                                    <option value="open">Open</option>
+                                                    <option value="close">Close</option>
+                                                </select>
+                                            </div>
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs text-gray-600">Invert</span>
-                                                <button onClick={() => setPreprocessing(p => ({ ...p, invert: !p.invert }))}
-                                                    className={`w-10 h-5 rounded-full transition-colors ${preprocessing.invert ? 'bg-patina' : 'bg-gray-300'}`}>
-                                                    <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${preprocessing.invert ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                <button onClick={() => setPreprocessing(p => ({ ...p, invertColors: !p.invertColors }))}
+                                                    className={`w-10 h-5 rounded-full transition-colors ${preprocessing.invertColors ? 'bg-patina' : 'bg-gray-300'}`}>
+                                                    <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${preprocessing.invertColors ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                 </button>
                                             </div>
                                             <div className="flex gap-2">
                                                 <button onClick={() => setPreprocessing({
                                                     rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false,
-                                                    blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invert: false
+                                                    blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invertColors: false
                                                 })} className="flex-1 px-2 py-1.5 bg-gray-200 rounded text-sm">Reset</button>
                                                 <button onClick={applyPreprocessing} className="flex-1 px-2 py-1.5 bg-patina text-white rounded text-sm">Apply</button>
                                             </div>
+                                        </div>
+                                    )}
+                                    
+                                    {/* Eraser Tool - Mobile */}
+                                    {originalImage && (
+                                        <div className="bg-gray-50 rounded-lg p-3 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs text-gray-600 font-semibold">🧹 Eraser Tool</span>
+                                                <button onClick={() => setEraserMode(!eraserMode)}
+                                                    className={`px-3 py-1 rounded text-xs font-medium ${eraserMode ? 'bg-ochre text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                                    {eraserMode ? 'Active' : 'Enable'}
+                                                </button>
+                                            </div>
+                                            {eraserMode && (
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                                            <span>Brush Size</span><span>{eraserSize}px</span>
+                                                        </div>
+                                                        <input type="range" min="5" max="50" value={eraserSize}
+                                                            onChange={(e) => setEraserSize(parseInt(e.target.value))}
+                                                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={cancelEraser}
+                                                            className="flex-1 px-2 py-1.5 bg-gray-200 text-gray-700 rounded text-sm">Cancel</button>
+                                                        <button onClick={applyEraser}
+                                                            className="flex-1 px-2 py-1.5 bg-patina text-white rounded text-sm">Apply Eraser</button>
+                                                    </div>
+                                                    <p className="text-xs text-gray-400">Draw on image to erase unwanted marks</p>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -4483,37 +4350,16 @@
                                     {recognitionResults.length > 0 && (
                                         <button
                                             onClick={() => {
-                                                // Check prerequisites for training mode
-                                                if (!templateTrainingMode) {
-                                                    if (!driveSignedIn) {
-                                                        alert('⚠️ Training Mode Requires Sign-In\n\nYou must sign in with Google to use training mode.\nChanges are saved to your Google Drive for team collaboration.');
-                                                        return;
-                                                    }
-                                                    if (!isDriveChart) {
-                                                        alert('⚠️ Training Mode Requires Cloud Chart\n\nTraining mode needs a cloud chart in Google Drive.\nSign in to enable this feature.');
-                                                        return;
-                                                    }
-                                                    if (isOfflineMode) {
-                                                        alert('⚠️ Training Mode Not Available Offline\n\nYou are currently offline. Training mode requires an active\ninternet connection to save changes to Google Drive.');
-                                                        return;
-                                                    }
-                                                }
-                                                
                                                 if (templateTrainingMode) {
                                                     setFocusedGlyphId(null);
                                                 }
                                                 setTemplateTrainingMode(!templateTrainingMode);
                                             }}
-                                            disabled={!driveSignedIn || !isDriveChart || isOfflineMode}
-                                            title={!driveSignedIn ? 'Sign in to enable training mode' : 
-                                                   !isDriveChart ? 'Drive chart required' : 
-                                                   isOfflineMode ? 'Not available offline' : 
-                                                   'Add and modify glyph variants'}
                                             className={`px-4 py-2 rounded-lg font-medium ${
                                                 templateTrainingMode 
                                                     ? 'bg-ochre text-white' 
                                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                            }`}
                                         >
                                             🎓 {templateTrainingMode ? 'Hide' : 'Show'} Training ({recognitionResults.length})
                                         </button>
