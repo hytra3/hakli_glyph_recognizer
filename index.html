@@ -1113,6 +1113,7 @@
                     });
                     
                     setEraserMode(false);
+                    setMobilePanel(null); // Close mobile panel after applying
                     console.log('✅ Eraser applied (original updated, rotation reset to 0)');
                 } catch (error) {
                     console.error('Eraser apply error:', error);
@@ -1121,6 +1122,7 @@
             
             const cancelEraser = useCallback(() => {
                 setEraserMode(false);
+                setMobilePanel(null); // Close mobile panel after canceling
             }, []);
             
             // Initialize eraser canvas when mode is enabled
@@ -2399,6 +2401,19 @@
                         </button>
                     </div>
                     
+                    {/* Floating Eraser Indicator - Mobile (when panel is closed) */}
+                    {eraserMode && !mobilePanel && (
+                        <div className="lg:hidden fixed top-20 right-4 z-40 bg-ochre text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+                            <span className="text-sm font-medium">🧹 Eraser Active ({eraserSize}px)</span>
+                            <button 
+                                onClick={() => setMobilePanel('preprocessing')}
+                                className="bg-white/20 hover:bg-white/30 px-2 py-1 rounded text-xs"
+                            >
+                                Settings
+                            </button>
+                        </div>
+                    )}
+                    
                     {/* Mobile Slide-out Panels */}
                     {/* Preprocessing Panel - Mobile */}
                     {mobilePanel === 'preprocessing' && (
@@ -2519,6 +2534,10 @@
                                                             onChange={(e) => setEraserSize(parseInt(e.target.value))}
                                                             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                                                     </div>
+                                                    <button onClick={() => setMobilePanel(null)}
+                                                        className="w-full px-3 py-2 bg-ochre text-white rounded font-medium text-sm">
+                                                        ✏️ Hide Panel &amp; Draw
+                                                    </button>
                                                     <div className="flex gap-2">
                                                         <button onClick={cancelEraser}
                                                             className="flex-1 px-2 py-1.5 bg-gray-200 text-gray-700 rounded text-sm">Cancel</button>
@@ -2552,6 +2571,20 @@
                                         {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : chartStatus !== 'loaded' ? '⏳ Loading chart...' : '🔍 Recognize Glyphs'}
                                     </button>
                                     
+                                    {/* Top controls - Arabic toggle and Clear all */}
+                                    {recognitionResults.length > 0 && (
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setShowArabicLabels(!showArabicLabels)}
+                                                className={`flex-1 px-3 py-2 rounded text-sm font-medium ${showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-700'}`}>
+                                                {showArabicLabels ? 'عربي' : 'ABC'}
+                                            </button>
+                                            <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); setExcludedDetections(new Set()); setExpandedCards(new Set()); }}}
+                                                className="px-3 py-2 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200" title="Clear all detections">
+                                                🗑 Clear
+                                            </button>
+                                        </div>
+                                    )}
+                                    
                                     {/* Detection/Reading toggle */}
                                     {recognitionResults.length > 0 && (
                                         <div className="flex gap-1 bg-gray-100 p-1 rounded">
@@ -2574,6 +2607,7 @@
                                                 <option value="ltr">LTR</option>
                                                 <option value="ttb-rtl">TTB-RTL</option>
                                                 <option value="ttb-ltr">TTB-LTR</option>
+                                                <option value="boustrophedon">Boustrophedon</option>
                                             </select>
                                             <button 
                                                 onClick={() => {
@@ -2599,7 +2633,7 @@
                                         </div>
                                     )}
                                     
-                                    {/* Detection cards - simplified for mobile */}
+                                    {/* Detection cards - enhanced for mobile */}
                                     {recognitionResults.length === 0 ? (
                                         <div className="text-center text-gray-400 py-8">
                                             <span className="text-3xl">🔍</span>
@@ -2614,20 +2648,78 @@
                                                 const result = recognitionResults[idx];
                                                 if (!result) return null;
                                                 const conf = Math.round(result.confidence * 100);
+                                                const validation = validations[idx];
+                                                const isExpanded = expandedCards.has(idx);
+                                                
                                                 return (
-                                                    <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded border">
-                                                        {result.thumbnail && (
-                                                            <img src={result.thumbnail} alt="" className="w-10 h-10 object-contain bg-white rounded" />
-                                                        )}
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="font-semibold text-sm truncate">{result.glyph.name}</div>
-                                                            <div className="text-xs text-gray-500">{result.glyph.transliteration || result.glyph.name} · {conf}%</div>
+                                                    <div key={idx} className="bg-gray-50 rounded border">
+                                                        {/* Main card */}
+                                                        <div className="flex items-center gap-2 p-2">
+                                                            {result.thumbnail && (
+                                                                <img src={result.thumbnail} alt="" className="w-10 h-10 object-contain bg-white rounded" />
+                                                            )}
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="font-semibold text-sm truncate">
+                                                                    {showArabicLabels && result.glyph.arabic ? result.glyph.arabic : result.glyph.name}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">{result.glyph.transliteration || result.glyph.name} · {conf}%</div>
+                                                            </div>
+                                                            <button onClick={() => setSelectedRegions(prev => {
+                                                                const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n;
+                                                            })} className={`px-2 py-1 rounded text-xs ${selectedRegions.has(idx) ? 'bg-ochre text-white' : 'bg-gray-200'}`}>
+                                                                {selectedRegions.has(idx) ? '✓' : 'Select'}
+                                                            </button>
                                                         </div>
-                                                        <button onClick={() => setSelectedRegions(prev => {
-                                                            const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n;
-                                                        })} className={`px-2 py-1 rounded text-xs ${selectedRegions.has(idx) ? 'bg-ochre text-white' : 'bg-gray-200'}`}>
-                                                            {selectedRegions.has(idx) ? '✓' : 'Select'}
-                                                        </button>
+                                                        
+                                                        {/* Action buttons row */}
+                                                        <div className="px-2 pb-2 flex gap-1 flex-wrap">
+                                                            {/* Validation buttons */}
+                                                            <button onClick={() => validateDetection(idx, true)}
+                                                                className={`px-2 py-1 rounded text-xs ${validation?.isCorrect ? 'bg-patina text-white' : 'bg-gray-100'}`}
+                                                                title="Mark correct">
+                                                                ✓
+                                                            </button>
+                                                            <button onClick={() => validateDetection(idx, false)}
+                                                                className={`px-2 py-1 rounded text-xs ${validation && !validation.isCorrect ? 'bg-rust text-white' : 'bg-gray-100'}`}
+                                                                title="Mark incorrect">
+                                                                ✗
+                                                            </button>
+                                                            
+                                                            {/* Alts button */}
+                                                            {result.topMatches && result.topMatches.length > 1 && (
+                                                                <button onClick={() => toggleCardExpansion(idx)}
+                                                                    className={`px-2 py-1 rounded text-xs ${isExpanded ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}>
+                                                                    {isExpanded ? '▼' : '▶'} Alts ({result.topMatches.length - 1})
+                                                                </button>
+                                                            )}
+                                                            
+                                                            {/* Delete button */}
+                                                            <button onClick={() => { if (confirm('Delete this detection?')) deleteDetection(idx); }}
+                                                                className="ml-auto px-2 py-1 bg-red-100 text-red-600 rounded text-xs">
+                                                                🗑
+                                                            </button>
+                                                        </div>
+                                                        
+                                                        {/* Expanded: Alternative matches */}
+                                                        {isExpanded && result.topMatches && result.topMatches.length > 1 && (
+                                                            <div className="px-2 pb-2 border-t border-gray-200 bg-gray-100 pt-2">
+                                                                <div className="text-xs text-gray-500 mb-1">Alternative matches:</div>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {result.topMatches.slice(1, 6).map((alt, altIdx) => (
+                                                                        <button key={altIdx}
+                                                                            onClick={() => changeGlyphAssignment(idx, alt.glyph)}
+                                                                            className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-300 rounded text-xs"
+                                                                            title={`Switch to ${alt.glyph.name} (${Math.round(alt.confidence * 100)}%)`}>
+                                                                            {glyphThumbnails[alt.glyph.id] && (
+                                                                                <img src={glyphThumbnails[alt.glyph.id]} alt="" className="w-5 h-5 object-contain" />
+                                                                            )}
+                                                                            <span className="font-medium">{alt.glyph.transliteration || alt.glyph.name}</span>
+                                                                            <span className="text-gray-400">{Math.round(alt.confidence * 100)}%</span>
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 );
                                             })}
