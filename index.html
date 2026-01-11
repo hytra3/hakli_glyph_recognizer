@@ -1023,22 +1023,22 @@
             
             // ========== ERASER TOOL ==========
             const initEraserCanvas = useCallback(() => {
-                if (!eraserCanvasRef.current || !imageRef.current) return;
+                if (!eraserCanvasRef.current || !imageRef.current) {
+                    console.warn('⚠️ Cannot init eraser canvas - missing refs');
+                    return;
+                }
                 const canvas = eraserCanvasRef.current;
                 const img = imageRef.current;
+                
+                console.log('🎨 Setting canvas dimensions:', img.naturalWidth, 'x', img.naturalHeight);
                 canvas.width = img.naturalWidth;
                 canvas.height = img.naturalHeight;
                 
                 // Draw current display image onto canvas
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+                console.log('✅ Eraser canvas initialized');
             }, []);
-            
-            const handleEraserStart = useCallback((e) => {
-                if (!eraserMode || !eraserCanvasRef.current) return;
-                isDrawingRef.current = true;
-                handleEraserDraw(e);
-            }, [eraserMode]);
             
             const handleEraserDraw = useCallback((e) => {
                 if (!isDrawingRef.current || !eraserMode || !eraserCanvasRef.current || !imageRef.current) return;
@@ -1096,6 +1096,16 @@
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fill();
             }, [eraserMode, eraserSize]);
+            
+            const handleEraserStart = useCallback((e) => {
+                if (!eraserMode || !eraserCanvasRef.current) {
+                    console.warn('⚠️ Cannot start eraser - mode:', eraserMode, 'canvas:', !!eraserCanvasRef.current);
+                    return;
+                }
+                console.log('🖱️ Eraser started');
+                isDrawingRef.current = true;
+                handleEraserDraw(e);
+            }, [eraserMode, handleEraserDraw]);
             
             const handleEraserEnd = useCallback(() => {
                 isDrawingRef.current = false;
@@ -1160,7 +1170,13 @@
             // Initialize eraser canvas when mode is enabled
             useEffect(() => {
                 if (eraserMode) {
-                    initEraserCanvas();
+                    // Add small delay to ensure canvas ref is ready
+                    setTimeout(() => {
+                        console.log('🧹 Initializing eraser canvas...');
+                        console.log('Canvas ref:', eraserCanvasRef.current);
+                        console.log('Image ref:', imageRef.current);
+                        initEraserCanvas();
+                    }, 50);
                 }
             }, [eraserMode, initEraserCanvas]);
             
