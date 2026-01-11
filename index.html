@@ -1043,15 +1043,47 @@
             const handleEraserDraw = useCallback((e) => {
                 if (!isDrawingRef.current || !eraserMode || !eraserCanvasRef.current || !imageRef.current) return;
                 
+                // Prevent scrolling on touch devices while drawing
+                if (e.type.startsWith('touch')) {
+                    e.preventDefault();
+                }
+                
+                // PALM REJECTION for touch events
+                if (e.touches && e.touches.length > 0) {
+                    const touch = e.touches[0];
+                    
+                    // Filter out touches with large contact areas (likely palm)
+                    // Typical finger: 5-15px radius, palm: 20-40px radius
+                    const touchRadius = Math.max(
+                        touch.radiusX || 0,
+                        touch.radiusY || 0
+                    );
+                    
+                    if (touchRadius > 25) {
+                        // Touch area too large - likely a palm, ignore it
+                        return;
+                    }
+                    
+                    // If multiple touches detected, only use the first one
+                    // (Additional touches are likely palm resting)
+                    if (e.touches.length > 1) {
+                        // Could add more sophisticated logic here, but keeping first touch is usually fine
+                    }
+                }
+                
                 const canvas = eraserCanvasRef.current;
                 const ctx = canvas.getContext('2d');
                 const rect = canvas.getBoundingClientRect();
                 
+                // Get coordinates from either mouse or touch event
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                
                 // Calculate position relative to canvas (accounting for scaling and zoom)
                 const scaleX = canvas.width / rect.width;
                 const scaleY = canvas.height / rect.height;
-                const x = (e.clientX - rect.left) * scaleX;
-                const y = (e.clientY - rect.top) * scaleY;
+                const x = (clientX - rect.left) * scaleX;
+                const y = (clientY - rect.top) * scaleY;
                 
                 // The cursor is displayed at eraserSize CSS pixels
                 // The canvas is displayed with CSS transform, so rect includes zoom
@@ -2700,6 +2732,28 @@
                                                             </button>
                                                         </div>
                                                         
+                                                        {/* Boundary controls - only in reading mode */}
+                                                        {viewMode === 'reading' && (
+                                                            <div className="px-2 pb-2 flex items-center gap-1 border-t border-gray-100 pt-1">
+                                                                <span className="text-xs text-gray-400 mr-1">After:</span>
+                                                                <button onClick={() => toggleWordBoundary(idx)}
+                                                                    className={`px-2 py-1 rounded text-xs font-bold ${wordBoundaries.has(idx) ? 'bg-stone text-white' : 'bg-gray-100 text-gray-500'}`}
+                                                                    title="Word boundary">
+                                                                    | Word
+                                                                </button>
+                                                                <button onClick={() => toggleColumnBreak(idx)}
+                                                                    className={`px-2 py-1 rounded text-xs font-bold ${columnBreaks.has(idx) ? 'bg-amber-700 text-white' : 'bg-gray-100 text-gray-500'}`}
+                                                                    title="Column break">
+                                                                    ‖ Col
+                                                                </button>
+                                                                <button onClick={() => toggleLineBreak(idx)}
+                                                                    className={`px-2 py-1 rounded text-xs font-bold ${lineBreaks.has(idx) ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-500'}`}
+                                                                    title="Line break">
+                                                                    ⏎ Line
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        
                                                         {/* Expanded: Alternative matches */}
                                                         {isExpanded && result.topMatches && result.topMatches.length > 1 && (
                                                             <div className="px-2 pb-2 border-t border-gray-200 bg-gray-100 pt-2">
@@ -3098,11 +3152,17 @@
                                                 return (
                                                     <canvas ref={eraserCanvasRef}
                                                         className="max-w-full max-h-full object-contain"
-                                                        style={{ cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair` }}
+                                                        style={{ 
+                                                            cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
+                                                            touchAction: 'none' // Disable default touch gestures for better palm rejection
+                                                        }}
                                                         onMouseDown={handleEraserStart}
                                                         onMouseMove={handleEraserDraw}
                                                         onMouseUp={handleEraserEnd}
                                                         onMouseLeave={handleEraserEnd}
+                                                        onTouchStart={handleEraserStart}
+                                                        onTouchMove={handleEraserDraw}
+                                                        onTouchEnd={handleEraserEnd}
                                                     />
                                                 );
                                             })()}
@@ -3941,7 +4001,7 @@
                                                         style={{
                                                             fontFamily: transcriptionScript === 'arabic'
                                                                 ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
-                                                                : '"Courier New", monospace',
+                                                                : '"Noto Sans", "Segoe UI", "Roboto", "DejaVu Sans", "Arial Unicode MS", sans-serif',
                                                             fontSize: '20px',
                                                             lineHeight: '2',
                                                             direction: 'ltr' // Keep text direction LTR within columns
@@ -3969,7 +4029,7 @@
                                             style={{
                                                 fontFamily: transcriptionScript === 'arabic'
                                                     ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
-                                                    : '"Courier New", monospace',
+                                                    : '"Noto Sans", "Segoe UI", "Roboto", "DejaVu Sans", "Arial Unicode MS", sans-serif',
                                                 direction: transcriptionFormat === 'horizontal-rtl' ? 'rtl' : 'ltr',
                                                 textAlign: transcriptionFormat === 'horizontal-rtl' ? 'right' : 'left'
                                             }}
