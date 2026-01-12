@@ -1042,14 +1042,21 @@
                 const canvas = eraserCanvasRef.current;
                 const img = imageRef.current;
                 
-                console.log('🎨 Setting canvas dimensions:', img.naturalWidth, 'x', img.naturalHeight);
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
+                // Use DISPLAYED dimensions, not natural dimensions!
+                const displayWidth = img.width || img.offsetWidth || img.clientWidth;
+                const displayHeight = img.height || img.offsetHeight || img.clientHeight;
                 
-                // Draw current display image onto canvas
+                console.log('🎨 Setting canvas to DISPLAYED size:', displayWidth, 'x', displayHeight);
+                console.log('📏 Original natural size was:', img.naturalWidth, 'x', img.naturalHeight);
+                
+                // Set canvas internal dimensions to match DISPLAYED size
+                canvas.width = displayWidth;
+                canvas.height = displayHeight;
+                
+                // Now scale the original image to fit the canvas
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
-                console.log('✅ Eraser canvas initialized');
+                ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+                console.log('✅ Eraser canvas initialized with displayed dimensions');
             }, []);
             
             const handleEraserDraw = useCallback((e) => {
@@ -3280,7 +3287,8 @@
                                                         style={{ 
                                                             cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
                                                             touchAction: 'none',
-                                                            backgroundColor: 'rgba(255,255,255,0.01)', // Slight tint to see canvas bounds
+                                                            backgroundColor: 'rgba(255,0,0,0.1)', // Light red tint to see canvas
+                                                            border: '5px solid red', // BRIGHT RED BORDER
                                                             pointerEvents: 'auto'
                                                         }}
                                                         onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
