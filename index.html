@@ -108,6 +108,10 @@
     </style>
 </head>
 <body class="bg-gray-100">
+    <!-- Eruda Mobile Console (remove after debugging) -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
+    
     <div id="root"></div>
 
     <!-- Core modules (must load first) -->
@@ -3276,15 +3280,19 @@
                                                             cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
                                                             touchAction: 'none', // Disable default touch gestures for better palm rejection
                                                             width: '100%',
-                                                            height: 'auto'
+                                                            height: 'auto',
+                                                            backgroundColor: 'transparent',
+                                                            pointerEvents: 'auto',
+                                                            position: 'relative',
+                                                            zIndex: 10
                                                         }}
-                                                        onMouseDown={handleEraserStart}
+                                                        onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
                                                         onMouseMove={handleEraserDraw}
                                                         onMouseUp={handleEraserEnd}
                                                         onMouseLeave={handleEraserEnd}
-                                                        onTouchStart={handleEraserStart}
-                                                        onTouchMove={handleEraserDraw}
-                                                        onTouchEnd={handleEraserEnd}
+                                                        onTouchStart={(e) => { console.log('👆 Touch start'); handleEraserStart(e); }}
+                                                        onTouchMove={(e) => { console.log('👆 Touch move'); handleEraserDraw(e); }}
+                                                        onTouchEnd={(e) => { console.log('👆 Touch end'); handleEraserEnd(); }}
                                                     />
                                                 );
                                             })()}
