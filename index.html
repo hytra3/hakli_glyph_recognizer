@@ -1058,63 +1058,64 @@
                     return;
                 }
                 
-                console.log('✏️ Drawing at', e.type);
-                
-                // Prevent scrolling on touch devices while drawing
-                if (e.type.startsWith('touch')) {
-                    e.preventDefault();
-                }
-                
-                // PALM REJECTION for touch events
-                if (e.touches && e.touches.length > 0) {
-                    const touch = e.touches[0];
+                try {
+                    // Prevent scrolling on touch devices while drawing
+                    if (e.type.startsWith('touch')) {
+                        e.preventDefault();
+                    }
                     
-                    // Filter out touches with large contact areas (likely palm)
-                    // Typical finger: 5-15px radius, palm: 20-40px radius
-                    const touchRadius = Math.max(
-                        touch.radiusX || 0,
-                        touch.radiusY || 0
-                    );
+                    // PALM REJECTION for touch events
+                    if (e.touches && e.touches.length > 0) {
+                        const touch = e.touches[0];
+                        
+                        // Filter out touches with large contact areas (likely palm)
+                        const touchRadius = Math.max(
+                            touch.radiusX || 0,
+                            touch.radiusY || 0
+                        );
+                        
+                        if (touchRadius > 25) {
+                            console.log('🖐️ Palm rejected (radius:', touchRadius, ')');
+                            return;
+                        }
+                        
+                        if (e.touches.length > 1) {
+                            console.log('👆 Multi-touch detected, using first');
+                        }
+                    }
                     
-                    if (touchRadius > 25) {
-                        // Touch area too large - likely a palm, ignore it
-                        console.log('🖐️ Palm rejected (radius:', touchRadius, ')');
+                    const canvas = eraserCanvasRef.current;
+                    const ctx = canvas.getContext('2d');
+                    const rect = canvas.getBoundingClientRect();
+                    
+                    // Get coordinates from either mouse or touch event
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    
+                    // Calculate position relative to canvas (accounting for scaling and zoom)
+                    const scaleX = canvas.width / rect.width;
+                    const scaleY = canvas.height / rect.height;
+                    const x = (clientX - rect.left) * scaleX;
+                    const y = (clientY - rect.top) * scaleY;
+                    
+                    // Check if coordinates are valid
+                    if (isNaN(x) || isNaN(y) || x < 0 || y < 0 || x > canvas.width || y > canvas.height) {
+                        console.warn('❌ Invalid coordinates:', { x, y, canvasW: canvas.width, canvasH: canvas.height });
                         return;
                     }
                     
-                    // If multiple touches detected, only use the first one
-                    // (Additional touches are likely palm resting)
-                    if (e.touches.length > 1) {
-                        console.log('👆 Multi-touch detected, using first');
-                    }
+                    const brushRadius = eraserSize * scaleX;
+                    
+                    // Draw white circle (erase)
+                    ctx.beginPath();
+                    ctx.arc(x, y, brushRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fill();
+                    
+                    console.log('✅ Drew at:', Math.round(x), Math.round(y));
+                } catch (error) {
+                    console.error('❌ Draw error:', error);
                 }
-                
-                const canvas = eraserCanvasRef.current;
-                const ctx = canvas.getContext('2d');
-                const rect = canvas.getBoundingClientRect();
-                
-                // Get coordinates from either mouse or touch event
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                
-                // Calculate position relative to canvas (accounting for scaling and zoom)
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                const x = (clientX - rect.left) * scaleX;
-                const y = (clientY - rect.top) * scaleY;
-                
-                console.log('📍 Drawing at canvas coords:', Math.round(x), Math.round(y), 'radius:', Math.round(eraserSize * scaleX));
-                
-                // The cursor is displayed at eraserSize CSS pixels
-                // The canvas is displayed with CSS transform, so rect includes zoom
-                // Scale the brush to match what the user sees (cursor size in canvas coords)
-                const brushRadius = eraserSize * scaleX;
-                
-                // Draw white circle (erase)
-                ctx.beginPath();
-                ctx.arc(x, y, brushRadius, 0, Math.PI * 2);
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fill();
             }, [eraserMode, eraserSize]);
             
             const handleEraserStart = useCallback((e) => {
@@ -3287,7 +3288,7 @@
                                                         onMouseUp={handleEraserEnd}
                                                         onMouseLeave={handleEraserEnd}
                                                         onTouchStart={(e) => { console.log('👆 Touch start'); handleEraserStart(e); }}
-                                                        onTouchMove={(e) => { console.log('👆 Touch move'); handleEraserDraw(e); }}
+                                                        onTouchMove={handleEraserDraw}
                                                         onTouchEnd={(e) => { console.log('👆 Touch end'); handleEraserEnd(); }}
                                                     />
                                                 );
