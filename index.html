@@ -3278,13 +3278,9 @@
                                                         className="max-w-full max-h-full object-contain block"
                                                         style={{ 
                                                             cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
-                                                            touchAction: 'none', // Disable default touch gestures for better palm rejection
-                                                            width: '100%',
-                                                            height: 'auto',
-                                                            backgroundColor: 'transparent',
-                                                            pointerEvents: 'auto',
-                                                            position: 'relative',
-                                                            zIndex: 10
+                                                            touchAction: 'none',
+                                                            backgroundColor: 'rgba(255,255,255,0.01)', // Slight tint to see canvas bounds
+                                                            pointerEvents: 'auto'
                                                         }}
                                                         onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
                                                         onMouseMove={handleEraserDraw}
