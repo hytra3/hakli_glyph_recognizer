@@ -365,6 +365,14 @@
             const eraserCanvasRef = useRef(null);
             const isDrawingRef = useRef(false);
             
+            // Audio recording state
+            const [audioData, setAudioData] = useState(null); // Stores audio as data URL
+            const [isRecording, setIsRecording] = useState(false);
+            const [audioRecorder, setAudioRecorder] = useState(null);
+            const audioChunksRef = useRef([]);
+            const audioInputRef = useRef(null);
+            const audioPlayerRef = useRef(null);
+            
             // Region editor state (per-detection eraser)
             const [regionEditorIdx, setRegionEditorIdx] = useState(null);
             const [regionEditorSize, setRegionEditorSize] = useState(10);
@@ -1041,7 +1049,12 @@
             }, []);
             
             const handleEraserDraw = useCallback((e) => {
-                if (!isDrawingRef.current || !eraserMode || !eraserCanvasRef.current || !imageRef.current) return;
+                if (!isDrawingRef.current || !eraserMode || !eraserCanvasRef.current || !imageRef.current) {
+                    if (!isDrawingRef.current) console.log('⚠️ Not drawing yet');
+                    return;
+                }
+                
+                console.log('✏️ Drawing at', e.type);
                 
                 // Prevent scrolling on touch devices while drawing
                 if (e.type.startsWith('touch')) {
@@ -1061,13 +1074,14 @@
                     
                     if (touchRadius > 25) {
                         // Touch area too large - likely a palm, ignore it
+                        console.log('🖐️ Palm rejected (radius:', touchRadius, ')');
                         return;
                     }
                     
                     // If multiple touches detected, only use the first one
                     // (Additional touches are likely palm resting)
                     if (e.touches.length > 1) {
-                        // Could add more sophisticated logic here, but keeping first touch is usually fine
+                        console.log('👆 Multi-touch detected, using first');
                     }
                 }
                 
@@ -1085,6 +1099,8 @@
                 const x = (clientX - rect.left) * scaleX;
                 const y = (clientY - rect.top) * scaleY;
                 
+                console.log('📍 Drawing at canvas coords:', Math.round(x), Math.round(y), 'radius:', Math.round(eraserSize * scaleX));
+                
                 // The cursor is displayed at eraserSize CSS pixels
                 // The canvas is displayed with CSS transform, so rect includes zoom
                 // Scale the brush to match what the user sees (cursor size in canvas coords)
@@ -1100,10 +1116,18 @@
             const handleEraserStart = useCallback((e) => {
                 if (!eraserMode || !eraserCanvasRef.current) {
                     console.warn('⚠️ Cannot start eraser - mode:', eraserMode, 'canvas:', !!eraserCanvasRef.current);
+                    // Update debug display
+                    const debug = document.getElementById('eraser-debug');
+                    if (debug) debug.textContent = `ERROR: Mode=${eraserMode} Canvas=${!!eraserCanvasRef.current}`;
                     return;
                 }
                 console.log('🖱️ Eraser started');
                 isDrawingRef.current = true;
+                
+                // Update debug display
+                const debug = document.getElementById('eraser-debug');
+                if (debug) debug.textContent = `Drawing started! Mode=✓ Canvas=✓`;
+                
                 handleEraserDraw(e);
             }, [eraserMode, handleEraserDraw]);
             
@@ -1165,6 +1189,79 @@
             const cancelEraser = useCallback(() => {
                 setEraserMode(false);
                 setMobilePanel(null); // Close mobile panel after canceling
+            }, []);
+            
+            // ========== AUDIO RECORDING ==========
+            const startRecording = useCallback(async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const recorder = new MediaRecorder(stream);
+                    audioChunksRef.current = [];
+                    
+                    recorder.ondataavailable = (e) => {
+                        if (e.data.size > 0) {
+                            audioChunksRef.current.push(e.data);
+                        }
+                    };
+                    
+                    recorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            setAudioData(reader.result); // Store as data URL
+                            console.log('🎤 Audio recorded successfully');
+                        };
+                        reader.readAsDataURL(audioBlob);
+                        
+                        // Stop all tracks
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    
+                    recorder.start();
+                    setAudioRecorder(recorder);
+                    setIsRecording(true);
+                    console.log('🎤 Recording started...');
+                } catch (error) {
+                    console.error('Error starting recording:', error);
+                    alert('Could not access microphone. Please grant permission.');
+                }
+            }, []);
+            
+            const stopRecording = useCallback(() => {
+                if (audioRecorder) {
+                    audioRecorder.stop();
+                    setIsRecording(false);
+                    setAudioRecorder(null);
+                    console.log('⏹️ Recording stopped');
+                }
+            }, [audioRecorder]);
+            
+            const uploadAudioFile = useCallback((e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                    if (!file.type.startsWith('audio/')) {
+                        alert('Please select an audio file');
+                        return;
+                    }
+                    
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        setAudioData(reader.result);
+                        console.log('📎 Audio file uploaded successfully');
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }, []);
+            
+            const deleteAudio = useCallback(() => {
+                if (confirm('Delete audio recording?')) {
+                    setAudioData(null);
+                    if (audioPlayerRef.current) {
+                        audioPlayerRef.current.pause();
+                        audioPlayerRef.current.currentTime = 0;
+                    }
+                    console.log('🗑️ Audio deleted');
+                }
             }, []);
             
             // Initialize eraser canvas when mode is enabled
@@ -2451,14 +2548,20 @@
                     
                     {/* Floating Eraser Indicator - Mobile (when panel is closed) */}
                     {eraserMode && !mobilePanel && (
-                        <div className="lg:hidden fixed top-20 right-4 z-40 bg-ochre text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
-                            <span className="text-sm font-medium">🧹 Eraser Active ({eraserSize}px)</span>
-                            <button 
-                                onClick={() => setMobilePanel('preprocessing')}
-                                className="bg-white/20 hover:bg-white/30 px-2 py-1 rounded text-xs"
-                            >
-                                Settings
-                            </button>
+                        <div className="lg:hidden fixed top-20 right-4 z-40 bg-ochre text-white px-4 py-2 rounded-lg shadow-lg">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium">🧹 Eraser Active ({eraserSize}px)</span>
+                                <button 
+                                    onClick={() => setMobilePanel('preprocessing')}
+                                    className="bg-white/20 hover:bg-white/30 px-2 py-1 rounded text-xs"
+                                >
+                                    Settings
+                                </button>
+                            </div>
+                            <div id="eraser-debug" className="text-xs font-mono bg-black/30 p-1 rounded mt-1">
+                                Canvas: {eraserCanvasRef.current ? '✓' : '✗'} | 
+                                Drawing: {isDrawingRef.current ? '✓' : '✗'}
+                            </div>
                         </div>
                     )}
                     
@@ -2895,6 +2998,7 @@
                                                         if (data.inscriptionComplete) setInscriptionComplete(data.inscriptionComplete);
                                                         if (data.currentInscriptionId) setCurrentInscriptionId(data.currentInscriptionId);
                                                         if (data.visibility) setVisibility(data.visibility);
+                                                        if (data.audioData) setAudioData(data.audioData); // Load audio recording
                                                         
                                                         console.log('📂 Loaded HKI:', data.inscriptionTitle || file.name);
                                                         alert('✅ Loaded: ' + (data.inscriptionTitle || file.name));
@@ -3167,10 +3271,12 @@
                                                 const cursorSize = cursorRadius * 2 + 2;
                                                 return (
                                                     <canvas ref={eraserCanvasRef}
-                                                        className="max-w-full max-h-full object-contain"
+                                                        className="max-w-full max-h-full object-contain block"
                                                         style={{ 
                                                             cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
-                                                            touchAction: 'none' // Disable default touch gestures for better palm rejection
+                                                            touchAction: 'none', // Disable default touch gestures for better palm rejection
+                                                            width: '100%',
+                                                            height: 'auto'
                                                         }}
                                                         onMouseDown={handleEraserStart}
                                                         onMouseMove={handleEraserDraw}
@@ -3978,6 +4084,90 @@
                                     </button>
                                 </div>
                                 
+                                {/* Audio Recording Section */}
+                                <div className="mb-3 border-t border-gray-200 pt-3">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-xs font-semibold text-gray-600">🎤 Audio Notes:</span>
+                                        {audioData && (
+                                            <span className="text-xs text-patina">● Recorded</span>
+                                        )}
+                                    </div>
+                                    
+                                    {!audioData ? (
+                                        /* No audio - show record/upload options */
+                                        <div className="flex gap-2">
+                                            {!isRecording ? (
+                                                <>
+                                                    <button
+                                                        onClick={startRecording}
+                                                        className="flex-1 px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded text-sm font-medium flex items-center justify-center gap-2"
+                                                        title="Record audio explanation"
+                                                    >
+                                                        ⏺ Record
+                                                    </button>
+                                                    <button
+                                                        onClick={() => audioInputRef.current?.click()}
+                                                        className="flex-1 px-3 py-2 bg-stone hover:bg-[#6d6355] text-white rounded text-sm font-medium flex items-center justify-center gap-2"
+                                                        title="Upload audio file"
+                                                    >
+                                                        📎 Upload
+                                                    </button>
+                                                    <input
+                                                        ref={audioInputRef}
+                                                        type="file"
+                                                        accept="audio/*"
+                                                        onChange={uploadAudioFile}
+                                                        className="hidden"
+                                                    />
+                                                </>
+                                            ) : (
+                                                /* Recording in progress */
+                                                <button
+                                                    onClick={stopRecording}
+                                                    className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium flex items-center justify-center gap-2 animate-pulse"
+                                                    title="Stop recording"
+                                                >
+                                                    ⏹ Stop Recording
+                                                </button>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        /* Audio exists - show player and delete */
+                                        <div className="space-y-2">
+                                            <audio
+                                                ref={audioPlayerRef}
+                                                src={audioData}
+                                                controls
+                                                className="w-full"
+                                                style={{ height: '40px' }}
+                                            />
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => audioInputRef.current?.click()}
+                                                    className="flex-1 px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-xs"
+                                                    title="Replace with new recording"
+                                                >
+                                                    🔄 Replace
+                                                </button>
+                                                <button
+                                                    onClick={deleteAudio}
+                                                    className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-600 rounded text-xs"
+                                                    title="Delete audio"
+                                                >
+                                                    🗑 Delete
+                                                </button>
+                                                <input
+                                                    ref={audioInputRef}
+                                                    type="file"
+                                                    accept="audio/*"
+                                                    onChange={uploadAudioFile}
+                                                    className="hidden"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                
                                 {/* Transcription Content */}
                                 <div className="p-4 bg-white rounded border-2 border-stone shadow-inner overflow-x-auto">
                                     {transcriptionFormat.startsWith('vertical') ? (
@@ -4175,6 +4365,7 @@
                                                 validations,
                                                 translationEnglish,
                                                 translationArabic,
+                                                audioData, // Audio recording/notes
                                                 visibility,
                                                 changeLog: changeLog || []
                                             };
@@ -4262,6 +4453,7 @@
                                                 validations,
                                                 translationEnglish,
                                                 translationArabic,
+                                                audioData, // Audio recording/notes
                                                 visibility: 'draft', // New files start as draft
                                                 changeLog: [] // New file starts with empty history
                                             };
@@ -5332,6 +5524,7 @@
                                     setInscriptionComplete(hkiData.inscriptionComplete || hkiData.complete);
                                 if (hkiData.inscriptionId) setCurrentInscriptionId(hkiData.inscriptionId);
                                 if (hkiData.visibility) setVisibility(hkiData.visibility);
+                                if (hkiData.audioData) setAudioData(hkiData.audioData); // Load audio recording
                                 
                                 // Set file tracking for Save vs Save As New
                                 setCurrentFileId(fileInfo.id);
