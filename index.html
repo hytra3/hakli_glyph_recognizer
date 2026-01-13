@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260112';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: Full-Size Canvas, Audio Recording)');
+        const APP_VERSION = 'v260112b';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Timing Fix + Audio Recording)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -1037,13 +1037,18 @@
             const initEraserCanvas = useCallback(() => {
                 if (!eraserCanvasRef.current || !imageRef.current) {
                     console.warn('⚠️ Cannot init eraser canvas - missing refs');
-                    return;
+                    return false;
                 }
                 const canvas = eraserCanvasRef.current;
                 const img = imageRef.current;
                 
                 // Get parent container dimensions (where canvas will fill with absolute positioning)
                 const container = img.parentElement;
+                if (!container) {
+                    console.warn('⚠️ No parent container');
+                    return false;
+                }
+                
                 const rect = container.getBoundingClientRect();
                 const containerWidth = Math.round(rect.width);
                 const containerHeight = Math.round(rect.height);
@@ -1057,6 +1062,12 @@
                 console.log('🖼️ Image rendered size:', imgWidth, 'x', imgHeight);
                 console.log('📏 Image natural size:', img.naturalWidth, 'x', img.naturalHeight);
                 
+                // Verify we have valid dimensions
+                if (imgWidth === 0 || imgHeight === 0) {
+                    console.error('❌ Image has no dimensions yet!');
+                    return false;
+                }
+                
                 // Set canvas internal dimensions to match image's rendered size for proper quality
                 canvas.width = imgWidth;
                 canvas.height = imgHeight;
@@ -1065,6 +1076,7 @@
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
                 console.log('✅ Eraser canvas initialized - Canvas will fill container via CSS');
+                return true;
             }, []);
             
             const handleEraserDraw = useCallback((e) => {
@@ -1287,13 +1299,40 @@
             // Initialize eraser canvas when mode is enabled
             useEffect(() => {
                 if (eraserMode) {
-                    // Add small delay to ensure canvas ref is ready
-                    setTimeout(() => {
-                        console.log('🧹 Initializing eraser canvas...');
-                        console.log('Canvas ref:', eraserCanvasRef.current);
-                        console.log('Image ref:', imageRef.current);
-                        initEraserCanvas();
-                    }, 50);
+                    // Add delay to ensure image layout is complete
+                    const initWithRetry = (attempt = 0) => {
+                        setTimeout(() => {
+                            console.log('🧹 Attempt', attempt + 1, 'to initialize eraser canvas...');
+                            
+                            if (!eraserCanvasRef.current || !imageRef.current) {
+                                console.warn('⚠️ Refs not ready');
+                                if (attempt < 10) initWithRetry(attempt + 1);
+                                return;
+                            }
+                            
+                            const img = imageRef.current;
+                            const rect = img.getBoundingClientRect();
+                            
+                            console.log('📏 Image dimensions:', rect.width, 'x', rect.height);
+                            
+                            // Check if image has dimensions
+                            if (rect.width === 0 || rect.height === 0) {
+                                console.warn('⚠️ Image not laid out yet (0x0), retrying...');
+                                if (attempt < 10) initWithRetry(attempt + 1);
+                                return;
+                            }
+                            
+                            // Now initialize
+                            console.log('✅ Image ready, initializing canvas...');
+                            const success = initEraserCanvas();
+                            if (!success && attempt < 10) {
+                                console.warn('⚠️ Init failed, retrying...');
+                                initWithRetry(attempt + 1);
+                            }
+                        }, attempt === 0 ? 200 : 300); // Longer initial delay for mobile
+                    };
+                    
+                    initWithRetry();
                 }
             }, [eraserMode, initEraserCanvas]);
             
@@ -3355,7 +3394,7 @@
                                                 const imgOffsetY = img.offsetTop;
                                                 
                                                 return (
-                                                    <div key={index} className={boxClass}
+                                                    <div key={`box-${index}-${result.position.x}-${result.position.y}`} className={boxClass}
                                                         style={{
                                                             left: imgOffsetX + result.position.x * scaleX,
                                                             top: imgOffsetY + result.position.y * scaleY,
@@ -3960,7 +3999,7 @@
                                                         if (excludedDetections.has(index)) return null;
                                                         const isSelected = selectedRegions.has(index);
                                                         return (
-                                                            <div key={index}
+                                                            <div key={`reading-${index}-${result.position.x}-${result.position.y}`}
                                                                 className={`absolute border-2 rounded ${isSelected ? 'border-ochre bg-ochre/20' : 'border-patina bg-patina/20'}`}
                                                                 style={{
                                                                     left: containerOffsetX + result.position.x * scaleX,
@@ -4237,7 +4276,7 @@
                                                     >
                                                         {column.map(({ result, index, actualIdx, hasWordBoundary }) => (
                                                             <span 
-                                                                key={index} 
+                                                                key={`vert-${actualIdx}`} 
                                                                 className={`text-gray-900 ${hasWordBoundary ? 'pb-2 mb-2 border-b-2 border-amber-600/50' : ''}`}
                                                             >
                                                                 {transcriptionScript === 'arabic'
@@ -4263,7 +4302,7 @@
                                             }}
                                         >
                                             {getReadingOrderedResults().map((result, index) => (
-                                                <span key={index}>
+                                                <span key={`horiz-${readingOrder[index] ?? index}`}>
                                                     <span className="text-gray-900">
                                                         {transcriptionScript === 'arabic'
                                                             ? (result.glyph.arabic || result.glyph.name)
