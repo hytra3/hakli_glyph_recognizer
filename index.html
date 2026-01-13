@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260112d';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: Simplified Retry Logic)');
+        const APP_VERSION = 'v260112e';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: CSS Dimensions!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -1089,6 +1089,10 @@
                 // Set canvas internal dimensions to match image's rendered size for proper quality
                 canvas.width = imgWidth;
                 canvas.height = imgHeight;
+                
+                // ALSO set CSS dimensions so canvas actually renders!
+                canvas.style.width = `${imgWidth}px`;
+                canvas.style.height = `${imgHeight}px`;
                 
                 // Draw the image at its full resolution
                 const ctx = canvas.getContext('2d');
