@@ -14,6 +14,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="favicon.png">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="apple-touch-icon" href="hh-logo.png">
+    
     <!-- React & Babel -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -151,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260111';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile Enhanced: Touch Support, Palm Rejection, Boundary Controls)');
+        const APP_VERSION = 'v260112';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: Full-Size Canvas, Audio Recording)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -1041,21 +1042,29 @@
                 const canvas = eraserCanvasRef.current;
                 const img = imageRef.current;
                 
-                // Use DISPLAYED dimensions, not natural dimensions!
-                const displayWidth = img.width || img.offsetWidth || img.clientWidth;
-                const displayHeight = img.height || img.offsetHeight || img.clientHeight;
+                // Get parent container dimensions (where canvas will fill with absolute positioning)
+                const container = img.parentElement;
+                const rect = container.getBoundingClientRect();
+                const containerWidth = Math.round(rect.width);
+                const containerHeight = Math.round(rect.height);
                 
-                console.log('🎨 Setting canvas to DISPLAYED size:', displayWidth, 'x', displayHeight);
-                console.log('📏 Original natural size was:', img.naturalWidth, 'x', img.naturalHeight);
+                // Get actual image rendered size
+                const imgRect = img.getBoundingClientRect();
+                const imgWidth = Math.round(imgRect.width);
+                const imgHeight = Math.round(imgRect.height);
                 
-                // Set canvas internal dimensions to match DISPLAYED size
-                canvas.width = displayWidth;
-                canvas.height = displayHeight;
+                console.log('📦 Container size:', containerWidth, 'x', containerHeight);
+                console.log('🖼️ Image rendered size:', imgWidth, 'x', imgHeight);
+                console.log('📏 Image natural size:', img.naturalWidth, 'x', img.naturalHeight);
                 
-                // Now scale the original image to fit the canvas
+                // Set canvas internal dimensions to match image's rendered size for proper quality
+                canvas.width = imgWidth;
+                canvas.height = imgHeight;
+                
+                // Draw the image at its full resolution
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
-                console.log('✅ Eraser canvas initialized with displayed dimensions');
+                ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
+                console.log('✅ Eraser canvas initialized - Canvas will fill container via CSS');
             }, []);
             
             const handleEraserDraw = useCallback((e) => {
@@ -3248,8 +3257,8 @@
                                                 <div className="relative inline-block" style={{ transform: `scale(${canvasZoom})`, transformOrigin: 'center center', transition: 'transform 0.15s ease' }}>
                                                     {/* Regular image display (hidden when eraser active) */}
                                                     <img ref={imageRef} src={displayImage} alt="Inscription" 
-                                                        className={`max-w-full max-h-full object-contain block ${eraserMode ? 'hidden' : ''}`}
-                                                        style={{ pointerEvents: manualBoxMode ? 'none' : 'auto' }}
+                                                        className="max-w-full max-h-full object-contain block"
+                                                        style={{ pointerEvents: eraserMode || manualBoxMode ? 'none' : 'auto' }}
                                                     />
                                             
                                             {/* Manual Box Drawing Overlay */}
@@ -3282,13 +3291,14 @@
                                                 const cursorSize = cursorRadius * 2 + 2;
                                                 return (
                                                     <canvas ref={eraserCanvasRef}
-                                                        className="max-w-full max-h-full object-contain block"
+                                                        className="absolute inset-0 w-full h-full"
                                                         style={{ 
                                                             cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
                                                             touchAction: 'none',
                                                             backgroundColor: 'rgba(255,0,0,0.1)', // Light red tint to see canvas
                                                             border: '5px solid red', // BRIGHT RED BORDER
-                                                            pointerEvents: 'auto'
+                                                            pointerEvents: 'auto',
+                                                            objectFit: 'contain'
                                                         }}
                                                         onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
                                                         onMouseMove={handleEraserDraw}
