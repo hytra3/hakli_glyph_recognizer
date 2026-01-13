@@ -1035,12 +1035,30 @@
             
             // ========== ERASER TOOL ==========
             const initEraserCanvas = useCallback(() => {
-                if (!eraserCanvasRef.current || !imageRef.current) {
-                    console.warn('⚠️ Cannot init eraser canvas - missing refs');
+                if (!eraserCanvasRef.current) {
+                    console.warn('⚠️ Cannot init eraser canvas - missing canvas ref');
                     return false;
                 }
+                
+                // Find the VISIBLE image (there may be multiple with same alt text)
+                const images = document.querySelectorAll('img[alt="Inscription"]');
+                let visibleImg = null;
+                images.forEach(img => {
+                    const rect = img.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        visibleImg = img;
+                    }
+                });
+                
+                if (!visibleImg) {
+                    console.error('❌ No visible image found!');
+                    return false;
+                }
+                
+                console.log('✅ Found visible image:', visibleImg.getBoundingClientRect());
+                
                 const canvas = eraserCanvasRef.current;
-                const img = imageRef.current;
+                const img = visibleImg;
                 
                 // Get parent container dimensions (where canvas will fill with absolute positioning)
                 const container = img.parentElement;
