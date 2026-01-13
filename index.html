@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260112c';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Canvas: Force Reflow + Image Complete Check)');
+        const APP_VERSION = 'v260112d';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: Simplified Retry Logic)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -1317,56 +1317,32 @@
             // Initialize eraser canvas when mode is enabled
             useEffect(() => {
                 if (eraserMode) {
-                    // Add delay to ensure image layout is complete
+                    // Simple retry logic - let initEraserCanvas handle everything
                     const initWithRetry = (attempt = 0) => {
                         setTimeout(() => {
                             console.log('🧹 Attempt', attempt + 1, 'to initialize eraser canvas...');
                             
-                            if (!eraserCanvasRef.current || !imageRef.current) {
-                                console.warn('⚠️ Refs not ready');
+                            if (!eraserCanvasRef.current) {
+                                console.warn('⚠️ Canvas ref not ready');
                                 if (attempt < 10) initWithRetry(attempt + 1);
                                 return;
                             }
                             
-                            const img = imageRef.current;
-                            
-                            // Force reflow to ensure layout is computed
-                            void img.offsetHeight;
-                            
-                            // Check if image is loaded
-                            if (!img.complete || img.naturalWidth === 0) {
-                                console.warn('⚠️ Image not loaded yet, retrying...');
-                                if (attempt < 10) initWithRetry(attempt + 1);
-                                return;
-                            }
-                            
-                            const rect = img.getBoundingClientRect();
-                            
-                            console.log('📏 Image dimensions:', rect.width, 'x', rect.height);
-                            console.log('📐 Natural dimensions:', img.naturalWidth, 'x', img.naturalHeight);
-                            console.log('✓ Image complete:', img.complete);
-                            console.log('✓ Display style:', window.getComputedStyle(img).display);
-                            
-                            // Check if image has dimensions
-                            if (rect.width === 0 || rect.height === 0) {
-                                console.warn('⚠️ Image not laid out yet (0x0), retrying...');
-                                if (attempt < 10) initWithRetry(attempt + 1);
-                                return;
-                            }
-                            
-                            // Now initialize
-                            console.log('✅ Image ready, initializing canvas...');
+                            // Call initEraserCanvas - it will find the visible image
                             const success = initEraserCanvas();
+                            
                             if (!success && attempt < 10) {
                                 console.warn('⚠️ Init failed, retrying...');
                                 initWithRetry(attempt + 1);
+                            } else if (success) {
+                                console.log('🎉 Eraser canvas ready!');
                             }
-                        }, attempt === 0 ? 300 : 400); // Even longer delays for mobile
+                        }, attempt === 0 ? 300 : 400);
                     };
                     
                     initWithRetry();
                 }
-            }, [eraserMode, initEraserCanvas, displayImage]); // Add displayImage dependency
+            }, [eraserMode, initEraserCanvas, displayImage]);
             
             // ========== BOX ADJUSTMENT ==========
             const shrinkBox = useCallback((index, amount = 5) => {
