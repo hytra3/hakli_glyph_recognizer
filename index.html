@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260112h';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: React State Dimensions!)');
+        const APP_VERSION = 'v260112i';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: Canvas in BOTH Panels!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -3989,6 +3989,34 @@
                                         onTouchEnd={manualBoxMode ? handleManualBoxEnd : undefined}
                                     >
                                         <img src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" />
+                                        
+                                        {/* Eraser canvas for mobile - positioned over visible image */}
+                                        {eraserMode && (() => {
+                                            const cursorRadius = eraserSize - 1;
+                                            const cursorSize = cursorRadius * 2 + 2;
+                                            return (
+                                                <canvas ref={eraserCanvasRef}
+                                                    className="absolute inset-0"
+                                                    style={{ 
+                                                        cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
+                                                        touchAction: 'none',
+                                                        backgroundColor: 'rgba(255,0,0,0.1)',
+                                                        border: '5px solid red',
+                                                        pointerEvents: 'auto',
+                                                        objectFit: 'contain',
+                                                        width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '0',
+                                                        height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '0'
+                                                    }}
+                                                    onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
+                                                    onMouseMove={handleEraserDraw}
+                                                    onMouseUp={handleEraserEnd}
+                                                    onMouseLeave={handleEraserEnd}
+                                                    onTouchStart={(e) => { console.log('👆 Touch start'); handleEraserStart(e); }}
+                                                    onTouchMove={handleEraserDraw}
+                                                    onTouchEnd={(e) => { console.log('👆 Touch end'); handleEraserEnd(); }}
+                                                />
+                                            );
+                                        })()}
                                         
                                         {/* Detection boxes overlay - mobile */}
                                         {recognitionResults.length > 0 && imageRef.current && (
