@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260112g';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: Remove Conflicting Tailwind Classes!)');
+        const APP_VERSION = 'v260112h';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: React State Dimensions!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -366,6 +366,7 @@
             // Eraser tool state
             const [eraserMode, setEraserMode] = useState(false);
             const [eraserSize, setEraserSize] = useState(15);
+            const [canvasDimensions, setCanvasDimensions] = useState({ width: 0, height: 0 });
             const eraserCanvasRef = useRef(null);
             const isDrawingRef = useRef(false);
             
@@ -1090,16 +1091,15 @@
                 canvas.width = imgWidth;
                 canvas.height = imgHeight;
                 
-                // ALSO set CSS dimensions so canvas actually renders!
-                canvas.style.width = `${imgWidth}px`;
-                canvas.style.height = `${imgHeight}px`;
+                // Update React state so dimensions persist through re-renders!
+                setCanvasDimensions({ width: imgWidth, height: imgHeight });
                 
                 // Draw the image at its full resolution
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
                 console.log('✅ Eraser canvas initialized - Canvas will fill container via CSS');
                 return true;
-            }, []);
+            }, [setCanvasDimensions]);
             
             const handleEraserDraw = useCallback((e) => {
                 if (!isDrawingRef.current || !eraserMode || !eraserCanvasRef.current || !imageRef.current) {
@@ -3349,7 +3349,9 @@
                                                             backgroundColor: 'rgba(255,0,0,0.1)', // Light red tint to see canvas
                                                             border: '5px solid red', // BRIGHT RED BORDER
                                                             pointerEvents: 'auto',
-                                                            objectFit: 'contain'
+                                                            objectFit: 'contain',
+                                                            width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '0',
+                                                            height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '0'
                                                         }}
                                                         onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
                                                         onMouseMove={handleEraserDraw}
