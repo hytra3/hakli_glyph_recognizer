@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260113f';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Fixed Mutual Exclusion + All Toggles!)');
+        const APP_VERSION = 'v260113g';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (EMERGENCY: Fixed Infinity Canvas Bug!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -878,8 +878,10 @@
             
             // ========== PREPROCESSING ==========
             const applyPreprocessing = useCallback(async () => {
+                console.log('🎨 Applying preprocessing with settings:', preprocessing);
+                
                 if (!originalMatRef.current || !opencvReady) {
-                    console.warn('No image or OpenCV not ready');
+                    console.warn('❌ No image or OpenCV not ready - opencvReady:', opencvReady, 'originalMat:', !!originalMatRef.current);
                     return;
                 }
                 
@@ -1132,6 +1134,21 @@
                 }
                 
                 try {
+                    const canvas = eraserCanvasRef.current;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // CRITICAL: Verify canvas dimensions are valid before drawing
+                    if (!canvas.width || !canvas.height || canvas.width === 0 || canvas.height === 0 || 
+                        !isFinite(canvas.width) || !isFinite(canvas.height)) {
+                        console.error('❌ Canvas has invalid dimensions:', canvas.width, 'x', canvas.height);
+                        console.log('🔄 Re-initializing canvas...');
+                        const success = initEraserCanvas();
+                        if (!success) {
+                            console.error('❌ Re-initialization failed');
+                            return;
+                        }
+                    }
+                    
                     // Prevent scrolling on touch devices while drawing
                     if (e.type.startsWith('touch')) {
                         e.preventDefault();
@@ -1156,8 +1173,6 @@
                         }
                     }
                     
-                    const canvas = eraserCanvasRef.current;
-                    const ctx = canvas.getContext('2d');
                     const rect = canvas.getBoundingClientRect();
                     
                     // Get coordinates from either mouse or touch event
@@ -1188,7 +1203,7 @@
                 } catch (error) {
                     console.error('❌ Draw error:', error);
                 }
-            }, [eraserMode, eraserSize]);
+            }, [eraserMode, eraserSize, initEraserCanvas]);
             
             const handleEraserStart = useCallback((e) => {
                 if (!eraserMode || !eraserCanvasRef.current) {
@@ -3536,7 +3551,7 @@
                                             })()}
                                             
                                             {/* Eraser canvas for desktop Detection panel */}
-                                            {eraserMode && !cropMode && (() => {
+                                            {eraserMode && (() => {
                                                 const cursorRadius = eraserSize - 1;
                                                 const cursorSize = cursorRadius * 2 + 2;
                                                 return (
@@ -4190,7 +4205,7 @@
                                         <img src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" />
                                         
                                         {/* Eraser canvas for mobile - positioned over visible image */}
-                                        {eraserMode && !cropMode && (() => {
+                                        {eraserMode && (() => {
                                             const cursorRadius = eraserSize - 1;
                                             const cursorSize = cursorRadius * 2 + 2;
                                             return (
