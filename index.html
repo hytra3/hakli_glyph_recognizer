@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260114';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: Canvas in BOTH Panels!)');
+        const APP_VERSION = 'v260112j';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser: Single Canvas - Mobile Only)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -3331,35 +3331,6 @@
                                                     <div 
                                                         className="absolute border-2 border-dashed border-ochre bg-ochre/20 pointer-events-none"
                                                         style={{ left, top, width, height }}
-                                                    />
-                                                );
-                                            })()}
-                                            
-                                            {/* Eraser canvas (shown when eraser active) */}
-                                            {eraserMode && (() => {
-                                                // Cursor radius is slightly smaller to account for stroke width
-                                                const cursorRadius = eraserSize - 1;
-                                                const cursorSize = cursorRadius * 2 + 2;
-                                                return (
-                                                    <canvas ref={eraserCanvasRef}
-                                                        className="absolute inset-0"
-                                                        style={{ 
-                                                            cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
-                                                            touchAction: 'none',
-                                                            backgroundColor: 'rgba(255,0,0,0.1)', // Light red tint to see canvas
-                                                            border: '5px solid red', // BRIGHT RED BORDER
-                                                            pointerEvents: 'auto',
-                                                            objectFit: 'contain',
-                                                            width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '0',
-                                                            height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '0'
-                                                        }}
-                                                        onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
-                                                        onMouseMove={handleEraserDraw}
-                                                        onMouseUp={handleEraserEnd}
-                                                        onMouseLeave={handleEraserEnd}
-                                                        onTouchStart={(e) => { console.log('👆 Touch start'); handleEraserStart(e); }}
-                                                        onTouchMove={handleEraserDraw}
-                                                        onTouchEnd={(e) => { console.log('👆 Touch end'); handleEraserEnd(); }}
                                                     />
                                                 );
                                             })()}
