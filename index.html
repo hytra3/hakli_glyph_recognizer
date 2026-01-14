@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260113g';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (EMERGENCY: Fixed Infinity Canvas Bug!)');
+        const APP_VERSION = 'v260114';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Simple One-Shot Crop!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -403,12 +403,12 @@
                 constantOffset: 2,
                 gaussianBlur: 0,
                 morphologyOperation: 'none',
-                invertColors: false,
-                cropArea: null // { x, y, width, height }
+                invertColors: false
             });
             
+            // Crop mode state (one-shot operation)
             const [cropMode, setCropMode] = useState(false);
-            const [cropSelection, setCropSelection] = useState(null);
+            const [cropSelection, setCropSelection] = useState(null); // { startX, startY, currentX, currentY }
             
             const [opencvReady, setOpencvReady] = useState(false);
             const originalMatRef = useRef(null);
@@ -878,10 +878,8 @@
             
             // ========== PREPROCESSING ==========
             const applyPreprocessing = useCallback(async () => {
-                console.log('🎨 Applying preprocessing with settings:', preprocessing);
-                
                 if (!originalMatRef.current || !opencvReady) {
-                    console.warn('❌ No image or OpenCV not ready - opencvReady:', opencvReady, 'originalMat:', !!originalMatRef.current);
+                    console.warn('No image or OpenCV not ready');
                     return;
                 }
                 
@@ -923,22 +921,6 @@
                             result.delete();
                             rotMatrix.delete();
                             result = rotated;
-                        }
-                        
-                        // Crop
-                        if (preprocessing.cropArea) {
-                            const { x, y, width, height } = preprocessing.cropArea;
-                            const cropX = Math.max(0, Math.min(x, result.cols));
-                            const cropY = Math.max(0, Math.min(y, result.rows));
-                            const cropW = Math.min(width, result.cols - cropX);
-                            const cropH = Math.min(height, result.rows - cropY);
-                            
-                            if (cropW > 0 && cropH > 0) {
-                                const cropped = result.roi(new cv.Rect(cropX, cropY, cropW, cropH));
-                                const croppedClone = cropped.clone();
-                                result.delete();
-                                result = croppedClone;
-                            }
                         }
                         
                         // Grayscale
@@ -1018,12 +1000,10 @@
                     constantOffset: 2,
                     gaussianBlur: 0,
                     morphologyOperation: 'none',
-                    invertColors: false,
-                    cropArea: null
+                    invertColors: false
                 });
                 setCropMode(false);
                 setCropSelection(null);
-                setEraserMode(false);
                 if (originalImage) setDisplayImage(originalImage);
                 if (preprocessedMatRef.current) {
                     preprocessedMatRef.current.delete();
@@ -1134,21 +1114,6 @@
                 }
                 
                 try {
-                    const canvas = eraserCanvasRef.current;
-                    const ctx = canvas.getContext('2d');
-                    
-                    // CRITICAL: Verify canvas dimensions are valid before drawing
-                    if (!canvas.width || !canvas.height || canvas.width === 0 || canvas.height === 0 || 
-                        !isFinite(canvas.width) || !isFinite(canvas.height)) {
-                        console.error('❌ Canvas has invalid dimensions:', canvas.width, 'x', canvas.height);
-                        console.log('🔄 Re-initializing canvas...');
-                        const success = initEraserCanvas();
-                        if (!success) {
-                            console.error('❌ Re-initialization failed');
-                            return;
-                        }
-                    }
-                    
                     // Prevent scrolling on touch devices while drawing
                     if (e.type.startsWith('touch')) {
                         e.preventDefault();
@@ -1170,9 +1135,12 @@
                         }
                         
                         if (e.touches.length > 1) {
+                            console.log('👆 Multi-touch detected, using first');
                         }
                     }
                     
+                    const canvas = eraserCanvasRef.current;
+                    const ctx = canvas.getContext('2d');
                     const rect = canvas.getBoundingClientRect();
                     
                     // Get coordinates from either mouse or touch event
@@ -1203,7 +1171,7 @@
                 } catch (error) {
                     console.error('❌ Draw error:', error);
                 }
-            }, [eraserMode, eraserSize, initEraserCanvas]);
+            }, [eraserMode, eraserSize]);
             
             const handleEraserStart = useCallback((e) => {
                 if (!eraserMode || !eraserCanvasRef.current) {
@@ -1213,6 +1181,7 @@
                     if (debug) debug.textContent = `ERROR: Mode=${eraserMode} Canvas=${!!eraserCanvasRef.current}`;
                     return;
                 }
+                console.log('🖱️ Eraser started');
                 isDrawingRef.current = true;
                 
                 // Update debug display
@@ -1620,9 +1589,9 @@
                 setDrawingBox(null);
             }, [drawingBox, recognitionSourceDims]);
             
-            // Crop selection handlers
+            // Crop selection handlers (one-shot operation)
             const handleCropStart = useCallback((e) => {
-                if (!cropMode || !imageRef.current || !imageContainerRef.current) return;
+                if (!cropMode || !imageRef.current) return;
                 
                 const img = imageRef.current;
                 const imgRect = img.getBoundingClientRect();
@@ -1647,8 +1616,8 @@
                 setCropSelection(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
             }, [cropSelection, canvasZoom]);
             
-            const handleCropEnd = useCallback(() => {
-                if (!cropSelection || !imageRef.current) return;
+            const handleCropEnd = useCallback(async () => {
+                if (!cropSelection || !imageRef.current || !opencvReady) return;
                 
                 const img = imageRef.current;
                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
@@ -1657,49 +1626,59 @@
                 const scaleX = sourceWidth / img.clientWidth;
                 const scaleY = sourceHeight / img.clientHeight;
                 
-                const x = Math.min(cropSelection.startX, cropSelection.currentX) * scaleX;
-                const y = Math.min(cropSelection.startY, cropSelection.currentY) * scaleY;
-                const width = Math.abs(cropSelection.currentX - cropSelection.startX) * scaleX;
-                const height = Math.abs(cropSelection.currentY - cropSelection.startY) * scaleY;
+                const x = Math.round(Math.min(cropSelection.startX, cropSelection.currentX) * scaleX);
+                const y = Math.round(Math.min(cropSelection.startY, cropSelection.currentY) * scaleY);
+                const width = Math.round(Math.abs(cropSelection.currentX - cropSelection.startX) * scaleX);
+                const height = Math.round(Math.abs(cropSelection.currentY - cropSelection.startY) * scaleY);
                 
+                // Only crop if selection is reasonable size
                 if (width > 20 && height > 20) {
-                    setPreprocessing(prev => ({ ...prev, cropArea: { x, y, width, height } }));
-                    setCropMode(false);
+                    try {
+                        // Crop the original mat
+                        if (originalMatRef.current) {
+                            const cropX = Math.max(0, Math.min(x, originalMatRef.current.cols - 1));
+                            const cropY = Math.max(0, Math.min(y, originalMatRef.current.rows - 1));
+                            const cropW = Math.min(width, originalMatRef.current.cols - cropX);
+                            const cropH = Math.min(height, originalMatRef.current.rows - cropY);
+                            
+                            if (cropW > 0 && cropH > 0) {
+                                const croppedRegion = originalMatRef.current.roi(new cv.Rect(cropX, cropY, cropW, cropH));
+                                const croppedClone = croppedRegion.clone();
+                                
+                                // Delete old mat and replace with cropped version
+                                originalMatRef.current.delete();
+                                originalMatRef.current = croppedClone;
+                                
+                                // Also crop preprocessed if it exists
+                                if (preprocessedMatRef.current) {
+                                    preprocessedMatRef.current.delete();
+                                    preprocessedMatRef.current = null;
+                                }
+                                
+                                // Update display
+                                const dataUrl = matToDataUrl(croppedClone);
+                                setOriginalImage(dataUrl);
+                                setDisplayImage(dataUrl);
+                                
+                                // Update recognition source dims
+                                setRecognitionSourceDims({
+                                    width: croppedClone.cols,
+                                    height: croppedClone.rows
+                                });
+                                
+                                console.log(`✂️ Cropped to ${cropW}×${cropH}px`);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Crop error:', error);
+                        alert('Crop failed: ' + error.message);
+                    }
                 }
                 
+                // Auto-disable crop mode and clear selection
+                setCropMode(false);
                 setCropSelection(null);
-            }, [cropSelection, recognitionSourceDims, canvasZoom]);
-            
-            const clearCrop = useCallback(() => {
-                setPreprocessing(prev => ({ ...prev, cropArea: null }));
-                setCropSelection(null);
-            }, []);
-            
-            const toggleCropMode = useCallback(() => {
-                if (!cropMode) {
-                    // Enabling crop - disable other modes
-                    setEraserMode(false);
-                    setManualBoxMode(false);
-                    setCropMode(true);
-                } else {
-                    // Disabling crop
-                    setCropMode(false);
-                    setCropSelection(null);
-                }
-            }, [cropMode]);
-            
-            const toggleEraserMode = useCallback(() => {
-                if (!eraserMode) {
-                    // Enabling eraser - disable other modes
-                    setCropMode(false);
-                    setCropSelection(null);
-                    setManualBoxMode(false);
-                    setEraserMode(true);
-                } else {
-                    // Disabling eraser
-                    setEraserMode(false);
-                }
-            }, [eraserMode]);
+            }, [cropSelection, recognitionSourceDims, canvasZoom, opencvReady, matToDataUrl]);
             
             // Open glyph selector to change an existing detection's glyph
             const openChartSelector = useCallback((detectionIndex) => {
@@ -2234,9 +2213,6 @@
                     }
                     
                     alert(`✅ Recognition complete! Found ${finalDetections.length} glyphs`);
-                    
-                    // Auto-switch to Reading view to show transcription
-                    setViewMode('reading');
                     
                 } catch (error) {
                     console.error('Recognition error:', error);
@@ -2848,49 +2824,33 @@
                                                 </button>
                                             </div>
                                             
-                                            {/* Crop Tool */}
+                                            {/* Crop */}
                                             <div className="border-t border-gray-200 pt-3">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <span className="text-xs text-gray-600 font-semibold">✂️ Crop</span>
-                                                    <button onClick={toggleCropMode}
-                                                        className={`w-10 h-5 rounded-full transition-colors ${cropMode ? 'bg-ochre' : 'bg-gray-300'}`}>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-gray-600 font-semibold">✂️ Crop Image</span>
+                                                    <button onClick={() => setCropMode(!cropMode)}
+                                                        className={`w-10 h-5 rounded-full transition-colors ${cropMode ? 'bg-stone' : 'bg-gray-300'}`}>
                                                         <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${cropMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                     </button>
                                                 </div>
                                                 {cropMode && (
-                                                    <div className="space-y-2">
+                                                    <div className="space-y-2 mt-2">
                                                         <button onClick={() => setMobilePanel(null)}
                                                             className="w-full px-3 py-2 bg-stone text-white rounded font-medium text-sm">
                                                             ✂️ Hide Panel &amp; Select Area
                                                         </button>
                                                         <div className="text-xs text-gray-400">
-                                                            Click and drag on image to select crop area
+                                                            Click and drag on image to select crop area. Image will crop automatically when you release.
                                                         </div>
-                                                    </div>
-                                                )}
-                                                {preprocessing.cropArea && (
-                                                    <div className="flex items-center justify-between text-xs">
-                                                        <span className="text-gray-500">
-                                                            {Math.round(preprocessing.cropArea.width)}×{Math.round(preprocessing.cropArea.height)}px
-                                                        </span>
-                                                        <button onClick={clearCrop} 
-                                                            className="px-2 py-0.5 bg-rust text-white rounded hover:bg-[#a05045]">
-                                                            Clear
-                                                        </button>
                                                     </div>
                                                 )}
                                             </div>
                                             
                                             <div className="flex gap-2">
-                                                <button onClick={() => {
-                                                    setPreprocessing({
-                                                        rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false,
-                                                        blockSize: 11, constantOffset: 2, morphologyOperation: 'none', 
-                                                        invertColors: false, cropArea: null
-                                                    });
-                                                    setCropMode(false);
-                                                    setCropSelection(null);
-                                                }} className="flex-1 px-2 py-1.5 bg-gray-200 rounded text-sm">Reset</button>
+                                                <button onClick={() => setPreprocessing({
+                                                    rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false,
+                                                    blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invertColors: false
+                                                })} className="flex-1 px-2 py-1.5 bg-gray-200 rounded text-sm">Reset</button>
                                                 <button onClick={applyPreprocessing} className="flex-1 px-2 py-1.5 bg-patina text-white rounded text-sm">Apply</button>
                                             </div>
                                         </div>
@@ -2901,7 +2861,7 @@
                                         <div className="bg-gray-50 rounded-lg p-3 space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs text-gray-600 font-semibold">🧹 Eraser</span>
-                                                <button onClick={toggleEraserMode}
+                                                <button onClick={() => setEraserMode(!eraserMode)}
                                                     className={`w-10 h-5 rounded-full transition-colors ${eraserMode ? 'bg-ochre' : 'bg-gray-300'}`}>
                                                     <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${eraserMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                 </button>
@@ -3337,29 +3297,18 @@
                                                     </button>
                                                 </div>
                                                 
-                                                {/* Crop Tool */}
-                                                <div className="border-t border-gray-200 pt-2">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <span className="text-gray-700">✂️ Crop</span>
-                                                        <button onClick={toggleCropMode}
-                                                            className={`w-10 h-5 rounded-full ${cropMode ? 'bg-ochre' : 'bg-gray-300'}`}>
+                                                {/* Crop */}
+                                                <div className="pt-2 border-t border-gray-200">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-gray-700">✂️ Crop Image</span>
+                                                        <button onClick={() => setCropMode(!cropMode)}
+                                                            className={`w-10 h-5 rounded-full ${cropMode ? 'bg-stone' : 'bg-gray-300'}`}>
                                                             <div className={`w-4 h-4 bg-white rounded-full shadow transform ${cropMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                         </button>
                                                     </div>
                                                     {cropMode && (
-                                                        <div className="text-xs text-gray-500 mb-2">
-                                                            Click and drag on image to select crop area
-                                                        </div>
-                                                    )}
-                                                    {preprocessing.cropArea && (
-                                                        <div className="flex items-center justify-between text-xs">
-                                                            <span className="text-gray-500">
-                                                                {Math.round(preprocessing.cropArea.width)}×{Math.round(preprocessing.cropArea.height)}px
-                                                            </span>
-                                                            <button onClick={clearCrop} 
-                                                                className="px-2 py-0.5 bg-rust text-white rounded hover:bg-[#a05045]">
-                                                                Clear
-                                                            </button>
+                                                        <div className="text-xs text-gray-500 mt-2">
+                                                            Click and drag on image to select crop area. Image will crop automatically when you release.
                                                         </div>
                                                     )}
                                                 </div>
@@ -3380,7 +3329,7 @@
                                                 <div className="pt-2 border-t border-gray-200">
                                                     <div className="flex items-center justify-between mb-2">
                                                         <span className="text-gray-700">🧹 Eraser</span>
-                                                        <button onClick={toggleEraserMode}
+                                                        <button onClick={() => setEraserMode(!eraserMode)}
                                                             className={`w-10 h-5 rounded-full ${eraserMode ? 'bg-ochre' : 'bg-gray-300'}`}>
                                                             <div className={`w-4 h-4 bg-white rounded-full shadow transform ${eraserMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                         </button>
@@ -3433,12 +3382,6 @@
                             <div className={`${isLeftPanelHidden && isRightPanelHidden ? 'col-span-12' : isLeftPanelHidden || isRightPanelHidden ? 'col-span-9' : 'col-span-6'} overflow-hidden flex flex-col`}>
                                 <div className="bg-white rounded-lg shadow p-3 flex-1 flex flex-col min-h-0">
                                     {/* Eraser mode indicator */}
-                                    {cropMode && (
-                                        <div className="mb-2 px-2 py-1 bg-stone/20 border border-stone rounded text-xs text-center">
-                                            ✂️ Crop Mode Active - Click and drag to select crop area
-                                        </div>
-                                    )}
-                                    
                                     {eraserMode && (
                                         <div className="mb-2 px-2 py-1 bg-ochre/20 border border-ochre rounded text-xs text-center">
                                             🧹 Eraser Mode Active - Draw to erase, then click "Apply Eraser"
@@ -3448,7 +3391,7 @@
                                     {displayImage ? (
                                         <div ref={imageContainerRef} 
                                             className="relative flex-1 overflow-auto"
-                                            style={{ cursor: (cropMode || manualBoxMode) ? 'crosshair' : 'default' }}
+                                            style={{ cursor: (manualBoxMode || cropMode) ? 'crosshair' : 'default' }}
                                             onMouseDown={cropMode ? handleCropStart : (manualBoxMode ? handleManualBoxStart : undefined)}
                                             onMouseMove={cropMode ? handleCropMove : (manualBoxMode ? handleManualBoxMove : undefined)}
                                             onMouseUp={cropMode ? handleCropEnd : (manualBoxMode ? handleManualBoxEnd : undefined)}
@@ -3550,8 +3493,9 @@
                                                 );
                                             })()}
                                             
-                                            {/* Eraser canvas for desktop Detection panel */}
+                                            {/* Eraser canvas (shown when eraser active) */}
                                             {eraserMode && (() => {
+                                                // Cursor radius is slightly smaller to account for stroke width
                                                 const cursorRadius = eraserSize - 1;
                                                 const cursorSize = cursorRadius * 2 + 2;
                                                 return (
@@ -3560,20 +3504,20 @@
                                                         style={{ 
                                                             cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
                                                             touchAction: 'none',
-                                                            backgroundColor: 'rgba(255,0,0,0.1)',
-                                                            border: '5px solid red',
+                                                            backgroundColor: 'rgba(255,0,0,0.1)', // Light red tint to see canvas
+                                                            border: '5px solid red', // BRIGHT RED BORDER
                                                             pointerEvents: 'auto',
                                                             objectFit: 'contain',
                                                             width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '0',
                                                             height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '0'
                                                         }}
-                                                        onMouseDown={handleEraserStart}
+                                                        onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
                                                         onMouseMove={handleEraserDraw}
                                                         onMouseUp={handleEraserEnd}
                                                         onMouseLeave={handleEraserEnd}
-                                                        onTouchStart={handleEraserStart}
+                                                        onTouchStart={(e) => { console.log('👆 Touch start'); handleEraserStart(e); }}
                                                         onTouchMove={handleEraserDraw}
-                                                        onTouchEnd={handleEraserEnd}
+                                                        onTouchEnd={(e) => { console.log('👆 Touch end'); handleEraserEnd(); }}
                                                     />
                                                 );
                                             })()}
@@ -4194,7 +4138,7 @@
                                 {displayImage ? (
                                     <div ref={imageContainerRef} 
                                         className="relative flex-1 flex items-center justify-center overflow-hidden"
-                                        style={{ cursor: (cropMode || manualBoxMode) ? 'crosshair' : 'default' }}
+                                        style={{ cursor: (manualBoxMode || cropMode) ? 'crosshair' : 'default' }}
                                         onMouseDown={cropMode ? handleCropStart : (manualBoxMode ? handleManualBoxStart : undefined)}
                                         onMouseMove={cropMode ? handleCropMove : (manualBoxMode ? handleManualBoxMove : undefined)}
                                         onMouseUp={cropMode ? handleCropEnd : (manualBoxMode ? handleManualBoxEnd : undefined)}
@@ -4221,20 +4165,20 @@
                                                         width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '0',
                                                         height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '0'
                                                     }}
-                                                    onMouseDown={handleEraserStart}
+                                                    onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
                                                     onMouseMove={handleEraserDraw}
                                                     onMouseUp={handleEraserEnd}
                                                     onMouseLeave={handleEraserEnd}
-                                                    onTouchStart={handleEraserStart}
+                                                    onTouchStart={(e) => { console.log('👆 Touch start'); handleEraserStart(e); }}
                                                     onTouchMove={handleEraserDraw}
-                                                    onTouchEnd={handleEraserEnd}
+                                                    onTouchEnd={(e) => { console.log('👆 Touch end'); handleEraserEnd(); }}
                                                 />
                                             );
                                         })()}
                                         
                                         {/* Crop Selection Overlay - mobile */}
                                         {cropMode && cropSelection && (() => {
-                                            const img = document.querySelector('img[alt="Inscription"]');
+                                            const img = imageRef.current;
                                             if (!img) return null;
                                             
                                             const imgRect = img.getBoundingClientRect();
