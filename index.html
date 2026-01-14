@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260112f';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: CSS Dimensions - Clean Deploy)');
+        const APP_VERSION = 'v260112g';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser Fix: Remove Conflicting Tailwind Classes!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -3342,7 +3342,7 @@
                                                 const cursorSize = cursorRadius * 2 + 2;
                                                 return (
                                                     <canvas ref={eraserCanvasRef}
-                                                        className="absolute inset-0 w-full h-full"
+                                                        className="absolute inset-0"
                                                         style={{ 
                                                             cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
                                                             touchAction: 'none',
