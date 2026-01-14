@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260113e';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Fixed Crop: Toggle + Priority!)');
+        const APP_VERSION = 'v260113f';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Fixed Mutual Exclusion + All Toggles!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -1021,6 +1021,7 @@
                 });
                 setCropMode(false);
                 setCropSelection(null);
+                setEraserMode(false);
                 if (originalImage) setDisplayImage(originalImage);
                 if (preprocessedMatRef.current) {
                     preprocessedMatRef.current.delete();
@@ -1671,6 +1672,19 @@
                     setCropSelection(null);
                 }
             }, [cropMode]);
+            
+            const toggleEraserMode = useCallback(() => {
+                if (!eraserMode) {
+                    // Enabling eraser - disable other modes
+                    setCropMode(false);
+                    setCropSelection(null);
+                    setManualBoxMode(false);
+                    setEraserMode(true);
+                } else {
+                    // Disabling eraser
+                    setEraserMode(false);
+                }
+            }, [eraserMode]);
             
             // Open glyph selector to change an existing detection's glyph
             const openChartSelector = useCallback((detectionIndex) => {
@@ -2829,8 +2843,14 @@
                                                     </button>
                                                 </div>
                                                 {cropMode && (
-                                                    <div className="text-xs text-gray-500 mb-2">
-                                                        Click and drag on image to select crop area
+                                                    <div className="space-y-2">
+                                                        <button onClick={() => setMobilePanel(null)}
+                                                            className="w-full px-3 py-2 bg-stone text-white rounded font-medium text-sm">
+                                                            ✂️ Hide Panel &amp; Select Area
+                                                        </button>
+                                                        <div className="text-xs text-gray-400">
+                                                            Click and drag on image to select crop area
+                                                        </div>
                                                     </div>
                                                 )}
                                                 {preprocessing.cropArea && (
@@ -2865,10 +2885,10 @@
                                     {originalImage && (
                                         <div className="bg-gray-50 rounded-lg p-3 space-y-3">
                                             <div className="flex items-center justify-between">
-                                                <span className="text-xs text-gray-600 font-semibold">🧹 Eraser Tool</span>
-                                                <button onClick={() => setEraserMode(!eraserMode)}
-                                                    className={`px-3 py-1 rounded text-xs font-medium ${eraserMode ? 'bg-ochre text-white' : 'bg-gray-200 text-gray-600'}`}>
-                                                    {eraserMode ? 'Active' : 'Enable'}
+                                                <span className="text-xs text-gray-600 font-semibold">🧹 Eraser</span>
+                                                <button onClick={toggleEraserMode}
+                                                    className={`w-10 h-5 rounded-full transition-colors ${eraserMode ? 'bg-ochre' : 'bg-gray-300'}`}>
+                                                    <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${eraserMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                 </button>
                                             </div>
                                             {eraserMode && (
@@ -3344,10 +3364,10 @@
                                                 {/* Eraser Tool */}
                                                 <div className="pt-2 border-t border-gray-200">
                                                     <div className="flex items-center justify-between mb-2">
-                                                        <span className="text-gray-700">🧹 Eraser Tool</span>
-                                                        <button onClick={() => setEraserMode(!eraserMode)}
-                                                            className={`px-2 py-1 rounded text-xs ${eraserMode ? 'bg-ochre text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>
-                                                            {eraserMode ? 'Active' : 'Enable'}
+                                                        <span className="text-gray-700">🧹 Eraser</span>
+                                                        <button onClick={toggleEraserMode}
+                                                            className={`w-10 h-5 rounded-full ${eraserMode ? 'bg-ochre' : 'bg-gray-300'}`}>
+                                                            <div className={`w-4 h-4 bg-white rounded-full shadow transform ${eraserMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                         </button>
                                                     </div>
                                                     {eraserMode && (
@@ -3516,7 +3536,7 @@
                                             })()}
                                             
                                             {/* Eraser canvas for desktop Detection panel */}
-                                            {eraserMode && (() => {
+                                            {eraserMode && !cropMode && (() => {
                                                 const cursorRadius = eraserSize - 1;
                                                 const cursorSize = cursorRadius * 2 + 2;
                                                 return (
@@ -4170,7 +4190,7 @@
                                         <img src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" />
                                         
                                         {/* Eraser canvas for mobile - positioned over visible image */}
-                                        {eraserMode && (() => {
+                                        {eraserMode && !cropMode && (() => {
                                             const cursorRadius = eraserSize - 1;
                                             const cursorSize = cursorRadius * 2 + 2;
                                             return (
