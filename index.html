@@ -1617,7 +1617,20 @@
             }, [cropSelection, canvasZoom]);
             
             const handleCropEnd = useCallback(async () => {
-                if (!cropSelection || !imageRef.current || !opencvReady) return;
+                console.log('✂️ Crop end triggered');
+                
+                if (!cropSelection) {
+                    console.log('❌ No crop selection');
+                    return;
+                }
+                if (!imageRef.current) {
+                    console.log('❌ No image ref');
+                    return;
+                }
+                if (!opencvReady) {
+                    console.log('❌ OpenCV not ready');
+                    return;
+                }
                 
                 const img = imageRef.current;
                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
@@ -1631,54 +1644,73 @@
                 const width = Math.round(Math.abs(cropSelection.currentX - cropSelection.startX) * scaleX);
                 const height = Math.round(Math.abs(cropSelection.currentY - cropSelection.startY) * scaleY);
                 
+                console.log(`✂️ Crop selection: ${width}×${height}px at (${x},${y})`);
+                
                 // Only crop if selection is reasonable size
-                if (width > 20 && height > 20) {
-                    try {
-                        // Crop the original mat
-                        if (originalMatRef.current) {
-                            const cropX = Math.max(0, Math.min(x, originalMatRef.current.cols - 1));
-                            const cropY = Math.max(0, Math.min(y, originalMatRef.current.rows - 1));
-                            const cropW = Math.min(width, originalMatRef.current.cols - cropX);
-                            const cropH = Math.min(height, originalMatRef.current.rows - cropY);
-                            
-                            if (cropW > 0 && cropH > 0) {
-                                const croppedRegion = originalMatRef.current.roi(new cv.Rect(cropX, cropY, cropW, cropH));
-                                const croppedClone = croppedRegion.clone();
-                                
-                                // Delete old mat and replace with cropped version
-                                originalMatRef.current.delete();
-                                originalMatRef.current = croppedClone;
-                                
-                                // Also crop preprocessed if it exists
-                                if (preprocessedMatRef.current) {
-                                    preprocessedMatRef.current.delete();
-                                    preprocessedMatRef.current = null;
-                                }
-                                
-                                // Update display
-                                const dataUrl = matToDataUrl(croppedClone);
-                                setOriginalImage(dataUrl);
-                                setDisplayImage(dataUrl);
-                                
-                                // Update recognition source dims
-                                setRecognitionSourceDims({
-                                    width: croppedClone.cols,
-                                    height: croppedClone.rows
-                                });
-                                
-                                console.log(`✂️ Cropped to ${cropW}×${cropH}px`);
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Crop error:', error);
-                        alert('Crop failed: ' + error.message);
+                if (width <= 20 || height <= 20) {
+                    console.log('⚠️ Crop area too small (minimum 20×20px)');
+                    setCropMode(false);
+                    setCropSelection(null);
+                    return;
+                }
+                
+                try {
+                    // Crop the original mat
+                    if (!originalMatRef.current) {
+                        console.log('❌ No original mat');
+                        setCropMode(false);
+                        setCropSelection(null);
+                        return;
                     }
+                    
+                    const cropX = Math.max(0, Math.min(x, originalMatRef.current.cols - 1));
+                    const cropY = Math.max(0, Math.min(y, originalMatRef.current.rows - 1));
+                    const cropW = Math.min(width, originalMatRef.current.cols - cropX);
+                    const cropH = Math.min(height, originalMatRef.current.rows - cropY);
+                    
+                    console.log(`✂️ Adjusted crop: ${cropW}×${cropH}px at (${cropX},${cropY})`);
+                    
+                    if (cropW <= 0 || cropH <= 0) {
+                        console.log('❌ Invalid crop dimensions');
+                        setCropMode(false);
+                        setCropSelection(null);
+                        return;
+                    }
+                    
+                    const croppedRegion = originalMatRef.current.roi(new cv.Rect(cropX, cropY, cropW, cropH));
+                    const croppedClone = croppedRegion.clone();
+                    
+                    // Delete old mat and replace with cropped version
+                    originalMatRef.current.delete();
+                    originalMatRef.current = croppedClone;
+                    
+                    // Also crop preprocessed if it exists
+                    if (preprocessedMatRef.current) {
+                        preprocessedMatRef.current.delete();
+                        preprocessedMatRef.current = null;
+                    }
+                    
+                    // Update display
+                    const dataUrl = matToDataUrl(croppedClone);
+                    setOriginalImage(dataUrl);
+                    setDisplayImage(dataUrl);
+                    
+                    // Update recognition source dims
+                    setRecognitionSourceDims({
+                        width: croppedClone.cols,
+                        height: croppedClone.rows
+                    });
+                    
+                    console.log(`✅ Crop successful: ${cropW}×${cropH}px`);
+                } catch (error) {
+                    console.error('❌ Crop error:', error);
+                    alert('Crop failed: ' + error.message);
                 }
                 
                 // Auto-disable crop mode and clear selection
                 setCropMode(false);
                 setCropSelection(null);
-            }, [cropSelection, recognitionSourceDims, canvasZoom, opencvReady, matToDataUrl]);
+            }, [cropSelection, recognitionSourceDims, opencvReady, matToDataUrl]);
             
             // Open glyph selector to change an existing detection's glyph
             const openChartSelector = useCallback((detectionIndex) => {
@@ -2845,14 +2877,6 @@
                                                     </div>
                                                 )}
                                             </div>
-                                            
-                                            <div className="flex gap-2">
-                                                <button onClick={() => setPreprocessing({
-                                                    rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false,
-                                                    blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invertColors: false
-                                                })} className="flex-1 px-2 py-1.5 bg-gray-200 rounded text-sm">Reset</button>
-                                                <button onClick={applyPreprocessing} className="flex-1 px-2 py-1.5 bg-patina text-white rounded text-sm">Apply</button>
-                                            </div>
                                         </div>
                                     )}
                                     
@@ -2889,6 +2913,19 @@
                                                     <p className="text-xs text-gray-400">Draw on image to erase unwanted marks</p>
                                                 </div>
                                             )}
+                                        </div>
+                                    )}
+                                    
+                                    {/* Apply/Reset Buttons - Mobile */}
+                                    {originalImage && (
+                                        <div className="bg-gray-50 rounded-lg p-3">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setPreprocessing({
+                                                    rotation: 0, gaussianBlur: 0, useAdaptiveThreshold: false,
+                                                    blockSize: 11, constantOffset: 2, morphologyOperation: 'none', invertColors: false
+                                                })} className="flex-1 px-2 py-1.5 bg-gray-200 rounded text-sm">↩️ Reset</button>
+                                                <button onClick={applyPreprocessing} className="flex-1 px-2 py-1.5 bg-patina text-white rounded text-sm">✅ Apply</button>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -3313,18 +3350,6 @@
                                                     )}
                                                 </div>
                                                 
-                                                {/* Buttons */}
-                                                <div className="flex gap-2 pt-2">
-                                                    <button onClick={resetPreprocessing} 
-                                                        className="flex-1 px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-sm border border-gray-300">
-                                                        ↩️ Reset
-                                                    </button>
-                                                    <button onClick={applyPreprocessing} disabled={!opencvReady}
-                                                        className="flex-1 px-2 py-1.5 bg-patina hover:bg-[#5a7d6e] text-white rounded text-sm font-medium disabled:bg-gray-300">
-                                                        ✅ Apply
-                                                    </button>
-                                                </div>
-                                                
                                                 {/* Eraser Tool */}
                                                 <div className="pt-2 border-t border-gray-200">
                                                     <div className="flex items-center justify-between mb-2">
@@ -3352,6 +3377,18 @@
                                                             <p className="text-xs text-gray-400">Draw on image to erase unwanted marks</p>
                                                         </div>
                                                     )}
+                                                </div>
+                                                
+                                                {/* Buttons */}
+                                                <div className="flex gap-2 pt-2">
+                                                    <button onClick={resetPreprocessing} 
+                                                        className="flex-1 px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-sm border border-gray-300">
+                                                        ↩️ Reset
+                                                    </button>
+                                                    <button onClick={applyPreprocessing} disabled={!opencvReady}
+                                                        className="flex-1 px-2 py-1.5 bg-patina hover:bg-[#5a7d6e] text-white rounded text-sm font-medium disabled:bg-gray-300">
+                                                        ✅ Apply
+                                                    </button>
                                                 </div>
                                                 
                                                 {/* Confidence Filter */}
