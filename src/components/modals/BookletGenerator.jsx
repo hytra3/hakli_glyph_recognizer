@@ -1,10 +1,11 @@
 // ============================================
-// BOOKLET GENERATOR v260115c
+// BOOKLET GENERATOR v260115d
 // Generate PDF and HTML booklets from HKI inscriptions
 // For tribal elders and review discussions
 // HTML: Full Arabic support with proper rendering
 // PDF: Transliteration only (no Arabic - use HTML for Arabic)
 // Fixed: Image aspect ratio, chart layout (2-column)
+// Fixed: Transcription symbols (·|‖⏎) now match app display
 // ============================================
 
 const BookletGenerator = ({
@@ -609,50 +610,30 @@ const BookletGenerator = ({
         
         // Build from recognition results
         if (hki.recognitionResults && Array.isArray(hki.recognitionResults)) {
-            const arabicChars = hki.recognitionResults
-                .filter(r => r.validated !== false && !r.excluded)
-                .sort((a, b) => {
-                    // Sort by reading order if available, otherwise by position
-                    if (a.readingOrder !== undefined && b.readingOrder !== undefined) {
-                        return a.readingOrder - b.readingOrder;
-                    }
-                    // Default: right-to-left, top-to-bottom
-                    const rowA = Math.floor((a.bounds?.y || 0) / 30);
-                    const rowB = Math.floor((b.bounds?.y || 0) / 30);
-                    if (rowA !== rowB) return rowA - rowB;
-                    return (b.bounds?.x || 0) - (a.bounds?.x || 0);
-                })
-                .map(r => {
-                    // Extract arabic text, handling both direct properties and nested glyph object
-                    if (typeof r.arabic === 'string') return r.arabic;
-                    if (r.glyph?.arabic && typeof r.glyph.arabic === 'string') return r.glyph.arabic;
-                    if (r.glyph?.name && typeof r.glyph.name === 'string') return r.glyph.name;
-                    return '';
-                })
-                .filter(Boolean);
+            const wordBoundaries = new Set(hki.wordBoundaries || hki.readingData?.wordBoundaries || []);
+            const lineBreaks = new Set(hki.lineBreaks || hki.readingData?.lineBreaks || []);
+            const columnBreaks = new Set(hki.columnBreaks || hki.readingData?.columnBreaks || []);
+            const readingOrder = hki.readingOrder || hki.readingData?.order || 
+                hki.recognitionResults.map((_, i) => i);
             
-            if (arabicChars.length > 0) {
-                // Get word boundaries from HKI
-                const wordBoundaries = new Set(hki.wordBoundaries || hki.readingData?.wordBoundaries || []);
-                const readingOrder = hki.readingOrder || hki.readingData?.order || [];
+            let result = '';
+            readingOrder.forEach((idx, i) => {
+                const r = hki.recognitionResults[idx];
+                if (!r || r.excluded || r.validated === false) return;
                 
-                // Build text with word breaks
-                if (wordBoundaries.size > 0 && readingOrder.length > 0) {
-                    let result = '';
-                    readingOrder.forEach((idx, i) => {
-                        const r = hki.recognitionResults[idx];
-                        if (!r || r.excluded) return;
-                        const char = r.glyph?.arabic || r.arabic || r.glyph?.name || '';
-                        result += char;
-                        if (wordBoundaries.has(idx)) {
-                            result += ' ';
-                        }
-                    });
-                    return result.trim();
+                const char = r.glyph?.arabic || r.arabic || r.glyph?.name || '';
+                result += char;
+                
+                // Add appropriate separator (Arabic uses spaces, not symbols)
+                if (lineBreaks.has(idx)) {
+                    result += '\n';
+                } else if (columnBreaks.has(idx)) {
+                    result += '  ';  // double space for column
+                } else if (wordBoundaries.has(idx)) {
+                    result += ' ';
                 }
-                
-                return arabicChars.join('');
-            }
+            });
+            return result.trim();
         }
         
         return '';
@@ -668,21 +649,34 @@ const BookletGenerator = ({
         // Build from recognition results
         if (hki.recognitionResults && Array.isArray(hki.recognitionResults)) {
             const wordBoundaries = new Set(hki.wordBoundaries || hki.readingData?.wordBoundaries || []);
+            const lineBreaks = new Set(hki.lineBreaks || hki.readingData?.lineBreaks || []);
+            const columnBreaks = new Set(hki.columnBreaks || hki.readingData?.columnBreaks || []);
             const readingOrder = hki.readingOrder || hki.readingData?.order || 
                 hki.recognitionResults.map((_, i) => i);
             
             let result = '';
-            readingOrder.forEach((idx, i) => {
+            const validIndices = readingOrder.filter(idx => {
                 const r = hki.recognitionResults[idx];
-                if (!r || r.excluded || r.validated === false) return;
+                return r && !r.excluded && r.validated !== false;
+            });
+            
+            validIndices.forEach((idx, i) => {
+                const r = hki.recognitionResults[idx];
                 
                 // Get transliteration - prefer glyph.name for Latin script
-                const char = r.glyph?.name || r.transliteration || '';
+                const char = r.glyph?.name || r.glyph?.transliteration || r.transliteration || '';
                 if (char) {
                     result += char;
-                    // Add space after word boundaries
-                    if (wordBoundaries.has(idx)) {
-                        result += ' ';
+                    
+                    // Add appropriate separator
+                    if (lineBreaks.has(idx)) {
+                        result += ' ⏎\n';
+                    } else if (columnBreaks.has(idx)) {
+                        result += ' ‖ ';
+                    } else if (wordBoundaries.has(idx)) {
+                        result += ' | ';
+                    } else if (i < validIndices.length - 1) {
+                        result += '·';  // glyph separator
                     }
                 }
             });
