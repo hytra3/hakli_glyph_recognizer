@@ -1854,6 +1854,315 @@
                 URL.revokeObjectURL(url);
             }, [getReadingOrderedResults, wordBoundaries, lineBreaks, inscriptionTitle, translationEnglish, translationArabic]);
             
+            // ========== BOOKLET GENERATION ==========
+            const generateHtmlBooklet = useCallback(() => {
+                const results = getReadingOrderedResults();
+                let translitText = '';
+                let arabicText = '';
+                
+                results.forEach((r, idx) => {
+                    translitText += r.glyph.transliteration || r.glyph.name;
+                    arabicText += r.glyph.arabic || r.glyph.name;
+                    if (wordBoundaries.has(idx)) {
+                        translitText += ' ';
+                        arabicText += ' ';
+                    }
+                    if (lineBreaks.has(idx)) {
+                        translitText += '<br>';
+                        arabicText += '<br>';
+                    }
+                });
+                
+                const bookletHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hakli Inscription Booklet - ${inscriptionTitle || 'Untitled'}</title>
+    <style>
+        @page { size: A5 portrait; margin: 1.5cm; }
+        body { 
+            font-family: Georgia, serif;
+            line-height: 1.6;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        .cover {
+            text-align: center;
+            padding: 60px 20px;
+            border: 3px solid #4a3d5a;
+            margin-bottom: 40px;
+        }
+        .cover h1 {
+            font-size: 32px;
+            color: #4a3d5a;
+            margin-bottom: 20px;
+        }
+        .cover p {
+            font-size: 16px;
+            color: #666;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-left: 4px solid #b87333;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4a3d5a;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .inscription-image {
+            width: 100%;
+            max-width: 400px;
+            border: 2px solid #ddd;
+            margin: 20px auto;
+            display: block;
+        }
+        .transliteration {
+            font-size: 20px;
+            font-family: 'Courier New', monospace;
+            color: #2d5a3d;
+            line-height: 1.8;
+        }
+        .arabic {
+            font-size: 24px;
+            font-family: 'Traditional Arabic', 'Arabic Typesetting', 'Scheherazade', sans-serif;
+            direction: rtl;
+            text-align: right;
+            color: #b87333;
+            line-height: 2;
+        }
+        .translation {
+            font-size: 16px;
+            font-style: italic;
+            color: #555;
+            line-height: 1.8;
+        }
+        .metadata {
+            font-size: 14px;
+            color: #999;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #ddd;
+            font-size: 12px;
+            color: #999;
+        }
+        .print-button {
+            display: block;
+            margin: 20px auto;
+            padding: 15px 30px;
+            background: #4a3d5a;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .print-button:hover {
+            background: #3a2d4a;
+        }
+        @media print {
+            .no-print { display: none; }
+            body { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="cover">
+        <h1>📜 ${inscriptionTitle || 'Hakli Inscription'}</h1>
+        <p>${inscriptionNotes || ''}</p>
+        <p class="metadata">
+            ID: ${currentInscriptionId || 'Unknown'}<br>
+            Date: ${new Date().toLocaleDateString()}<br>
+            Total Glyphs: ${results.length}
+        </p>
+    </div>
+    
+    <button class="print-button no-print" onclick="window.print()">🖨️ Print Booklet</button>
+    
+    ${originalImage ? `
+    <div class="section">
+        <div class="section-title">Original Inscription</div>
+        <img src="${originalImage}" alt="Inscription" class="inscription-image">
+    </div>
+    ` : ''}
+    
+    <div class="section">
+        <div class="section-title">Transliteration</div>
+        <div class="transliteration">${translitText}</div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">نسخ عربي (Arabic Transcription)</div>
+        <div class="arabic">${arabicText}</div>
+    </div>
+    
+    ${translationEnglish ? `
+    <div class="section">
+        <div class="section-title">English Translation</div>
+        <div class="translation">${translationEnglish.replace(/\n/g, '<br>')}</div>
+    </div>
+    ` : ''}
+    
+    ${translationArabic ? `
+    <div class="section">
+        <div class="section-title">الترجمة العربية (Arabic Translation)</div>
+        <div class="translation arabic">${translationArabic.replace(/\n/g, '<br>')}</div>
+    </div>
+    ` : ''}
+    
+    <div class="footer">
+        <p>Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
+        <p>© hoopoe holdings · Hakli Glyph Recognizer</p>
+    </div>
+</body>
+</html>`;
+                
+                const bookletWindow = window.open('', '_blank');
+                bookletWindow.document.write(bookletHtml);
+                bookletWindow.document.close();
+                
+                console.log('📖 HTML Booklet generated');
+            }, [getReadingOrderedResults, wordBoundaries, lineBreaks, inscriptionTitle, inscriptionNotes, currentInscriptionId, originalImage, translationEnglish, translationArabic]);
+            
+            const generatePdfBooklet = useCallback(async () => {
+                if (typeof jspdf === 'undefined' || !jspdf.jsPDF) {
+                    alert('❌ jsPDF library not loaded');
+                    return;
+                }
+                
+                const { jsPDF } = jspdf;
+                const pdf = new jsPDF({ format: 'a5', unit: 'mm' });
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                const margin = 15;
+                const contentWidth = pageWidth - (margin * 2);
+                
+                const results = getReadingOrderedResults();
+                let translitText = '';
+                let arabicText = '';
+                
+                results.forEach((r, idx) => {
+                    translitText += r.glyph.transliteration || r.glyph.name;
+                    arabicText += r.glyph.arabic || r.glyph.name;
+                    if (wordBoundaries.has(idx)) {
+                        translitText += ' ';
+                        arabicText += ' ';
+                    }
+                    if (lineBreaks.has(idx)) {
+                        translitText += '\n';
+                        arabicText += '\n';
+                    }
+                });
+                
+                // Cover page
+                pdf.setFontSize(20);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(inscriptionTitle || 'Hakli Inscription', pageWidth / 2, 50, { align: 'center' });
+                
+                pdf.setFontSize(12);
+                pdf.setFont('helvetica', 'normal');
+                if (inscriptionNotes) {
+                    const notesLines = pdf.splitTextToSize(inscriptionNotes, contentWidth);
+                    pdf.text(notesLines, pageWidth / 2, 70, { align: 'center' });
+                }
+                
+                pdf.setFontSize(10);
+                pdf.text(`ID: ${currentInscriptionId || 'Unknown'}`, pageWidth / 2, 100, { align: 'center' });
+                pdf.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth / 2, 110, { align: 'center' });
+                pdf.text(`Total Glyphs: ${results.length}`, pageWidth / 2, 120, { align: 'center' });
+                
+                // New page for inscription image
+                if (originalImage) {
+                    pdf.addPage();
+                    pdf.setFontSize(14);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.text('Original Inscription', margin, 20);
+                    
+                    try {
+                        const imgWidth = contentWidth;
+                        const imgHeight = (imgWidth * 3) / 4; // Maintain aspect ratio
+                        pdf.addImage(originalImage, 'JPEG', margin, 30, imgWidth, imgHeight);
+                    } catch (err) {
+                        console.warn('Could not add image to PDF:', err);
+                    }
+                }
+                
+                // Transliteration page
+                pdf.addPage();
+                pdf.setFontSize(14);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('Transliteration', margin, 20);
+                
+                pdf.setFontSize(12);
+                pdf.setFont('courier', 'normal');
+                const translitLines = pdf.splitTextToSize(translitText, contentWidth);
+                pdf.text(translitLines, margin, 35);
+                
+                // Arabic page (will show gibberish but keeping as requested)
+                pdf.addPage();
+                pdf.setFontSize(14);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text('Arabic Transcription', margin, 20);
+                
+                pdf.setFontSize(12);
+                pdf.setFont('helvetica', 'normal');
+                const arabicLines = pdf.splitTextToSize(arabicText, contentWidth);
+                pdf.text(arabicLines, margin, 35);
+                
+                // Translations
+                if (translationEnglish) {
+                    pdf.addPage();
+                    pdf.setFontSize(14);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.text('English Translation', margin, 20);
+                    
+                    pdf.setFontSize(11);
+                    pdf.setFont('helvetica', 'normal');
+                    const englishLines = pdf.splitTextToSize(translationEnglish, contentWidth);
+                    pdf.text(englishLines, margin, 35);
+                }
+                
+                if (translationArabic) {
+                    pdf.addPage();
+                    pdf.setFontSize(14);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.text('Arabic Translation', margin, 20);
+                    
+                    pdf.setFontSize(11);
+                    pdf.setFont('helvetica', 'normal');
+                    const arabicTransLines = pdf.splitTextToSize(translationArabic, contentWidth);
+                    pdf.text(arabicTransLines, margin, 35);
+                }
+                
+                // Footer on last page
+                const lastPageNum = pdf.internal.pages.length - 1;
+                pdf.setPage(lastPageNum);
+                pdf.setFontSize(8);
+                pdf.setFont('helvetica', 'italic');
+                pdf.text('Based on Ahmad Al-Jallad (2025), The Decipherment of the Dhofari Script', pageWidth / 2, pageHeight - 20, { align: 'center' });
+                pdf.text('© hoopoe holdings · Hakli Glyph Recognizer', pageWidth / 2, pageHeight - 15, { align: 'center' });
+                
+                // Save
+                pdf.save(`${inscriptionTitle || 'booklet'}_${new Date().toISOString().slice(0,10)}.pdf`);
+                console.log('📖 PDF Booklet generated (Note: Arabic text may not render correctly in PDF)');
+            }, [getReadingOrderedResults, wordBoundaries, lineBreaks, inscriptionTitle, inscriptionNotes, currentInscriptionId, originalImage, translationEnglish, translationArabic]);
+            
             // ========== TEMPLATE TRAINING ==========
             const saveAsTemplate = useCallback((detectionIndex, templateType) => {
                 const detection = recognitionResults[detectionIndex];
@@ -2860,7 +3169,10 @@
                                             <div className="border-t border-gray-200 pt-3">
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-xs text-gray-600 font-semibold">✂️ Crop Image</span>
-                                                    <button onClick={() => setCropMode(!cropMode)}
+                                                    <button onClick={() => {
+                                                        setCropMode(!cropMode);
+                                                        if (!cropMode) setEraserMode(false); // Disable eraser when enabling crop
+                                                    }}
                                                         className={`w-10 h-5 rounded-full transition-colors ${cropMode ? 'bg-stone' : 'bg-gray-300'}`}>
                                                         <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${cropMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                     </button>
@@ -2885,7 +3197,10 @@
                                         <div className="bg-gray-50 rounded-lg p-3 space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs text-gray-600 font-semibold">🧹 Eraser</span>
-                                                <button onClick={() => setEraserMode(!eraserMode)}
+                                                <button onClick={() => {
+                                                    setEraserMode(!eraserMode);
+                                                    if (!eraserMode) setCropMode(false); // Disable crop when enabling eraser
+                                                }}
                                                     className={`w-10 h-5 rounded-full transition-colors ${eraserMode ? 'bg-ochre' : 'bg-gray-300'}`}>
                                                     <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${eraserMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                 </button>
@@ -3338,7 +3653,10 @@
                                                 <div className="pt-2 border-t border-gray-200">
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-gray-700">✂️ Crop Image</span>
-                                                        <button onClick={() => setCropMode(!cropMode)}
+                                                        <button onClick={() => {
+                                                            setCropMode(!cropMode);
+                                                            if (!cropMode) setEraserMode(false); // Disable eraser when enabling crop
+                                                        }}
                                                             className={`w-10 h-5 rounded-full ${cropMode ? 'bg-stone' : 'bg-gray-300'}`}>
                                                             <div className={`w-4 h-4 bg-white rounded-full shadow transform ${cropMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                         </button>
@@ -3354,7 +3672,10 @@
                                                 <div className="pt-2 border-t border-gray-200">
                                                     <div className="flex items-center justify-between mb-2">
                                                         <span className="text-gray-700">🧹 Eraser</span>
-                                                        <button onClick={() => setEraserMode(!eraserMode)}
+                                                        <button onClick={() => {
+                                                            setEraserMode(!eraserMode);
+                                                            if (!eraserMode) setCropMode(false); // Disable crop when enabling eraser
+                                                        }}
                                                             className={`w-10 h-5 rounded-full ${eraserMode ? 'bg-ochre' : 'bg-gray-300'}`}>
                                                             <div className={`w-4 h-4 bg-white rounded-full shadow transform ${eraserMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
                                                         </button>
@@ -4317,6 +4638,20 @@
                                                 >
                                                     💾 Export
                                                 </button>
+                                                <button 
+                                                    onClick={generateHtmlBooklet}
+                                                    className="px-2 py-1 bg-ancient-purple text-white text-xs rounded hover:bg-[#4a3d5a]"
+                                                    title="Generate print-friendly HTML booklet (perfect Arabic)"
+                                                >
+                                                    📖 HTML Booklet
+                                                </button>
+                                                <button 
+                                                    onClick={generatePdfBooklet}
+                                                    className="px-2 py-1 bg-ochre text-white text-xs rounded hover:bg-[#a67c52]"
+                                                    title="Generate PDF booklet (Arabic may show incorrectly)"
+                                                >
+                                                    📕 PDF Booklet
+                                                </button>
                                             </div>
                                         )}
                                         <svg 
@@ -5026,6 +5361,134 @@
                                         className={`px-4 py-2 rounded-lg hover:bg-[#4a3d5a] ${chartModified ? 'bg-ochre text-white' : 'bg-ancient-purple text-white'}`}
                                     >
                                         {chartModified ? '⚠️ Export Chart*' : '📥 Export Chart'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            // Generate print-friendly equivalence chart
+                                            const printWindow = window.open('', '_blank');
+                                            const glyphs = chartData?.glyphs || [];
+                                            
+                                            const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Hakli Glyph Equivalence Chart</title>
+    <style>
+        @page { size: A4; margin: 1cm; }
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 20px;
+        }
+        h1 { 
+            text-align: center; 
+            color: #4a3d5a; 
+            border-bottom: 3px solid #4a3d5a;
+            padding-bottom: 10px;
+        }
+        .meta { 
+            text-align: center; 
+            color: #666; 
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 20px;
+        }
+        th { 
+            background: #4a3d5a; 
+            color: white; 
+            padding: 12px; 
+            text-align: left;
+            font-weight: bold;
+        }
+        td { 
+            padding: 10px; 
+            border-bottom: 1px solid #ddd;
+        }
+        tr:hover { background: #f5f5f5; }
+        .glyph-img { 
+            max-width: 50px; 
+            max-height: 50px; 
+            vertical-align: middle;
+        }
+        .transliteration { 
+            font-size: 18px; 
+            font-weight: bold; 
+            color: #2d5a3d;
+        }
+        .arabic { 
+            font-size: 20px; 
+            font-family: 'Traditional Arabic', 'Arabic Typesetting', 'Scheherazade', sans-serif;
+            direction: rtl;
+            color: #b87333;
+        }
+        .footer { 
+            margin-top: 40px; 
+            text-align: center; 
+            color: #999; 
+            font-size: 12px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+        @media print {
+            button { display: none; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <h1>📜 Hakli Glyph Equivalence Chart</h1>
+    <div class="meta">
+        <p>Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
+        <p>Generated: ${new Date().toLocaleDateString()} · ${glyphs.length} glyphs</p>
+        <button class="no-print" onclick="window.print()" style="padding: 10px 20px; background: #4a3d5a; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">🖨️ Print</button>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 80px;">Glyph</th>
+                <th style="width: 150px;">Transliteration</th>
+                <th style="width: 150px;">Arabic</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${glyphs.map(glyph => {
+                const imgSrc = glyph.images?.primary || '';
+                const translit = glyph.transliteration || glyph.name || '';
+                const arabic = glyph.arabic || '';
+                const notes = glyph.notes || '';
+                
+                return `
+                    <tr>
+                        <td>${imgSrc ? `<img src="${imgSrc}" class="glyph-img" alt="${glyph.name}">` : '—'}</td>
+                        <td class="transliteration">${translit}</td>
+                        <td class="arabic">${arabic}</td>
+                        <td style="font-size: 14px; color: #666;">${notes}</td>
+                    </tr>
+                `;
+            }).join('')}
+        </tbody>
+    </table>
+    
+    <div class="footer">
+        <p>© hoopoe holdings · Hakli Glyph Recognizer · ${new Date().getFullYear()}</p>
+    </div>
+</body>
+</html>`;
+                                            
+                                            printWindow.document.write(html);
+                                            printWindow.document.close();
+                                        }}
+                                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                                    >
+                                        🖨️ Print Chart
                                     </button>
                                     {recognitionResults.length > 0 && (
                                         <button
