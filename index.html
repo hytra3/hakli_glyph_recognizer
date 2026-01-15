@@ -141,19 +141,19 @@
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
     
-    <!-- UI Components (loaded as Babel) - v260115b cache-bust -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260115d"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260115d"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260115d"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260115d"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260115d"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260115d"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260115d"></script>
+    <!-- UI Components (loaded as Babel) - v260115f cache-bust -->
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260115f"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260115f"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260115f"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260115f"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260115f"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260115f"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260115f"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260115d';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Symbols Fix!)');
+        const APP_VERSION = 'v260115f';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Column Break Lines!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -5394,30 +5394,36 @@
             margin-bottom: 30px;
             font-size: 14px;
         }
+        .chart-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
         table { 
             width: 100%; 
             border-collapse: collapse; 
-            margin-top: 20px;
         }
         th { 
             background: #4a3d5a; 
             color: white; 
-            padding: 12px; 
+            padding: 8px 6px; 
             text-align: left;
             font-weight: bold;
+            font-size: 12px;
         }
         td { 
-            padding: 10px; 
+            padding: 6px; 
             border-bottom: 1px solid #ddd;
+            vertical-align: middle;
         }
         tr:hover { background: #f5f5f5; }
         .glyph-img { 
-            max-width: 50px; 
-            max-height: 50px; 
+            max-width: 40px; 
+            max-height: 40px; 
             vertical-align: middle;
         }
         .transliteration { 
-            font-size: 18px; 
+            font-size: 16px; 
             font-weight: bold; 
             color: #2d5a3d;
         }
@@ -5425,7 +5431,9 @@
             font-size: 20px; 
             font-family: 'Traditional Arabic', 'Arabic Typesetting', 'Scheherazade', sans-serif;
             direction: rtl;
+            text-align: center;
             color: #b87333;
+            width: 50px;
         }
         .footer { 
             margin-top: 40px; 
@@ -5445,40 +5453,63 @@
     <h1>📜 Hakli Glyph Equivalence Chart</h1>
     <div class="meta">
         <p>Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
-        <p>Generated: ${new Date().toLocaleDateString()} · ${glyphs.length} glyphs</p>
+        <p>Generated: \${new Date().toLocaleDateString()} · \${glyphs.length} glyphs</p>
         <button class="no-print" onclick="window.print()" style="padding: 10px 20px; background: #4a3d5a; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">🖨️ Print</button>
     </div>
     
-    <table>
-        <thead>
-            <tr>
-                <th style="width: 80px;">Glyph</th>
-                <th style="width: 150px;">Transliteration</th>
-                <th style="width: 150px;">Arabic</th>
-                <th>Notes</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${glyphs.map(glyph => {
-                const imgSrc = glyph.images?.primary || '';
-                const translit = glyph.transliteration || glyph.name || '';
-                const arabic = glyph.arabic || '';
-                const notes = glyph.notes || '';
-                
-                return `
-                    <tr>
-                        <td>${imgSrc ? `<img src="${imgSrc}" class="glyph-img" alt="${glyph.name}">` : '—'}</td>
-                        <td class="transliteration">${translit}</td>
-                        <td class="arabic">${arabic}</td>
-                        <td style="font-size: 14px; color: #666;">${notes}</td>
-                    </tr>
-                `;
-            }).join('')}
-        </tbody>
-    </table>
+    <div class="chart-columns">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50px;">Glyph</th>
+                    <th>Trans.</th>
+                    <th style="width: 50px;">Arabic</th>
+                </tr>
+            </thead>
+            <tbody>
+                \${glyphs.slice(0, Math.ceil(glyphs.length / 2)).map(glyph => {
+                    const imgSrc = glyph.images?.primary || '';
+                    const translit = glyph.transliteration || glyph.name || '';
+                    const arabic = glyph.arabic || '';
+                    
+                    return \`
+                        <tr>
+                            <td>\${imgSrc ? \`<img src="\${imgSrc}" class="glyph-img" alt="\${glyph.name}">\` : '—'}</td>
+                            <td class="transliteration">\${translit}</td>
+                            <td class="arabic">\${arabic}</td>
+                        </tr>
+                    \`;
+                }).join('')}
+            </tbody>
+        </table>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50px;">Glyph</th>
+                    <th>Trans.</th>
+                    <th style="width: 50px;">Arabic</th>
+                </tr>
+            </thead>
+            <tbody>
+                \${glyphs.slice(Math.ceil(glyphs.length / 2)).map(glyph => {
+                    const imgSrc = glyph.images?.primary || '';
+                    const translit = glyph.transliteration || glyph.name || '';
+                    const arabic = glyph.arabic || '';
+                    
+                    return \`
+                        <tr>
+                            <td>\${imgSrc ? \`<img src="\${imgSrc}" class="glyph-img" alt="\${glyph.name}">\` : '—'}</td>
+                            <td class="transliteration">\${translit}</td>
+                            <td class="arabic">\${arabic}</td>
+                        </tr>
+                    \`;
+                }).join('')}
+            </tbody>
+        </table>
+    </div>
     
     <div class="footer">
-        <p>© hoopoe holdings · Hakli Glyph Recognizer · ${new Date().getFullYear()}</p>
+        <p>© hoopoe holdings · Hakli Glyph Recognizer · \${new Date().getFullYear()}</p>
     </div>
 </body>
 </html>`;

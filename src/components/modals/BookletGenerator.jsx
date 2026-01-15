@@ -1,11 +1,10 @@
 // ============================================
-// BOOKLET GENERATOR v260115d
+// BOOKLET GENERATOR v260115f
 // Generate PDF and HTML booklets from HKI inscriptions
 // For tribal elders and review discussions
 // HTML: Full Arabic support with proper rendering
 // PDF: Transliteration only (no Arabic - use HTML for Arabic)
-// Fixed: Image aspect ratio, chart layout (2-column)
-// Fixed: Transcription symbols (·|‖⏎) now match app display
+// Fixed: Column breaks now create line breaks in transcription
 // ============================================
 
 const BookletGenerator = ({
@@ -282,9 +281,26 @@ const BookletGenerator = ({
                 // Get transliteration and Arabic
                 const { translit, arabic } = getTranscriptionParts(hki);
                 
-                // Prepare image (with boxes if requested)
-                let imageSrc = hki.originalImage || '';
-                if (options.showDetectionBoxes && hki.recognitionResults?.length > 0) {
+                // Prepare image - check all possible locations where image data might be stored
+                let imageSrc = hki.displayImage || 
+                               hki.originalImage ||
+                               hki.image ||
+                               hki.images?.preprocessed || 
+                               hki.images?.original ||
+                               item.thumbnail ||
+                               '';
+                
+                console.log(`Booklet image for "${item.title}":`, imageSrc ? `found (${imageSrc.substring(0, 50)}...)` : 'NOT FOUND', {
+                    hasDisplayImage: !!hki.displayImage,
+                    hasOriginalImage: !!hki.originalImage,
+                    hasImage: !!hki.image,
+                    hasImagesPreprocessed: !!hki.images?.preprocessed,
+                    hasImagesOriginal: !!hki.images?.original,
+                    hasThumbnail: !!item.thumbnail
+                });
+                
+                // Apply detection boxes if requested
+                if (options.showDetectionBoxes && imageSrc && hki.recognitionResults?.length > 0) {
                     imageSrc = await drawDetectionBoxes(imageSrc, hki.recognitionResults);
                 }
                 
@@ -295,17 +311,17 @@ const BookletGenerator = ({
                             <h2 class="inscription-title">${item.title || 'Untitled'}</h2>
                         </div>
                         
-                        ${imageSrc ? `<img src="${imageSrc}" alt="Inscription ${i + 1}" class="inscription-image" />` : ''}
+                        ${imageSrc ? `<img src="${imageSrc}" alt="Inscription ${i + 1}" class="inscription-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" /><div class="no-image" style="display:none;">Image failed to load</div>` : '<div class="no-image">No image available</div>'}
                         
                         <div class="transcription-section">
                             <div class="translit-box">
                                 <div class="label">Transliteration:</div>
-                                <div class="translit-text">${translit || '—'}</div>
+                                <div class="translit-text">${(translit || '—').replace(/\n/g, '<br>')}</div>
                             </div>
                             
                             <div class="arabic-box">
                                 <div class="label">Arabic:</div>
-                                <div class="arabic-text">${arabic || '—'}</div>
+                                <div class="arabic-text">${(arabic || '—').replace(/\n/g, '<br>')}</div>
                             </div>
                         </div>
                         
@@ -397,7 +413,8 @@ const BookletGenerator = ({
         .inscription-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; border-bottom: 2px solid #5d4e6d; padding-bottom: 10px; }
         .seq-number { background: #8b7d6b; color: white; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; }
         .inscription-title { font-size: 24px; font-weight: bold; color: #5d4e6d; margin: 0; }
-        .inscription-image { width: 100%; max-height: 400px; object-fit: contain; margin: 20px 0; border: 1px solid #ddd; border-radius: 4px; }
+        .inscription-image { width: 100%; max-height: 400px; object-fit: contain; margin: 20px 0; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
+        .no-image { padding: 40px; text-align: center; color: #999; background: #f5f5f5; border: 2px dashed #ddd; border-radius: 4px; margin: 20px 0; }
         .transcription-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
         .translit-box, .arabic-box { background: #f9f9f9; padding: 15px; border-radius: 6px; border-left: 4px solid #6b8e7f; }
         .label { font-size: 12px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 8px; }
@@ -624,11 +641,11 @@ const BookletGenerator = ({
                 const char = r.glyph?.arabic || r.arabic || r.glyph?.name || '';
                 result += char;
                 
-                // Add appropriate separator (Arabic uses spaces, not symbols)
+                // Add appropriate separator (Arabic uses spaces for words, newlines for columns/lines)
                 if (lineBreaks.has(idx)) {
                     result += '\n';
                 } else if (columnBreaks.has(idx)) {
-                    result += '  ';  // double space for column
+                    result += '\n';  // column break = new line
                 } else if (wordBoundaries.has(idx)) {
                     result += ' ';
                 }
@@ -670,9 +687,9 @@ const BookletGenerator = ({
                     
                     // Add appropriate separator
                     if (lineBreaks.has(idx)) {
-                        result += ' ⏎\n';
+                        result += '\n';  // line break = new line
                     } else if (columnBreaks.has(idx)) {
-                        result += ' ‖ ';
+                        result += '\n';  // column break = new line (keeps text from spanning page)
                     } else if (wordBoundaries.has(idx)) {
                         result += ' | ';
                     } else if (i < validIndices.length - 1) {
