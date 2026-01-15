@@ -141,19 +141,19 @@
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
     
-    <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx"></script>
+    <!-- UI Components (loaded as Babel) - v260115a cache-bust -->
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260115a"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260115a"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260115a"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260115a"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260115a"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260115a"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260115a"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260114c';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Simple One-Shot Crop!)');
+        const APP_VERSION = 'v260115a';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Aspect Ratio Fix!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;

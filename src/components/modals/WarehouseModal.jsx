@@ -1,5 +1,5 @@
 // ============================================
-// WAREHOUSE MODAL v260114
+// WAREHOUSE MODAL v260115a
 // Browse and load HKI files from Google Drive
 // Public view (published) + authenticated view (drafts, shared)
 // Fixed: thumbnail blinking due to dependency cycle

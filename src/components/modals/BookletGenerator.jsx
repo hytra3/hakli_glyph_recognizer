@@ -1,8 +1,9 @@
 // ============================================
-// BOOKLET GENERATOR v260114
+// BOOKLET GENERATOR v260115a
 // Generate PDF and HTML booklets from HKI inscriptions
 // For tribal elders and review discussions
 // Added: HTML booklet option with perfect Arabic rendering
+// Fixed: Image aspect ratio preservation in PDF
 // ============================================
 
 const BookletGenerator = ({
@@ -468,8 +469,35 @@ const BookletGenerator = ({
         
         if (baseImageSrc) {
             try {
-                const imgHeight = Math.min(height * 0.5, 80);
-                const imgWidth = width - 10;
+                // Load image to get actual dimensions for proper aspect ratio
+                const imgDimensions = await new Promise((resolve, reject) => {
+                    const tempImg = new Image();
+                    tempImg.crossOrigin = 'anonymous';
+                    tempImg.onload = () => resolve({ width: tempImg.naturalWidth, height: tempImg.naturalHeight });
+                    tempImg.onerror = () => resolve({ width: 4, height: 3 }); // Default fallback ratio
+                    tempImg.src = baseImageSrc;
+                });
+                
+                // Calculate dimensions that preserve aspect ratio
+                const maxImgHeight = Math.min(height * 0.5, 80);
+                const maxImgWidth = width - 10;
+                const imgAspectRatio = imgDimensions.width / imgDimensions.height;
+                
+                let imgWidth, imgHeight;
+                
+                // Fit within bounds while preserving aspect ratio
+                if (maxImgWidth / maxImgHeight > imgAspectRatio) {
+                    // Height-constrained
+                    imgHeight = maxImgHeight;
+                    imgWidth = imgHeight * imgAspectRatio;
+                } else {
+                    // Width-constrained
+                    imgWidth = maxImgWidth;
+                    imgHeight = imgWidth / imgAspectRatio;
+                }
+                
+                // Center the image horizontally within the available space
+                const imgX = x + 5 + (maxImgWidth - imgWidth) / 2;
                 
                 // If showBoxes and we have recognition results, draw boxes on the image
                 let finalImageSrc = baseImageSrc;
@@ -485,8 +513,8 @@ const BookletGenerator = ({
                     console.log(`Boxes drawn, new image length: ${finalImageSrc?.length || 0}`);
                 }
                 
-                // Add image (centered)
-                doc.addImage(finalImageSrc, 'JPEG', x + 5, currentY, imgWidth, imgHeight, undefined, 'MEDIUM');
+                // Add image (centered, with proper aspect ratio)
+                doc.addImage(finalImageSrc, 'JPEG', imgX, currentY, imgWidth, imgHeight, undefined, 'MEDIUM');
                 currentY += imgHeight + 5;
             } catch (imgErr) {
                 console.warn('Failed to add image:', imgErr);
