@@ -1,5 +1,5 @@
 // ============================================
-// BOOKLET GENERATOR v260115g
+// BOOKLET GENERATOR v260115h
 // Generate PDF and HTML booklets from HKI inscriptions
 // HTML: Full Arabic support with proper rendering
 // PDF: Transliteration only, column breaks create line breaks
