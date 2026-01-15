@@ -1,9 +1,10 @@
 // ============================================
-// BOOKLET GENERATOR v260115a
+// BOOKLET GENERATOR v260115c
 // Generate PDF and HTML booklets from HKI inscriptions
 // For tribal elders and review discussions
-// Added: HTML booklet option with perfect Arabic rendering
-// Fixed: Image aspect ratio preservation in PDF
+// HTML: Full Arabic support with proper rendering
+// PDF: Transliteration only (no Arabic - use HTML for Arabic)
+// Fixed: Image aspect ratio, chart layout (2-column)
 // ============================================
 
 const BookletGenerator = ({
@@ -322,7 +323,13 @@ const BookletGenerator = ({
             if (equivalenceChart && equivalenceChart.glyphs) {
                 setProgress('Adding glyph reference chart...');
                 
-                const glyphRows = equivalenceChart.glyphs.map(glyph => {
+                // Split glyphs into 2 columns
+                const glyphs = equivalenceChart.glyphs;
+                const midpoint = Math.ceil(glyphs.length / 2);
+                const leftColumn = glyphs.slice(0, midpoint);
+                const rightColumn = glyphs.slice(midpoint);
+                
+                const renderGlyphRow = (glyph) => {
                     const imgSrc = glyph.images?.primary || '';
                     const translit = glyph.transliteration || glyph.name || '';
                     const arabic = glyph.arabic || '';
@@ -334,24 +341,38 @@ const BookletGenerator = ({
                             <td class="arabic-cell">${arabic}</td>
                         </tr>
                     `;
-                }).join('');
+                };
                 
                 glyphChartHtml = `
                     <div class="chart-page">
                         <h2 class="chart-title">Glyph Reference Chart</h2>
                         <p class="chart-subtitle">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
-                        <table class="glyph-table">
-                            <thead>
-                                <tr>
-                                    <th>Glyph</th>
-                                    <th>Transliteration</th>
-                                    <th>Arabic</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${glyphRows}
-                            </tbody>
-                        </table>
+                        <div class="chart-columns">
+                            <table class="glyph-table">
+                                <thead>
+                                    <tr>
+                                        <th>Glyph</th>
+                                        <th>Trans.</th>
+                                        <th>Arabic</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${leftColumn.map(renderGlyphRow).join('')}
+                                </tbody>
+                            </table>
+                            <table class="glyph-table">
+                                <thead>
+                                    <tr>
+                                        <th>Glyph</th>
+                                        <th>Trans.</th>
+                                        <th>Arabic</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${rightColumn.map(renderGlyphRow).join('')}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 `;
             }
@@ -386,14 +407,15 @@ const BookletGenerator = ({
         .chart-page { page-break-before: always; background: white; padding: 30px; margin-bottom: 20px; border-radius: 8px; }
         .chart-title { font-size: 28px; font-weight: bold; color: #5d4e6d; text-align: center; margin-bottom: 10px; }
         .chart-subtitle { text-align: center; color: #666; margin-bottom: 30px; }
+        .chart-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
         .glyph-table { width: 100%; border-collapse: collapse; }
-        .glyph-table th { background: #5d4e6d; color: white; padding: 12px; text-align: left; font-weight: bold; }
-        .glyph-table td { padding: 10px; border-bottom: 1px solid #ddd; }
+        .glyph-table th { background: #5d4e6d; color: white; padding: 8px 6px; text-align: left; font-weight: bold; font-size: 12px; }
+        .glyph-table td { padding: 6px; border-bottom: 1px solid #ddd; vertical-align: middle; }
         .glyph-table tr:hover { background: #f5f5f5; }
-        .glyph-cell { width: 80px; text-align: center; }
-        .glyph-img { max-width: 50px; max-height: 50px; }
-        .translit-cell { font-weight: bold; color: #2d5a3d; font-size: 18px; }
-        .arabic-cell { font-size: 20px; font-family: 'Traditional Arabic', 'Arabic Typesetting', 'Scheherazade', 'Amiri', sans-serif; direction: rtl; text-align: right; color: #b87333; }
+        .glyph-cell { width: 50px; text-align: center; }
+        .glyph-img { max-width: 40px; max-height: 40px; }
+        .translit-cell { font-weight: bold; color: #2d5a3d; font-size: 16px; padding-left: 8px; }
+        .arabic-cell { font-size: 22px; font-family: 'Traditional Arabic', 'Arabic Typesetting', 'Scheherazade', 'Amiri', sans-serif; direction: rtl; text-align: center; color: #b87333; width: 50px; }
         .footer { text-align: center; color: #999; font-size: 12px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; }
         @media print { body { background: white; } .print-button { display: none; } }
     </style>
@@ -527,36 +549,27 @@ const BookletGenerator = ({
             currentY += 10;
         }
         
-        // Arabic transcription (RTL)
-        const transcription = extractArabicTranscription(hki);
-        if (transcription) {
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(14);
-            doc.setTextColor(60, 60, 60);
-            
-            // RTL text - align right
-            const lines = doc.splitTextToSize(transcription, width - 10);
-            lines.forEach(line => {
-                // Right-align for RTL
-                doc.text(line, x + width - 5, currentY, { align: 'right' });
-                currentY += 7;
-            });
-            currentY += 3;
-        }
-        
-        // Transliteration (LTR)
+        // Transliteration only in PDF (Arabic renders as gibberish - use HTML for Arabic)
         const transliteration = extractTransliteration(hki);
         if (transliteration) {
+            // Label
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(139, 125, 107);
+            doc.text('Transliteration:', x + 5, currentY);
+            currentY += 5;
+            
+            // Content
             doc.setFont('courier', 'normal');
-            doc.setFontSize(11);
-            doc.setTextColor(93, 78, 109);  // ancient-purple
+            doc.setFontSize(12);
+            doc.setTextColor(45, 90, 61);  // dark green
             
             const lines = doc.splitTextToSize(transliteration, width - 10);
             lines.forEach(line => {
                 doc.text(line, x + 5, currentY);
-                currentY += 5;
+                currentY += 6;
             });
-            currentY += 3;
+            currentY += 5;
         }
         
         // Notes
@@ -677,6 +690,14 @@ const BookletGenerator = ({
         }
         
         return '';
+    };
+    
+    // Get both transcription parts for HTML booklet
+    const getTranscriptionParts = (hki) => {
+        return {
+            translit: extractTransliteration(hki),
+            arabic: extractArabicTranscription(hki)
+        };
     };
     
     // Render glyph reference chart
@@ -862,7 +883,7 @@ const BookletGenerator = ({
                         onClick={generateHtmlBooklet}
                         disabled={generating || !selectedItems?.length}
                         className="px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5a7d6e] disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
-                        title="Opens in new tab - Perfect Arabic rendering"
+                        title="Arabic + Transliteration - Opens in new tab"
                     >
                         {generating ? (
                             <>
@@ -871,7 +892,7 @@ const BookletGenerator = ({
                             </>
                         ) : (
                             <>
-                                🌐 HTML Booklet
+                                🌐 HTML (Arabic)
                             </>
                         )}
                     </button>
@@ -879,7 +900,7 @@ const BookletGenerator = ({
                         onClick={generateBooklet}
                         disabled={generating || !selectedItems?.length}
                         className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
-                        title="Downloads PDF - Arabic may show as gibberish"
+                        title="Transliteration only - Downloads PDF"
                     >
                         {generating ? (
                             <>
@@ -888,7 +909,7 @@ const BookletGenerator = ({
                             </>
                         ) : (
                             <>
-                                📄 PDF Booklet
+                                📄 PDF (English)
                             </>
                         )}
                     </button>
