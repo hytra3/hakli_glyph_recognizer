@@ -1,10 +1,8 @@
 // ============================================
-// BOOKLET GENERATOR v260115f
+// BOOKLET GENERATOR v260115g
 // Generate PDF and HTML booklets from HKI inscriptions
-// For tribal elders and review discussions
 // HTML: Full Arabic support with proper rendering
-// PDF: Transliteration only (no Arabic - use HTML for Arabic)
-// Fixed: Column breaks now create line breaks in transcription
+// PDF: Transliteration only, column breaks create line breaks
 // ============================================
 
 const BookletGenerator = ({
@@ -577,15 +575,21 @@ const BookletGenerator = ({
             doc.text('Transliteration:', x + 5, currentY);
             currentY += 5;
             
-            // Content
+            // Content - split by newlines first, then wrap each segment
             doc.setFont('courier', 'normal');
             doc.setFontSize(12);
             doc.setTextColor(45, 90, 61);  // dark green
             
-            const lines = doc.splitTextToSize(transliteration, width - 10);
-            lines.forEach(line => {
-                doc.text(line, x + 5, currentY);
-                currentY += 6;
+            // Split by newlines (from column/line breaks), then wrap each
+            const segments = transliteration.split('\n');
+            segments.forEach(segment => {
+                if (segment.trim()) {
+                    const lines = doc.splitTextToSize(segment, width - 10);
+                    lines.forEach(line => {
+                        doc.text(line, x + 5, currentY);
+                        currentY += 6;
+                    });
+                }
             });
             currentY += 5;
         }
