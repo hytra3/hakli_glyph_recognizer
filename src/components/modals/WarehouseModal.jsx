@@ -1,9 +1,10 @@
 // ============================================
-// WAREHOUSE MODAL v251231i
+// WAREHOUSE MODAL v260114
 // Browse and load HKI files from Google Drive
 // Public view (published) + authenticated view (drafts, shared)
 // Fixed: thumbnail blinking due to dependency cycle
 // Added: Delete functionality for owned inscriptions
+// Updated: "Generate PDF" → "Generate Booklet" (supports HTML + PDF)
 // ============================================
 
 const WarehouseModal = ({
@@ -611,7 +612,7 @@ const WarehouseModal = ({
                                 disabled={Object.keys(bookletSelection).length === 0}
                                 className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] disabled:bg-gray-300 disabled:cursor-not-allowed"
                             >
-                                📄 Generate PDF ({Object.keys(bookletSelection).length})
+                                📚 Generate Booklet ({Object.keys(bookletSelection).length})
                             </button>
                         ) : (
                             <>
