@@ -1,8 +1,8 @@
 // ============================================
-// BOOKLET GENERATOR v260101
-// Generate PDF booklets from HKI inscriptions
+// BOOKLET GENERATOR v260114
+// Generate PDF and HTML booklets from HKI inscriptions
 // For tribal elders and review discussions
-// Added: word boundaries, transliteration support
+// Added: HTML booklet option with perfect Arabic rendering
 // ============================================
 
 const BookletGenerator = ({
@@ -250,6 +250,185 @@ const BookletGenerator = ({
         } catch (err) {
             console.error('Booklet generation failed:', err);
             alert('❌ Failed to generate booklet: ' + err.message);
+            setGenerating(false);
+            setProgress('');
+        }
+    };
+    
+    // Generate HTML booklet (for better Arabic rendering)
+    const generateHtmlBooklet = async () => {
+        try {
+            setGenerating(true);
+            setProgress('Generating HTML booklet...');
+            
+            if (!selectedItems || selectedItems.length === 0) {
+                throw new Error('No items selected');
+            }
+            
+            // Build HTML content
+            let inscriptionsHtml = '';
+            
+            for (let i = 0; i < selectedItems.length; i++) {
+                const item = selectedItems[i];
+                const hki = item.hkiData;
+                
+                if (!hki) continue;
+                
+                setProgress(`Processing inscription ${i + 1} of ${selectedItems.length}...`);
+                
+                // Get transliteration and Arabic
+                const { translit, arabic } = getTranscriptionParts(hki);
+                
+                // Prepare image (with boxes if requested)
+                let imageSrc = hki.originalImage || '';
+                if (options.showDetectionBoxes && hki.recognitionResults?.length > 0) {
+                    imageSrc = await drawDetectionBoxes(imageSrc, hki.recognitionResults);
+                }
+                
+                inscriptionsHtml += `
+                    <div class="inscription-page">
+                        <div class="inscription-header">
+                            <span class="seq-number">${i + 1}</span>
+                            <h2 class="inscription-title">${item.title || 'Untitled'}</h2>
+                        </div>
+                        
+                        ${imageSrc ? `<img src="${imageSrc}" alt="Inscription ${i + 1}" class="inscription-image" />` : ''}
+                        
+                        <div class="transcription-section">
+                            <div class="translit-box">
+                                <div class="label">Transliteration:</div>
+                                <div class="translit-text">${translit || '—'}</div>
+                            </div>
+                            
+                            <div class="arabic-box">
+                                <div class="label">Arabic:</div>
+                                <div class="arabic-text">${arabic || '—'}</div>
+                            </div>
+                        </div>
+                        
+                        ${hki.notes ? `
+                            <div class="notes-section">
+                                <div class="label">Notes:</div>
+                                <div class="notes-text">${hki.notes}</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
+            // Build glyph chart if provided
+            let glyphChartHtml = '';
+            if (equivalenceChart && equivalenceChart.glyphs) {
+                setProgress('Adding glyph reference chart...');
+                
+                const glyphRows = equivalenceChart.glyphs.map(glyph => {
+                    const imgSrc = glyph.images?.primary || '';
+                    const translit = glyph.transliteration || glyph.name || '';
+                    const arabic = glyph.arabic || '';
+                    
+                    return `
+                        <tr>
+                            <td class="glyph-cell">${imgSrc ? `<img src="${imgSrc}" class="glyph-img" alt="${glyph.name}">` : '—'}</td>
+                            <td class="translit-cell">${translit}</td>
+                            <td class="arabic-cell">${arabic}</td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                glyphChartHtml = `
+                    <div class="chart-page">
+                        <h2 class="chart-title">Glyph Reference Chart</h2>
+                        <p class="chart-subtitle">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
+                        <table class="glyph-table">
+                            <thead>
+                                <tr>
+                                    <th>Glyph</th>
+                                    <th>Transliteration</th>
+                                    <th>Arabic</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${glyphRows}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+            
+            // Complete HTML document
+            const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${options.title}</title>
+    <style>
+        @page { size: A4; margin: 15mm; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .cover-page { page-break-after: always; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; background: linear-gradient(135deg, #f5f0e6, #e8dcc8); border: 2px solid #8b7d6b; padding: 40px; text-align: center; }
+        .cover-title { font-size: 48px; font-weight: bold; color: #5d4e6d; margin-bottom: 20px; }
+        .cover-subtitle { font-size: 24px; color: #8b7d6b; margin-bottom: 30px; }
+        .cover-location { font-size: 20px; color: #6b8e7f; margin-bottom: 40px; }
+        .cover-meta { font-size: 16px; color: #666; margin-top: 40px; }
+        .inscription-page { page-break-after: always; background: white; padding: 30px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .inscription-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; border-bottom: 2px solid #5d4e6d; padding-bottom: 10px; }
+        .seq-number { background: #8b7d6b; color: white; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; }
+        .inscription-title { font-size: 24px; font-weight: bold; color: #5d4e6d; margin: 0; }
+        .inscription-image { width: 100%; max-height: 400px; object-fit: contain; margin: 20px 0; border: 1px solid #ddd; border-radius: 4px; }
+        .transcription-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+        .translit-box, .arabic-box { background: #f9f9f9; padding: 15px; border-radius: 6px; border-left: 4px solid #6b8e7f; }
+        .label { font-size: 12px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 8px; }
+        .translit-text { font-size: 20px; font-weight: bold; color: #2d5a3d; line-height: 1.6; }
+        .arabic-text { font-size: 24px; font-family: 'Traditional Arabic', 'Arabic Typesetting', 'Scheherazade', 'Amiri', sans-serif; direction: rtl; text-align: right; color: #b87333; line-height: 1.8; }
+        .notes-section { background: #fff9e6; padding: 15px; border-radius: 6px; border-left: 4px solid #b8956a; margin-top: 15px; }
+        .notes-text { color: #666; line-height: 1.6; }
+        .chart-page { page-break-before: always; background: white; padding: 30px; margin-bottom: 20px; border-radius: 8px; }
+        .chart-title { font-size: 28px; font-weight: bold; color: #5d4e6d; text-align: center; margin-bottom: 10px; }
+        .chart-subtitle { text-align: center; color: #666; margin-bottom: 30px; }
+        .glyph-table { width: 100%; border-collapse: collapse; }
+        .glyph-table th { background: #5d4e6d; color: white; padding: 12px; text-align: left; font-weight: bold; }
+        .glyph-table td { padding: 10px; border-bottom: 1px solid #ddd; }
+        .glyph-table tr:hover { background: #f5f5f5; }
+        .glyph-cell { width: 80px; text-align: center; }
+        .glyph-img { max-width: 50px; max-height: 50px; }
+        .translit-cell { font-weight: bold; color: #2d5a3d; font-size: 18px; }
+        .arabic-cell { font-size: 20px; font-family: 'Traditional Arabic', 'Arabic Typesetting', 'Scheherazade', 'Amiri', sans-serif; direction: rtl; text-align: right; color: #b87333; }
+        .footer { text-align: center; color: #999; font-size: 12px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; }
+        @media print { body { background: white; } .print-button { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="cover-page">
+        <div class="cover-title">${options.title}</div>
+        ${options.subtitle ? `<div class="cover-subtitle">${options.subtitle}</div>` : ''}
+        <div class="cover-location">Dhofar Region, Oman</div>
+        <div style="width: 100px; height: 2px; background: #b8956a; margin: 20px 0;"></div>
+        <div class="cover-meta">
+            <p><strong>${selectedItems.length}</strong> ${selectedItems.length === 1 ? 'Inscription' : 'Inscriptions'}</p>
+            <p>Prepared by: ${options.author}</p>
+            <p>${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
+    </div>
+    ${inscriptionsHtml}
+    ${glyphChartHtml}
+    <div class="footer"><p>© hoopoe holdings · Hakli Glyph Recognizer · ${new Date().getFullYear()}</p></div>
+    <div style="position: fixed; bottom: 20px; right: 20px;" class="print-button">
+        <button onclick="window.print()" style="padding: 15px 30px; background: #5d4e6d; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">🖨️ Print Booklet</button>
+    </div>
+</body>
+</html>`;
+            
+            const bookletWindow = window.open('', '_blank');
+            bookletWindow.document.write(htmlContent);
+            bookletWindow.document.close();
+            
+            setProgress('');
+            setGenerating(false);
+            onClose();
+            
+        } catch (err) {
+            console.error('HTML booklet generation failed:', err);
+            alert('❌ Failed to generate HTML booklet: ' + err.message);
             setGenerating(false);
             setProgress('');
         }
@@ -652,9 +831,10 @@ const BookletGenerator = ({
                         Cancel
                     </button>
                     <button
-                        onClick={generateBooklet}
+                        onClick={generateHtmlBooklet}
                         disabled={generating || !selectedItems?.length}
-                        className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="px-4 py-2 bg-patina text-white rounded-lg hover:bg-[#5a7d6e] disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                        title="Opens in new tab - Perfect Arabic rendering"
                     >
                         {generating ? (
                             <>
@@ -663,7 +843,24 @@ const BookletGenerator = ({
                             </>
                         ) : (
                             <>
-                                📄 Generate PDF
+                                🌐 HTML Booklet
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={generateBooklet}
+                        disabled={generating || !selectedItems?.length}
+                        className="px-4 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                        title="Downloads PDF - Arabic may show as gibberish"
+                    >
+                        {generating ? (
+                            <>
+                                <span className="animate-spin">⏳</span>
+                                Generating...
+                            </>
+                        ) : (
+                            <>
+                                📄 PDF Booklet
                             </>
                         )}
                     </button>
