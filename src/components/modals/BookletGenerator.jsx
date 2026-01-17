@@ -1,8 +1,10 @@
 // ============================================
-// BOOKLET GENERATOR v260117a
+// BOOKLET GENERATOR v260117b
 // Generate PDF and HTML booklets from HKI inscriptions
 // HTML: Full Arabic support with proper rendering
 // PDF: Transliteration only, column breaks create line breaks
+// Added: Debug logging for break detection
+// Added: Character substitution, superscript handling
 // ============================================
 
 const BookletGenerator = ({
@@ -316,10 +318,7 @@ const BookletGenerator = ({
                 
                 // Apply detection boxes if requested
                 if (options.showDetectionBoxes && imageSrc && hki.recognitionResults?.length > 0) {
-                    console.log(`HTML booklet: Drawing detection boxes for "${item.title}" (${hki.recognitionResults.length} results)`);
                     imageSrc = await drawDetectionBoxes(imageSrc, hki.recognitionResults);
-                } else if (options.showDetectionBoxes) {
-                    console.log(`HTML booklet: Skipping boxes for "${item.title}" - imageSrc: ${!!imageSrc}, results: ${hki.recognitionResults?.length || 0}`);
                 }
                 
                 inscriptionsHtml += `
@@ -643,10 +642,10 @@ const BookletGenerator = ({
     const extractArabicTranscription = (hki) => {
         // Try different possible locations for transcription
         if (hki.transcription?.arabic && typeof hki.transcription.arabic === 'string') {
-            return hki.transcription.arabic;
+            return applySubstitutions(hki.transcription.arabic);
         }
         if (typeof hki.transcription === 'string') {
-            return hki.transcription;
+            return applySubstitutions(hki.transcription);
         }
         
         // Build from recognition results
@@ -657,7 +656,7 @@ const BookletGenerator = ({
             const readingOrder = hki.readingOrder || hki.readingData?.order || 
                 hki.recognitionResults.map((_, i) => i);
             
-            // Superscript characters (don't add space before these in Arabic)
+            // Superscript characters (skip in Arabic - they're Latin modifiers)
             const isSuperscript = (name) => /^[¹²³⁴⁵⁶⁷⁸⁹⁰ˢʰᵃᵉⁱᵒᵘʲʷˀˁ]+$/.test(name || '');
             
             let result = '';
@@ -665,19 +664,19 @@ const BookletGenerator = ({
                 const r = hki.recognitionResults[idx];
                 if (!r || r.excluded || r.validated === false) return;
                 
-                const char = r.glyph?.arabic || r.arabic || '';
-                const glyphName = r.glyph?.name || '';
+                const glyphName = r.glyph?.name || r.glyph?.transliteration || '';
                 
                 // Skip superscript markers in Arabic (they're Latin modifiers)
                 if (isSuperscript(glyphName)) return;
                 
+                const char = r.glyph?.arabic || r.arabic || '';
                 result += char;
                 
                 // Add appropriate separator (Arabic uses spaces for words, newlines for columns/lines)
-                if (lineBreaks.has(idx)) {
-                    result += '\n';
-                } else if (columnBreaks.has(idx)) {
+                if (columnBreaks.has(idx)) {
                     result += '\n';  // column break = new line
+                } else if (lineBreaks.has(idx)) {
+                    result += '\n';
                 } else if (wordBoundaries.has(idx)) {
                     result += ' ';
                 }
@@ -692,29 +691,33 @@ const BookletGenerator = ({
     const extractTransliteration = (hki) => {
         // Try direct property first
         if (hki.transcription?.transliteration && typeof hki.transcription.transliteration === 'string') {
-            return hki.transcription.transliteration;
+            return applySubstitutions(hki.transcription.transliteration);
         }
         
         // Build from recognition results
         if (hki.recognitionResults && Array.isArray(hki.recognitionResults)) {
-            const wordBoundaries = new Set(hki.wordBoundaries || hki.readingData?.wordBoundaries || []);
-            const lineBreaks = new Set(hki.lineBreaks || hki.readingData?.lineBreaks || []);
-            const columnBreaks = new Set(hki.columnBreaks || hki.readingData?.columnBreaks || []);
-            const readingOrder = hki.readingOrder || hki.readingData?.order || 
-                hki.recognitionResults.map((_, i) => i);
+            // Check multiple possible data paths for breaks
+            const wordBoundariesArr = hki.wordBoundaries || hki.readingData?.wordBoundaries || [];
+            const lineBreaksArr = hki.lineBreaks || hki.readingData?.lineBreaks || [];
+            const columnBreaksArr = hki.columnBreaks || hki.readingData?.columnBreaks || [];
             
-            // Debug: log break data
+            const wordBoundaries = new Set(wordBoundariesArr);
+            const lineBreaks = new Set(lineBreaksArr);
+            const columnBreaks = new Set(columnBreaksArr);
+            
             console.log('extractTransliteration breaks:', {
-                wordBoundaries: [...wordBoundaries],
-                lineBreaks: [...lineBreaks],
-                columnBreaks: [...columnBreaks],
-                sources: {
+                wordBoundaries: Array.from(wordBoundaries),
+                lineBreaks: Array.from(lineBreaks),
+                columnBreaks: Array.from(columnBreaks),
+                rawPaths: {
                     'hki.columnBreaks': hki.columnBreaks,
                     'hki.readingData?.columnBreaks': hki.readingData?.columnBreaks,
-                    'hki.wordBoundaries': hki.wordBoundaries,
-                    'hki.readingData?.wordBoundaries': hki.readingData?.wordBoundaries
+                    'hki.readingData': hki.readingData ? Object.keys(hki.readingData) : 'undefined'
                 }
             });
+            
+            const readingOrder = hki.readingOrder || hki.readingData?.order || hki.readingData?.readingOrder ||
+                hki.recognitionResults.map((_, i) => i);
             
             // Superscript/modifier characters that should attach to previous glyph
             const isSuperscript = (char) => /^[¹²³⁴⁵⁶⁷⁸⁹⁰ˢʰᵃᵉⁱᵒᵘʲʷˀˁ]+$/.test(char);
@@ -728,8 +731,8 @@ const BookletGenerator = ({
             validIndices.forEach((idx, i) => {
                 const r = hki.recognitionResults[idx];
                 
-                // Get transliteration - prefer glyph.name for Latin script
-                const char = r.glyph?.name || r.glyph?.transliteration || r.transliteration || '';
+                // Get transliteration - prefer glyph.transliteration for special chars
+                const char = r.glyph?.transliteration || r.glyph?.name || r.transliteration || '';
                 if (char) {
                     // If this is a superscript modifier, remove the preceding separator and attach directly
                     if (isSuperscript(char) && result.endsWith('·')) {
@@ -738,16 +741,18 @@ const BookletGenerator = ({
                     
                     result += char;
                     
-                    // Add appropriate separator (unless next char is a superscript)
+                    // Check if next char is a superscript (to skip separator)
                     const nextIdx = validIndices[i + 1];
                     const nextResult = nextIdx !== undefined ? hki.recognitionResults[nextIdx] : null;
-                    const nextChar = nextResult?.glyph?.name || nextResult?.glyph?.transliteration || '';
+                    const nextChar = nextResult?.glyph?.transliteration || nextResult?.glyph?.name || '';
                     const nextIsSuperscript = isSuperscript(nextChar);
                     
-                    if (lineBreaks.has(idx)) {
+                    // Add appropriate separator - check column breaks FIRST
+                    if (columnBreaks.has(idx)) {
+                        result += '\n';  // column break = new line
+                        console.log(`Column break at idx ${idx}, char ${char}`);
+                    } else if (lineBreaks.has(idx)) {
                         result += '\n';  // line break = new line
-                    } else if (columnBreaks.has(idx)) {
-                        result += '\n';  // column break = new line (keeps text from spanning page)
                     } else if (wordBoundaries.has(idx)) {
                         result += ' | ';
                     } else if (i < validIndices.length - 1 && !nextIsSuperscript) {
