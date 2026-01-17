@@ -1,5 +1,5 @@
 // ============================================
-// BOOKLET GENERATOR v260115h
+// BOOKLET GENERATOR v260117a
 // Generate PDF and HTML booklets from HKI inscriptions
 // HTML: Full Arabic support with proper rendering
 // PDF: Transliteration only, column breaks create line breaks
@@ -29,6 +29,23 @@ const BookletGenerator = ({
             setOptions(prev => ({ ...prev, author: currentUserEmail }));
         }
     }, [currentUserEmail]);
+    
+    // Character substitution map for known issues in older data
+    // Maps incorrect/legacy characters to correct ones
+    const charSubstitutions = {
+        '℅': 'ḥ',  // Care-of symbol → h with underdot (pharyngeal fricative)
+        // Add more substitutions here as needed
+    };
+    
+    // Apply character substitutions to text
+    const applySubstitutions = (text) => {
+        if (!text) return text;
+        let result = text;
+        for (const [from, to] of Object.entries(charSubstitutions)) {
+            result = result.split(from).join(to);
+        }
+        return result;
+    };
     
     // Helper: Draw detection boxes on an image
     const drawDetectionBoxes = (imageSrc, recognitionResults) => {
@@ -299,7 +316,10 @@ const BookletGenerator = ({
                 
                 // Apply detection boxes if requested
                 if (options.showDetectionBoxes && imageSrc && hki.recognitionResults?.length > 0) {
+                    console.log(`HTML booklet: Drawing detection boxes for "${item.title}" (${hki.recognitionResults.length} results)`);
                     imageSrc = await drawDetectionBoxes(imageSrc, hki.recognitionResults);
+                } else if (options.showDetectionBoxes) {
+                    console.log(`HTML booklet: Skipping boxes for "${item.title}" - imageSrc: ${!!imageSrc}, results: ${hki.recognitionResults?.length || 0}`);
                 }
                 
                 inscriptionsHtml += `
@@ -637,12 +657,20 @@ const BookletGenerator = ({
             const readingOrder = hki.readingOrder || hki.readingData?.order || 
                 hki.recognitionResults.map((_, i) => i);
             
+            // Superscript characters (don't add space before these in Arabic)
+            const isSuperscript = (name) => /^[¹²³⁴⁵⁶⁷⁸⁹⁰ˢʰᵃᵉⁱᵒᵘʲʷˀˁ]+$/.test(name || '');
+            
             let result = '';
             readingOrder.forEach((idx, i) => {
                 const r = hki.recognitionResults[idx];
                 if (!r || r.excluded || r.validated === false) return;
                 
-                const char = r.glyph?.arabic || r.arabic || r.glyph?.name || '';
+                const char = r.glyph?.arabic || r.arabic || '';
+                const glyphName = r.glyph?.name || '';
+                
+                // Skip superscript markers in Arabic (they're Latin modifiers)
+                if (isSuperscript(glyphName)) return;
+                
                 result += char;
                 
                 // Add appropriate separator (Arabic uses spaces for words, newlines for columns/lines)
@@ -654,7 +682,7 @@ const BookletGenerator = ({
                     result += ' ';
                 }
             });
-            return result.trim();
+            return applySubstitutions(result.trim());
         }
         
         return '';
@@ -675,6 +703,22 @@ const BookletGenerator = ({
             const readingOrder = hki.readingOrder || hki.readingData?.order || 
                 hki.recognitionResults.map((_, i) => i);
             
+            // Debug: log break data
+            console.log('extractTransliteration breaks:', {
+                wordBoundaries: [...wordBoundaries],
+                lineBreaks: [...lineBreaks],
+                columnBreaks: [...columnBreaks],
+                sources: {
+                    'hki.columnBreaks': hki.columnBreaks,
+                    'hki.readingData?.columnBreaks': hki.readingData?.columnBreaks,
+                    'hki.wordBoundaries': hki.wordBoundaries,
+                    'hki.readingData?.wordBoundaries': hki.readingData?.wordBoundaries
+                }
+            });
+            
+            // Superscript/modifier characters that should attach to previous glyph
+            const isSuperscript = (char) => /^[¹²³⁴⁵⁶⁷⁸⁹⁰ˢʰᵃᵉⁱᵒᵘʲʷˀˁ]+$/.test(char);
+            
             let result = '';
             const validIndices = readingOrder.filter(idx => {
                 const r = hki.recognitionResults[idx];
@@ -687,21 +731,31 @@ const BookletGenerator = ({
                 // Get transliteration - prefer glyph.name for Latin script
                 const char = r.glyph?.name || r.glyph?.transliteration || r.transliteration || '';
                 if (char) {
+                    // If this is a superscript modifier, remove the preceding separator and attach directly
+                    if (isSuperscript(char) && result.endsWith('·')) {
+                        result = result.slice(0, -1);  // Remove the trailing ·
+                    }
+                    
                     result += char;
                     
-                    // Add appropriate separator
+                    // Add appropriate separator (unless next char is a superscript)
+                    const nextIdx = validIndices[i + 1];
+                    const nextResult = nextIdx !== undefined ? hki.recognitionResults[nextIdx] : null;
+                    const nextChar = nextResult?.glyph?.name || nextResult?.glyph?.transliteration || '';
+                    const nextIsSuperscript = isSuperscript(nextChar);
+                    
                     if (lineBreaks.has(idx)) {
                         result += '\n';  // line break = new line
                     } else if (columnBreaks.has(idx)) {
                         result += '\n';  // column break = new line (keeps text from spanning page)
                     } else if (wordBoundaries.has(idx)) {
                         result += ' | ';
-                    } else if (i < validIndices.length - 1) {
-                        result += '·';  // glyph separator
+                    } else if (i < validIndices.length - 1 && !nextIsSuperscript) {
+                        result += '·';  // glyph separator (skip if next is superscript)
                     }
                 }
             });
-            return result.trim();
+            return applySubstitutions(result.trim());
         }
         
         return '';

@@ -141,7 +141,7 @@
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
     
-    <!-- UI Components (loaded as Babel) - v260115h cache-bust -->
+    <!-- UI Components (loaded as Babel) - v260117a cache-bust -->
     <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260115h"></script>
     <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260115h"></script>
     <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260115h"></script>
@@ -152,7 +152,7 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260115h';
+        const APP_VERSION = 'v260117a';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Chart Divider!)');
 
         function HakliGlyphRecognizer() {
@@ -3544,6 +3544,13 @@
                                                         if (data.audioData) setAudioData(data.audioData); // Load audio recording
                                                         
                                                         console.log('📂 Loaded HKI:', data.inscriptionTitle || file.name);
+                                                        
+                                                        // Auto-switch to reading mode if detections exist
+                                                        const detectionCount = data.recognitionResults?.length || 0;
+                                                        if (detectionCount > 0) {
+                                                            setViewMode('reading');
+                                                        }
+                                                        
                                                         alert('✅ Loaded: ' + (data.inscriptionTitle || file.name));
                                                     } catch (err) {
                                                         console.error('Error loading HKI:', err);
@@ -5201,6 +5208,12 @@
                                                 setIsReadOnly(false);
                                                 
                                                 const detectionCount = data.recognitionResults?.length || data.detections?.length || 0;
+                                                
+                                                // Auto-switch to reading mode if detections exist
+                                                if (detectionCount > 0) {
+                                                    setViewMode('reading');
+                                                }
+                                                
                                                 alert(`✅ Loaded from local file!\n\n📊 ${detectionCount} detections`);
                                             } catch (err) {
                                                 alert('❌ Failed to load: ' + err.message);
@@ -6050,7 +6063,14 @@
                                                 setShowUnlockModal(false);
                                                 setPendingHkiData(null);
                                                 
-                                                alert(`✅ Loaded as ${user.name} (${user.role})\n\n📊 ${data.detections?.length || data.recognitionResults?.length || 0} detections`);
+                                                const detectionCount = data.detections?.length || data.recognitionResults?.length || 0;
+                                                
+                                                // Auto-switch to reading mode if detections exist
+                                                if (detectionCount > 0) {
+                                                    setViewMode('reading');
+                                                }
+                                                
+                                                alert(`✅ Loaded as ${user.name} (${user.role})\n\n📊 ${detectionCount} detections`);
                                             } else {
                                                 alert('❌ Invalid keyword');
                                             }
@@ -6106,7 +6126,14 @@
                                                     setShowUnlockModal(false);
                                                     setPendingHkiData(null);
                                                     
-                                                    alert(`✅ Loaded in read-only mode\n\n📊 ${data.detections?.length || data.recognitionResults?.length || 0} detections`);
+                                                    const detectionCount = data.detections?.length || data.recognitionResults?.length || 0;
+                                                    
+                                                    // Auto-switch to reading mode if detections exist
+                                                    if (detectionCount > 0) {
+                                                        setViewMode('reading');
+                                                    }
+                                                    
+                                                    alert(`✅ Loaded in read-only mode\n\n📊 ${detectionCount} detections`);
                                                 }}
                                                 className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium"
                                             >
