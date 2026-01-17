@@ -1,10 +1,11 @@
 // ============================================
-// WAREHOUSE MODAL v260115a
+// WAREHOUSE MODAL v260117d
 // Browse and load HKI files from Google Drive
-// Public view (published) + authenticated view (drafts, shared)
+// Public view (published) + authenticated view (drafts, review, shared)
 // Fixed: thumbnail blinking due to dependency cycle
 // Added: Delete functionality for owned inscriptions
 // Updated: "Generate PDF" → "Generate Booklet" (supports HTML + PDF)
+// Added: Separate "In Review" section for review visibility items
 // ============================================
 
 const WarehouseModal = ({
@@ -532,13 +533,24 @@ const WarehouseModal = ({
                                 </div>
                             )}
                             
-                            {/* Drafts - only when signed in */}
+                            {/* Drafts - only when signed in (exclude review items) */}
                             {currentUserEmail && (
                                 <Section
                                     title="My Drafts"
                                     icon="📝"
-                                    items={draftItems}
+                                    items={draftItems.filter(item => item.visibility !== 'review')}
                                     emptyText="No drafts yet. Upload an image to start!"
+                                    isOwner={true}
+                                />
+                            )}
+                            
+                            {/* In Review - only when signed in */}
+                            {currentUserEmail && draftItems.filter(item => item.visibility === 'review').length > 0 && (
+                                <Section
+                                    title="In Review"
+                                    icon="👁️"
+                                    items={draftItems.filter(item => item.visibility === 'review')}
+                                    emptyText="No items in review"
                                     isOwner={true}
                                 />
                             )}
@@ -547,7 +559,7 @@ const WarehouseModal = ({
                             {currentUserEmail && (
                                 <Section
                                     title="Shared with Me"
-                                    icon="👁️"
+                                    icon="🤝"
                                     items={sharedItems}
                                     emptyText="No inscriptions shared with you yet"
                                     showSharedBy={true}

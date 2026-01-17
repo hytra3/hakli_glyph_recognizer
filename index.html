@@ -141,19 +141,19 @@
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
     
-    <!-- UI Components (loaded as Babel) - v260117c cache-bust -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260117c"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260117c"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260117c"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260117c"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260117c"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260117c"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260117c"></script>
+    <!-- UI Components (loaded as Babel) - v260117d cache-bust -->
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260117d"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260117d"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260117d"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260117d"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260117d"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260117d"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260117d"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260117c';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Auto-Read Mode!)');
+        const APP_VERSION = 'v260117d';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser+Image Fix!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -1142,6 +1142,12 @@
                     const canvas = eraserCanvasRef.current;
                     const ctx = canvas.getContext('2d');
                     const rect = canvas.getBoundingClientRect();
+                    
+                    // Guard against division by zero
+                    if (rect.width === 0 || rect.height === 0) {
+                        console.warn('❌ Canvas has no CSS dimensions yet, waiting...');
+                        return;
+                    }
                     
                     // Get coordinates from either mouse or touch event
                     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -3873,8 +3879,8 @@
                                                             border: '5px solid red', // BRIGHT RED BORDER
                                                             pointerEvents: 'auto',
                                                             objectFit: 'contain',
-                                                            width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '0',
-                                                            height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '0'
+                                                            width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '100%',
+                                                            height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '100%'
                                                         }}
                                                         onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
                                                         onMouseMove={handleEraserDraw}
@@ -4527,8 +4533,8 @@
                                                         border: '5px solid red',
                                                         pointerEvents: 'auto',
                                                         objectFit: 'contain',
-                                                        width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '0',
-                                                        height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '0'
+                                                        width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '100%',
+                                                        height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '100%'
                                                     }}
                                                     onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
                                                     onMouseMove={handleEraserDraw}
@@ -6298,6 +6304,8 @@
                             }}
                             onLoadHki={(hkiData, fileInfo) => {
                                 // Clear ALL state first (fresh start)
+                                setOriginalImage(null);  // Clear old image first!
+                                setDisplayImage(null);   // Clear old display image!
                                 setRecognitionResults([]);
                                 setValidations({});
                                 setReadingOrder([]);
@@ -6324,11 +6332,18 @@
                                 setCanvasZoom(1);
                                 
                                 // Now load from HKI data
-                                // Load image
-                                if (hkiData.image) setOriginalImage(hkiData.image);
-                                if (hkiData.displayImage) setDisplayImage(hkiData.displayImage);
-                                if (hkiData.images?.original) setOriginalImage(hkiData.images.original);
-                                if (hkiData.images?.preprocessed) setDisplayImage(hkiData.images.preprocessed);
+                                // Load image - MUST set both original and display
+                                const newOriginal = hkiData.image || hkiData.images?.original;
+                                const newDisplay = hkiData.displayImage || hkiData.images?.preprocessed || hkiData.image || hkiData.images?.original;
+                                
+                                if (newOriginal) setOriginalImage(newOriginal);
+                                if (newDisplay) setDisplayImage(newDisplay);
+                                
+                                // If neither found, clear images to prevent stale data
+                                if (!newOriginal && !newDisplay) {
+                                    setOriginalImage(null);
+                                    setDisplayImage(null);
+                                }
                                 
                                 // Load preprocessing
                                 if (hkiData.preprocessing || hkiData.images?.preprocessingSettings) 
