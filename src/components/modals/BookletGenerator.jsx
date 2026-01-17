@@ -1,5 +1,5 @@
 // ============================================
-// BOOKLET GENERATOR v260117b
+// BOOKLET GENERATOR v260117c
 // Generate PDF and HTML booklets from HKI inscriptions
 // HTML: Full Arabic support with proper rendering
 // PDF: Transliteration only, column breaks create line breaks
@@ -36,6 +36,7 @@ const BookletGenerator = ({
     // Maps incorrect/legacy characters to correct ones
     const charSubstitutions = {
         '℅': 'ḥ',  // Care-of symbol → h with underdot (pharyngeal fricative)
+        '%': 'ḥ',  // Percent sign → h with underdot (legacy data issue)
         // Add more substitutions here as needed
     };
     
