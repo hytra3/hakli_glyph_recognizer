@@ -141,19 +141,19 @@
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
     
-    <!-- UI Components (loaded as Babel) - v260117d cache-bust -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260117d"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260117d"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260117d"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260117d"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260117d"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260117d"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260117d"></script>
+    <!-- UI Components (loaded as Babel) - v260117e cache-bust -->
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260117e"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260117e"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260117e"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260117e"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260117e"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260117e"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260117e"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260117d';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Eraser+Image Fix!)');
+        const APP_VERSION = 'v260117e';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Single Canvas Fix!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -205,6 +205,7 @@
             const [expandedCards, setExpandedCards] = useState(new Set()); // Cards showing alternatives
             const [excludedDetections, setExcludedDetections] = useState(new Set()); // Excluded from reading
             const [editMenuCardIdx, setEditMenuCardIdx] = useState(null); // Which card has edit menu open
+            const [breaksMenuCardIdx, setBreaksMenuCardIdx] = useState(null); // Which card has breaks menu open
             const [historyCardIdx, setHistoryCardIdx] = useState(null); // Which card shows history
             const [editingBoxIdx, setEditingBoxIdx] = useState(null); // Index of detection being edited
             
@@ -368,6 +369,7 @@
             const [eraserSize, setEraserSize] = useState(15);
             const [canvasDimensions, setCanvasDimensions] = useState({ width: 0, height: 0 });
             const eraserCanvasRef = useRef(null);
+            const activeEraserCanvasRef = useRef(null); // Stores the VISIBLE canvas (not overwritten by React)
             const isDrawingRef = useRef(false);
             
             // Audio recording state
@@ -1042,11 +1044,6 @@
             
             // ========== ERASER TOOL ==========
             const initEraserCanvas = useCallback(() => {
-                if (!eraserCanvasRef.current) {
-                    console.warn('⚠️ Cannot init eraser canvas - missing canvas ref');
-                    return false;
-                }
-                
                 // Find the VISIBLE image (there may be multiple with same alt text)
                 const images = document.querySelectorAll('img[alt="Inscription"]');
                 let visibleImg = null;
@@ -1064,15 +1061,25 @@
                 
                 console.log('✅ Found visible image:', visibleImg.getBoundingClientRect());
                 
-                const canvas = eraserCanvasRef.current;
-                const img = visibleImg;
-                
-                // Get parent container dimensions (where canvas will fill with absolute positioning)
-                const container = img.parentElement;
+                // Find the canvas that's a sibling of the visible image (in same container)
+                const container = visibleImg.parentElement;
                 if (!container) {
                     console.warn('⚠️ No parent container');
                     return false;
                 }
+                
+                // Find canvas in the same container as the visible image
+                const canvas = container.querySelector('canvas');
+                if (!canvas) {
+                    console.warn('⚠️ No canvas found in container');
+                    return false;
+                }
+                
+                // Store in our controlled ref (NOT the React-managed one)
+                activeEraserCanvasRef.current = canvas;
+                console.log('🎯 Stored active canvas in activeEraserCanvasRef');
+                
+                const img = visibleImg;
                 
                 const rect = container.getBoundingClientRect();
                 const containerWidth = Math.round(rect.width);
@@ -1097,19 +1104,24 @@
                 canvas.width = imgWidth;
                 canvas.height = imgHeight;
                 
-                // Update React state so dimensions persist through re-renders!
+                // Set CSS dimensions DIRECTLY on canvas (don't wait for React re-render!)
+                canvas.style.width = `${imgWidth}px`;
+                canvas.style.height = `${imgHeight}px`;
+                
+                // Also update React state for consistency
                 setCanvasDimensions({ width: imgWidth, height: imgHeight });
                 
                 // Draw the image at its full resolution
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
-                console.log('✅ Eraser canvas initialized - Canvas will fill container via CSS');
+                console.log('✅ Eraser canvas initialized with CSS dimensions:', imgWidth, 'x', imgHeight);
                 return true;
             }, [setCanvasDimensions]);
             
             const handleEraserDraw = useCallback((e) => {
-                if (!isDrawingRef.current || !eraserMode || !eraserCanvasRef.current || !imageRef.current) {
-                    if (!isDrawingRef.current) console.log('⚠️ Not drawing yet');
+                // Use the ACTIVE canvas ref, not the React-managed one
+                const canvas = activeEraserCanvasRef.current;
+                if (!isDrawingRef.current || !eraserMode || !canvas || !imageRef.current) {
                     return;
                 }
                 
@@ -1139,13 +1151,15 @@
                         }
                     }
                     
-                    const canvas = eraserCanvasRef.current;
                     const ctx = canvas.getContext('2d');
                     const rect = canvas.getBoundingClientRect();
                     
-                    // Guard against division by zero
-                    if (rect.width === 0 || rect.height === 0) {
-                        console.warn('❌ Canvas has no CSS dimensions yet, waiting...');
+                    // Verify canvas has dimensions
+                    if (rect.width === 0 || rect.height === 0 || canvas.width === 0) {
+                        console.warn('❌ Canvas has no dimensions:', { 
+                            cssW: rect.width, cssH: rect.height, 
+                            internalW: canvas.width, internalH: canvas.height 
+                        });
                         return;
                     }
                     
@@ -1180,19 +1194,24 @@
             }, [eraserMode, eraserSize]);
             
             const handleEraserStart = useCallback((e) => {
-                if (!eraserMode || !eraserCanvasRef.current) {
-                    console.warn('⚠️ Cannot start eraser - mode:', eraserMode, 'canvas:', !!eraserCanvasRef.current);
+                // Use the ACTIVE canvas ref
+                const canvas = activeEraserCanvasRef.current;
+                if (!eraserMode || !canvas) {
+                    console.warn('⚠️ Cannot start eraser - mode:', eraserMode, 'activeCanvas:', !!canvas);
                     // Update debug display
                     const debug = document.getElementById('eraser-debug');
-                    if (debug) debug.textContent = `ERROR: Mode=${eraserMode} Canvas=${!!eraserCanvasRef.current}`;
+                    if (debug) debug.textContent = `ERROR: Mode=${eraserMode} ActiveCanvas=${!!canvas}`;
                     return;
                 }
-                console.log('🖱️ Eraser started');
+                
+                const rect = canvas.getBoundingClientRect();
+                console.log('🖱️ Eraser started - Canvas rect:', rect.width, 'x', rect.height, 'Canvas internal:', canvas.width, 'x', canvas.height);
+                
                 isDrawingRef.current = true;
                 
                 // Update debug display
                 const debug = document.getElementById('eraser-debug');
-                if (debug) debug.textContent = `Drawing started! Mode=✓ Canvas=✓`;
+                if (debug) debug.textContent = `Drawing started! Mode=✓ ActiveCanvas=✓`;
                 
                 handleEraserDraw(e);
             }, [eraserMode, handleEraserDraw]);
@@ -1202,11 +1221,15 @@
             }, []);
             
             const applyEraser = useCallback(async () => {
-                if (!eraserCanvasRef.current || !opencvReady) return;
+                // Use the ACTIVE canvas ref
+                const canvas = activeEraserCanvasRef.current;
+                if (!canvas || !opencvReady) {
+                    console.warn('Cannot apply eraser - canvas:', !!canvas, 'opencv:', opencvReady);
+                    return;
+                }
                 
                 try {
                     // Get erased canvas data
-                    const canvas = eraserCanvasRef.current;
                     const dataUrl = canvas.toDataURL('image/png');
                     
                     // Update display image
@@ -1333,18 +1356,12 @@
             // Initialize eraser canvas when mode is enabled
             useEffect(() => {
                 if (eraserMode) {
-                    // Simple retry logic - let initEraserCanvas handle everything
+                    // Simple retry logic - initEraserCanvas finds canvas via DOM query
                     const initWithRetry = (attempt = 0) => {
                         setTimeout(() => {
                             console.log('🧹 Attempt', attempt + 1, 'to initialize eraser canvas...');
                             
-                            if (!eraserCanvasRef.current) {
-                                console.warn('⚠️ Canvas ref not ready');
-                                if (attempt < 10) initWithRetry(attempt + 1);
-                                return;
-                            }
-                            
-                            // Call initEraserCanvas - it will find the visible image
+                            // Call initEraserCanvas - it will find the visible canvas via DOM query
                             const success = initEraserCanvas();
                             
                             if (!success && attempt < 10) {
@@ -3875,8 +3892,6 @@
                                                         style={{ 
                                                             cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
                                                             touchAction: 'none',
-                                                            backgroundColor: 'rgba(255,0,0,0.1)', // Light red tint to see canvas
-                                                            border: '5px solid red', // BRIGHT RED BORDER
                                                             pointerEvents: 'auto',
                                                             objectFit: 'contain',
                                                             width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '100%',
@@ -4234,6 +4249,7 @@
                                                             <div className="p-2 cursor-pointer hover:bg-gray-50"
                                                                 onClick={(e) => { 
                                                                     setEditMenuCardIdx(null);
+                                                                    setBreaksMenuCardIdx(null);
                                                                     
                                                                     // Shift+click for range selection
                                                                     if (e.shiftKey && lastSelectedIdx !== null) {
@@ -4347,7 +4363,7 @@
                                                                 
                                                                 {/* Edit menu toggle */}
                                                                 <div className="relative ml-auto">
-                                                                    <button onClick={(e) => { e.stopPropagation(); setEditMenuCardIdx(editMenuCardIdx === idx ? null : idx); }}
+                                                                    <button onClick={(e) => { e.stopPropagation(); setEditMenuCardIdx(editMenuCardIdx === idx ? null : idx); setBreaksMenuCardIdx(null); }}
                                                                         className={`px-2 py-0.5 rounded text-xs ${editMenuCardIdx === idx ? 'bg-stone text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                                                                         title="Edit options">
                                                                         ✏️ Edit
@@ -4388,45 +4404,40 @@
                                                                 </div>
                                                             </div>
                                                             
-                                                            {/* Boundary controls row */}
-                                                            <div className="px-2 pb-2 flex items-center gap-1 border-t border-gray-100 pt-2">
-                                                                <span className="text-xs text-gray-500 mr-1">After:</span>
-                                                                <button onClick={(e) => { 
-                                                                    e.stopPropagation(); 
-                                                                    toggleWordBoundary(idx);
-                                                                }}
-                                                                    className={`px-2 py-1 rounded text-xs font-bold ${
-                                                                        wordBoundaries.has(idx) 
-                                                                            ? 'bg-stone text-white' 
-                                                                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                                                    }`}
-                                                                    title="Toggle word boundary after this glyph">
-                                                                    | Word
-                                                                </button>
-                                                                <button onClick={(e) => { 
-                                                                    e.stopPropagation(); 
-                                                                    toggleColumnBreak(idx);
-                                                                }}
-                                                                    className={`px-2 py-1 rounded text-xs font-bold ${
-                                                                        columnBreaks.has(idx) 
-                                                                            ? 'bg-amber-700 text-white' 
-                                                                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                                                    }`}
-                                                                    title="Toggle column break after this glyph">
-                                                                    ‖ Column
-                                                                </button>
-                                                                <button onClick={(e) => { 
-                                                                    e.stopPropagation(); 
-                                                                    toggleLineBreak(idx);
-                                                                }}
-                                                                    className={`px-2 py-1 rounded text-xs font-bold ${
-                                                                        lineBreaks.has(idx) 
-                                                                            ? 'bg-ancient-purple text-white' 
-                                                                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                                                    }`}
-                                                                    title="Toggle line break after this glyph">
-                                                                    ⏎ Line
-                                                                </button>
+                                                            {/* Boundary controls - compact popover */}
+                                                            <div className="px-2 pb-2 flex items-center gap-1 border-t border-gray-100 pt-1">
+                                                                {/* Show active breaks as badges */}
+                                                                {(wordBoundaries.has(idx) || columnBreaks.has(idx) || lineBreaks.has(idx)) && (
+                                                                    <div className="flex gap-0.5 mr-1">
+                                                                        {wordBoundaries.has(idx) && <span className="text-xs font-bold text-stone bg-stone/20 px-1 rounded">|</span>}
+                                                                        {columnBreaks.has(idx) && <span className="text-xs font-bold text-amber-700 bg-amber-100 px-1 rounded">‖</span>}
+                                                                        {lineBreaks.has(idx) && <span className="text-xs font-bold text-ancient-purple bg-ancient-purple/20 px-1 rounded">⏎</span>}
+                                                                    </div>
+                                                                )}
+                                                                {/* Breaks popover button */}
+                                                                <div className="relative">
+                                                                    <button onClick={(e) => { e.stopPropagation(); setBreaksMenuCardIdx(breaksMenuCardIdx === idx ? null : idx); setEditMenuCardIdx(null); }}
+                                                                        className={`px-2 py-0.5 rounded text-xs ${breaksMenuCardIdx === idx ? 'bg-stone text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                                                        title="Add break after this glyph">
+                                                                        Break ▾
+                                                                    </button>
+                                                                    {breaksMenuCardIdx === idx && (
+                                                                        <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[100px]">
+                                                                            <button onClick={(e) => { e.stopPropagation(); toggleWordBoundary(idx); }}
+                                                                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${wordBoundaries.has(idx) ? 'text-stone font-bold' : ''}`}>
+                                                                                | Word {wordBoundaries.has(idx) && '✓'}
+                                                                            </button>
+                                                                            <button onClick={(e) => { e.stopPropagation(); toggleColumnBreak(idx); }}
+                                                                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${columnBreaks.has(idx) ? 'text-amber-700 font-bold' : ''}`}>
+                                                                                ‖ Column {columnBreaks.has(idx) && '✓'}
+                                                                            </button>
+                                                                            <button onClick={(e) => { e.stopPropagation(); toggleLineBreak(idx); }}
+                                                                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${lineBreaks.has(idx) ? 'text-ancient-purple font-bold' : ''}`}>
+                                                                                ⏎ Line {lineBreaks.has(idx) && '✓'}
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                             
                                                             {/* Expanded: Alternative matches */}
@@ -4519,7 +4530,7 @@
                                     >
                                         <img src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" />
                                         
-                                        {/* Eraser canvas for mobile - positioned over visible image */}
+                                        {/* Eraser canvas for mobile - activeEraserCanvasRef will find whichever is visible */}
                                         {eraserMode && (() => {
                                             const cursorRadius = eraserSize - 1;
                                             const cursorSize = cursorRadius * 2 + 2;
@@ -4529,8 +4540,6 @@
                                                     style={{ 
                                                         cursor: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${cursorSize}" height="${cursorSize}" viewBox="0 0 ${cursorSize} ${cursorSize}"><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="black" stroke-width="1"/><circle cx="${cursorRadius + 1}" cy="${cursorRadius + 1}" r="${cursorRadius}" fill="none" stroke="white" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="${cursorRadius + 1}" y1="${cursorRadius - 3}" x2="${cursorRadius + 1}" y2="${cursorRadius + 5}" stroke="black" stroke-width="1"/><line x1="${cursorRadius - 3}" y1="${cursorRadius + 1}" x2="${cursorRadius + 5}" y2="${cursorRadius + 1}" stroke="black" stroke-width="1"/></svg>') ${cursorRadius + 1} ${cursorRadius + 1}, crosshair`,
                                                         touchAction: 'none',
-                                                        backgroundColor: 'rgba(255,0,0,0.1)',
-                                                        border: '5px solid red',
                                                         pointerEvents: 'auto',
                                                         objectFit: 'contain',
                                                         width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '100%',
@@ -4883,7 +4892,7 @@
                                                     >
                                                         {column.map(({ result, index, actualIdx, hasWordBoundary }) => (
                                                             <span 
-                                                                key={`vert-${actualIdx}`} 
+                                                                key={`vert-${index}-${actualIdx}`} 
                                                                 className={`text-gray-900 ${hasWordBoundary ? 'pb-2 mb-2 border-b-2 border-amber-600/50' : ''}`}
                                                             >
                                                                 {transcriptionScript === 'arabic'
@@ -4909,7 +4918,7 @@
                                             }}
                                         >
                                             {getReadingOrderedResults().map((result, index) => (
-                                                <span key={`horiz-${readingOrder[index] ?? index}`}>
+                                                <span key={`horiz-${index}`}>
                                                     <span className="text-gray-900">
                                                         {transcriptionScript === 'arabic'
                                                             ? (result.glyph.arabic || result.glyph.name)
