@@ -141,19 +141,19 @@
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
     
-    <!-- UI Components (loaded as Babel) - v260117e cache-bust -->
+    <!-- UI Components (loaded as Babel) - v260118b cache-bust -->
     <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260117e"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260117e"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260118b"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260117e';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Single Canvas Fix!)');
+        const APP_VERSION = 'v260118b';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile + PDF Fixes!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -2069,6 +2069,34 @@
                     return;
                 }
                 
+                // Helper to convert special transliteration chars to ASCII for PDF
+                // jsPDF default fonts don't support Unicode diacritics
+                // Uses CAPITALS for emphatic/pharyngeal consonants (standard Semitic convention)
+                const toAsciiTranslit = (text) => {
+                    return text
+                        .replace(/ḥ/g, 'H')    // pharyngeal h → H
+                        .replace(/Ḥ/g, 'H')
+                        .replace(/ṣ/g, 'S')    // emphatic s → S
+                        .replace(/Ṣ/g, 'S')
+                        .replace(/ṭ/g, 'T')    // emphatic t → T
+                        .replace(/Ṭ/g, 'T')
+                        .replace(/ḍ/g, 'D')    // emphatic d → D
+                        .replace(/Ḍ/g, 'D')
+                        .replace(/ẓ/g, 'Z')    // emphatic z → Z
+                        .replace(/Ẓ/g, 'Z')
+                        .replace(/ḏ/g, 'dh')   // d with line below (eth)
+                        .replace(/ṯ/g, 'th')   // t with line below (thorn)
+                        .replace(/ġ/g, 'gh')   // g with dot above
+                        .replace(/ʿ/g, "c")    // ayin → c (common convention)
+                        .replace(/ʾ/g, "'")    // aleph/hamza
+                        .replace(/š/g, 'sh')   // s with caron
+                        .replace(/ā/g, 'aa')   // long vowels doubled
+                        .replace(/ī/g, 'ii')
+                        .replace(/ū/g, 'uu')
+                        .replace(/ē/g, 'ee')
+                        .replace(/ō/g, 'oo');
+                };
+                
                 const { jsPDF } = jspdf;
                 const pdf = new jsPDF({ format: 'a5', unit: 'mm' });
                 const pageWidth = pdf.internal.pageSize.getWidth();
@@ -2092,6 +2120,9 @@
                         arabicText += '\n';
                     }
                 });
+                
+                // Convert to ASCII for PDF compatibility
+                const pdfTranslitText = toAsciiTranslit(translitText);
                 
                 // Cover page
                 pdf.setFontSize(20);
@@ -2134,19 +2165,25 @@
                 
                 pdf.setFontSize(12);
                 pdf.setFont('courier', 'normal');
-                const translitLines = pdf.splitTextToSize(translitText, contentWidth);
+                const translitLines = pdf.splitTextToSize(pdfTranslitText, contentWidth);
                 pdf.text(translitLines, margin, 35);
                 
-                // Arabic page (will show gibberish but keeping as requested)
+                // Note about special characters
+                pdf.setFontSize(8);
+                pdf.setFont('helvetica', 'italic');
+                pdf.text('(Note: Special diacritics simplified for PDF - use HTML Booklet for accurate rendering)', margin, pageHeight - 10);
+                
+                // Arabic page - PDF fonts don't support Arabic, show placeholder
                 pdf.addPage();
                 pdf.setFontSize(14);
                 pdf.setFont('helvetica', 'bold');
                 pdf.text('Arabic Transcription', margin, 20);
                 
-                pdf.setFontSize(12);
+                pdf.setFontSize(11);
+                pdf.setFont('helvetica', 'italic');
+                pdf.text('(Arabic text cannot be rendered in PDF - use HTML Booklet for Arabic)', margin, 35);
                 pdf.setFont('helvetica', 'normal');
-                const arabicLines = pdf.splitTextToSize(arabicText, contentWidth);
-                pdf.text(arabicLines, margin, 35);
+                pdf.text('Transliteration: ' + pdfTranslitText.substring(0, 100) + (pdfTranslitText.length > 100 ? '...' : ''), margin, 50);
                 
                 // Translations
                 if (translationEnglish) {
@@ -2168,9 +2205,8 @@
                     pdf.text('Arabic Translation', margin, 20);
                     
                     pdf.setFontSize(11);
-                    pdf.setFont('helvetica', 'normal');
-                    const arabicTransLines = pdf.splitTextToSize(translationArabic, contentWidth);
-                    pdf.text(arabicTransLines, margin, 35);
+                    pdf.setFont('helvetica', 'italic');
+                    pdf.text('(Arabic text cannot be rendered in PDF - use HTML Booklet for Arabic)', margin, 35);
                 }
                 
                 // Footer on last page
@@ -3361,7 +3397,7 @@
                                             {(viewMode === 'reading' 
                                                 ? readingOrder.filter(i => !excludedDetections.has(i))
                                                 : recognitionResults.map((_, i) => i)
-                                            ).map((idx) => {
+                                            ).map((idx, displayIdx) => {
                                                 const result = recognitionResults[idx];
                                                 if (!result) return null;
                                                 const conf = Math.round(result.confidence * 100);
@@ -3372,14 +3408,24 @@
                                                     <div key={idx} className="bg-gray-50 rounded border">
                                                         {/* Main card */}
                                                         <div className="flex items-center gap-2 p-2">
-                                                            {result.thumbnail && (
-                                                                <img src={result.thumbnail} alt="" className="w-10 h-10 object-contain bg-white rounded" />
-                                                            )}
+                                                            {/* Both thumbnails side by side */}
+                                                            <div className="flex gap-1 flex-shrink-0">
+                                                                {result.thumbnail && (
+                                                                    <img src={result.thumbnail} alt="det" className="w-10 h-10 object-contain bg-white rounded border" title="Detected" />
+                                                                )}
+                                                                {glyphThumbnails[result.glyph.id] && (
+                                                                    <img src={glyphThumbnails[result.glyph.id]} alt="chart" className="w-10 h-10 object-contain bg-white rounded border-2 border-ancient-purple" title="Chart" />
+                                                                )}
+                                                            </div>
                                                             <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="font-bold text-xs text-gray-500">#{viewMode === 'reading' ? displayIdx + 1 : idx + 1}</span>
+                                                                    <span className={`text-xs ${conf >= 70 ? 'text-patina' : conf >= 50 ? 'text-ochre' : 'text-rust'}`}>{conf}%</span>
+                                                                </div>
                                                                 <div className="font-semibold text-sm truncate">
                                                                     {showArabicLabels && result.glyph.arabic ? result.glyph.arabic : result.glyph.name}
                                                                 </div>
-                                                                <div className="text-xs text-gray-500">{result.glyph.transliteration || result.glyph.name} · {conf}%</div>
+                                                                <div className="text-xs text-gray-500">{result.glyph.transliteration || result.glyph.name}</div>
                                                             </div>
                                                             <button onClick={() => setSelectedRegions(prev => {
                                                                 const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n;
@@ -3897,13 +3943,13 @@
                                                             width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '100%',
                                                             height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '100%'
                                                         }}
-                                                        onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
+                                                        onMouseDown={handleEraserStart}
                                                         onMouseMove={handleEraserDraw}
                                                         onMouseUp={handleEraserEnd}
                                                         onMouseLeave={handleEraserEnd}
-                                                        onTouchStart={(e) => { console.log('👆 Touch start'); handleEraserStart(e); }}
+                                                        onTouchStart={handleEraserStart}
                                                         onTouchMove={handleEraserDraw}
-                                                        onTouchEnd={(e) => { console.log('👆 Touch end'); handleEraserEnd(); }}
+                                                        onTouchEnd={handleEraserEnd}
                                                     />
                                                 );
                                             })()}
@@ -4239,12 +4285,6 @@
                                                             onDrop={viewMode === 'reading' ? (e) => handleDrop(e, displayIdx) : undefined}
                                                             onDragEnd={viewMode === 'reading' ? handleDragEnd : undefined}
                                                         >
-                                                            {/* Drag handle indicator for reading mode */}
-                                                            {viewMode === 'reading' && (
-                                                                <div className="bg-ochre/20 px-2 py-1 text-center text-ochre text-xs border-b border-ochre/30 cursor-grab hover:bg-ochre/30 font-medium">
-                                                                    ⋮⋮⋮ drag to reorder ⋮⋮⋮
-                                                                </div>
-                                                            )}
                                                             {/* Main card header */}
                                                             <div className="p-2 cursor-pointer hover:bg-gray-50"
                                                                 onClick={(e) => { 
@@ -4404,7 +4444,7 @@
                                                                 </div>
                                                             </div>
                                                             
-                                                            {/* Boundary controls - compact popover */}
+                                                            {/* Bottom row: Break button + drag handle */}
                                                             <div className="px-2 pb-2 flex items-center gap-1 border-t border-gray-100 pt-1">
                                                                 {/* Show active breaks as badges */}
                                                                 {(wordBoundaries.has(idx) || columnBreaks.has(idx) || lineBreaks.has(idx)) && (
@@ -4417,12 +4457,13 @@
                                                                 {/* Breaks popover button */}
                                                                 <div className="relative">
                                                                     <button onClick={(e) => { e.stopPropagation(); setBreaksMenuCardIdx(breaksMenuCardIdx === idx ? null : idx); setEditMenuCardIdx(null); }}
+                                                                        onBlur={() => setTimeout(() => setBreaksMenuCardIdx(null), 150)}
                                                                         className={`px-2 py-0.5 rounded text-xs ${breaksMenuCardIdx === idx ? 'bg-stone text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                                                                         title="Add break after this glyph">
                                                                         Break ▾
                                                                     </button>
                                                                     {breaksMenuCardIdx === idx && (
-                                                                        <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[100px]">
+                                                                        <div className="absolute left-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[100px]">
                                                                             <button onClick={(e) => { e.stopPropagation(); toggleWordBoundary(idx); }}
                                                                                 className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${wordBoundaries.has(idx) ? 'text-stone font-bold' : ''}`}>
                                                                                 | Word {wordBoundaries.has(idx) && '✓'}
@@ -4438,6 +4479,13 @@
                                                                         </div>
                                                                     )}
                                                                 </div>
+                                                                {/* Drag handle - only in reading mode */}
+                                                                {viewMode === 'reading' && (
+                                                                    <div className="ml-auto px-2 py-0.5 bg-ochre/20 text-ochre text-xs rounded cursor-grab hover:bg-ochre/30 font-medium select-none"
+                                                                        title="Drag to reorder">
+                                                                        ⋮⋮ drag
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                             
                                                             {/* Expanded: Alternative matches */}
@@ -4528,7 +4576,7 @@
                                         onTouchMove={cropMode ? (e) => handleCropMove(e.touches[0]) : (manualBoxMode ? (e) => handleManualBoxMove(e.touches[0]) : undefined)}
                                         onTouchEnd={cropMode ? handleCropEnd : (manualBoxMode ? handleManualBoxEnd : undefined)}
                                     >
-                                        <img src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" />
+                                        <img src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" style={{ visibility: eraserMode ? 'hidden' : 'visible' }} />
                                         
                                         {/* Eraser canvas for mobile - activeEraserCanvasRef will find whichever is visible */}
                                         {eraserMode && (() => {
@@ -4545,13 +4593,13 @@
                                                         width: canvasDimensions.width > 0 ? `${canvasDimensions.width}px` : '100%',
                                                         height: canvasDimensions.height > 0 ? `${canvasDimensions.height}px` : '100%'
                                                     }}
-                                                    onMouseDown={(e) => { console.log('🖱️ Mouse down'); handleEraserStart(e); }}
+                                                    onMouseDown={handleEraserStart}
                                                     onMouseMove={handleEraserDraw}
                                                     onMouseUp={handleEraserEnd}
                                                     onMouseLeave={handleEraserEnd}
-                                                    onTouchStart={(e) => { console.log('👆 Touch start'); handleEraserStart(e); }}
+                                                    onTouchStart={handleEraserStart}
                                                     onTouchMove={handleEraserDraw}
-                                                    onTouchEnd={(e) => { console.log('👆 Touch end'); handleEraserEnd(); }}
+                                                    onTouchEnd={handleEraserEnd}
                                                 />
                                             );
                                         })()}
@@ -6340,80 +6388,86 @@
                                 setLocalSaveTime(null);
                                 setCanvasZoom(1);
                                 
-                                // Now load from HKI data
-                                // Load image - MUST set both original and display
-                                const newOriginal = hkiData.image || hkiData.images?.original;
-                                const newDisplay = hkiData.displayImage || hkiData.images?.preprocessed || hkiData.image || hkiData.images?.original;
-                                
-                                if (newOriginal) setOriginalImage(newOriginal);
-                                if (newDisplay) setDisplayImage(newDisplay);
-                                
-                                // If neither found, clear images to prevent stale data
-                                if (!newOriginal && !newDisplay) {
-                                    setOriginalImage(null);
-                                    setDisplayImage(null);
-                                }
-                                
-                                // Load preprocessing
-                                if (hkiData.preprocessing || hkiData.images?.preprocessingSettings) 
-                                    setPreprocessing(hkiData.preprocessing || hkiData.images.preprocessingSettings);
-                                
-                                // Load detections
-                                if (hkiData.recognitionResults) setRecognitionResults(hkiData.recognitionResults);
-                                if (hkiData.recognitionSourceDims) setRecognitionSourceDims(hkiData.recognitionSourceDims);
-                                if (hkiData.detections) setRecognitionResults(hkiData.detections.map(d => ({
-                                    glyph: d.glyph, confidence: d.confidence, position: d.position,
-                                    thumbnail: d.thumbnail, matchType: d.matchType,
-                                    corrected: d.corrected, originalGlyph: d.originalGlyph
-                                })));
-                                
-                                // Load validations and reading data
-                                if (hkiData.validations) setValidations(hkiData.validations);
-                                if (hkiData.readingOrder) setReadingOrder(hkiData.readingOrder);
-                                if (hkiData.readingData?.readingOrder) setReadingOrder(hkiData.readingData.readingOrder);
-                                if (hkiData.readingDirection) setReadingDirection(hkiData.readingDirection);
-                                if (hkiData.readingData?.direction) setReadingDirection(hkiData.readingData.direction);
-                                if (hkiData.wordBoundaries) setWordBoundaries(new Set(hkiData.wordBoundaries));
-                                if (hkiData.readingData?.wordBoundaries) setWordBoundaries(new Set(hkiData.readingData.wordBoundaries));
-                                if (hkiData.lineBreaks) setLineBreaks(new Set(hkiData.lineBreaks));
-                                if (hkiData.readingData?.lineBreaks) setLineBreaks(new Set(hkiData.readingData.lineBreaks));
-                                if (hkiData.columnBreaks) setColumnBreaks(new Set(hkiData.columnBreaks));
-                                if (hkiData.readingData?.columnBreaks) setColumnBreaks(new Set(hkiData.readingData.columnBreaks));
-                                
-                                // Load translations
-                                if (hkiData.translationEnglish || hkiData.translations?.english)
-                                    setTranslationEnglish(hkiData.translationEnglish || hkiData.translations?.english || '');
-                                if (hkiData.translationArabic || hkiData.translations?.arabic)
-                                    setTranslationArabic(hkiData.translationArabic || hkiData.translations?.arabic || '');
-                                
-                                // Load metadata
-                                if (hkiData.inscriptionTitle) setInscriptionTitle(hkiData.inscriptionTitle);
-                                if (hkiData.inscriptionNotes) setInscriptionNotes(hkiData.inscriptionNotes);
-                                if (hkiData.inscriptionComplete || hkiData.complete) 
-                                    setInscriptionComplete(hkiData.inscriptionComplete || hkiData.complete);
-                                if (hkiData.inscriptionId) setCurrentInscriptionId(hkiData.inscriptionId);
-                                if (hkiData.visibility) setVisibility(hkiData.visibility);
-                                if (hkiData.audioData) setAudioData(hkiData.audioData); // Load audio recording
-                                
-                                // Set file tracking for Save vs Save As New
-                                setCurrentFileId(fileInfo.id);
-                                setFileOwner(fileInfo.owner);
-                                
-                                // Determine if read-only (not owner and not collaborator)
-                                const isOwner = fileInfo.owner === driveUserEmail;
-                                const isCollaborator = fileInfo.collaborators?.includes(driveUserEmail);
-                                setIsReadOnly(!driveUserEmail || (!isOwner && !isCollaborator));
+                                // Use timeout to ensure React processes the clear before loading new data
+                                setTimeout(() => {
+                                    // Now load from HKI data
+                                    // Load image - MUST set both original and display
+                                    const newOriginal = hkiData.image || hkiData.images?.original;
+                                    const newDisplay = hkiData.displayImage || hkiData.images?.preprocessed || hkiData.image || hkiData.images?.original;
+                                    
+                                    console.log('📷 Loading images:', { hasOriginal: !!newOriginal, hasDisplay: !!newDisplay });
+                                    
+                                    if (newOriginal) setOriginalImage(newOriginal);
+                                    if (newDisplay) setDisplayImage(newDisplay);
+                                    
+                                    // If neither found, clear images to prevent stale data
+                                    if (!newOriginal && !newDisplay) {
+                                        console.warn('⚠️ No images found in HKI file!');
+                                        setOriginalImage(null);
+                                        setDisplayImage(null);
+                                    }
+                                    
+                                    // Load preprocessing
+                                    if (hkiData.preprocessing || hkiData.images?.preprocessingSettings) 
+                                        setPreprocessing(hkiData.preprocessing || hkiData.images.preprocessingSettings);
+                                    
+                                    // Load detections
+                                    if (hkiData.recognitionResults) setRecognitionResults(hkiData.recognitionResults);
+                                    if (hkiData.recognitionSourceDims) setRecognitionSourceDims(hkiData.recognitionSourceDims);
+                                    if (hkiData.detections) setRecognitionResults(hkiData.detections.map(d => ({
+                                        glyph: d.glyph, confidence: d.confidence, position: d.position,
+                                        thumbnail: d.thumbnail, matchType: d.matchType,
+                                        corrected: d.corrected, originalGlyph: d.originalGlyph
+                                    })));
+                                    
+                                    // Load validations and reading data
+                                    if (hkiData.validations) setValidations(hkiData.validations);
+                                    if (hkiData.readingOrder) setReadingOrder(hkiData.readingOrder);
+                                    if (hkiData.readingData?.readingOrder) setReadingOrder(hkiData.readingData.readingOrder);
+                                    if (hkiData.readingDirection) setReadingDirection(hkiData.readingDirection);
+                                    if (hkiData.readingData?.direction) setReadingDirection(hkiData.readingData.direction);
+                                    if (hkiData.wordBoundaries) setWordBoundaries(new Set(hkiData.wordBoundaries));
+                                    if (hkiData.readingData?.wordBoundaries) setWordBoundaries(new Set(hkiData.readingData.wordBoundaries));
+                                    if (hkiData.lineBreaks) setLineBreaks(new Set(hkiData.lineBreaks));
+                                    if (hkiData.readingData?.lineBreaks) setLineBreaks(new Set(hkiData.readingData.lineBreaks));
+                                    if (hkiData.columnBreaks) setColumnBreaks(new Set(hkiData.columnBreaks));
+                                    if (hkiData.readingData?.columnBreaks) setColumnBreaks(new Set(hkiData.readingData.columnBreaks));
+                                    
+                                    // Load translations
+                                    if (hkiData.translationEnglish || hkiData.translations?.english)
+                                        setTranslationEnglish(hkiData.translationEnglish || hkiData.translations?.english || '');
+                                    if (hkiData.translationArabic || hkiData.translations?.arabic)
+                                        setTranslationArabic(hkiData.translationArabic || hkiData.translations?.arabic || '');
+                                    
+                                    // Load metadata
+                                    if (hkiData.inscriptionTitle) setInscriptionTitle(hkiData.inscriptionTitle);
+                                    if (hkiData.inscriptionNotes) setInscriptionNotes(hkiData.inscriptionNotes);
+                                    if (hkiData.inscriptionComplete || hkiData.complete) 
+                                        setInscriptionComplete(hkiData.inscriptionComplete || hkiData.complete);
+                                    if (hkiData.inscriptionId) setCurrentInscriptionId(hkiData.inscriptionId);
+                                    if (hkiData.visibility) setVisibility(hkiData.visibility);
+                                    if (hkiData.audioData) setAudioData(hkiData.audioData); // Load audio recording
+                                    
+                                    // Set file tracking for Save vs Save As New
+                                    setCurrentFileId(fileInfo.id);
+                                    setFileOwner(fileInfo.owner);
+                                    
+                                    // Determine if read-only (not owner and not collaborator)
+                                    const isOwner = fileInfo.owner === driveUserEmail;
+                                    const isCollaborator = fileInfo.collaborators?.includes(driveUserEmail);
+                                    setIsReadOnly(!driveUserEmail || (!isOwner && !isCollaborator));
+                                    
+                                    const count = hkiData.recognitionResults?.length || hkiData.detections?.length || 0;
+                                    console.log(`📂 Loaded from warehouse: ${fileInfo.title} (${count} glyphs)`);
+                                    
+                                    // If file has detections, switch to reading view
+                                    if (count > 0) {
+                                        setViewMode('reading');
+                                    }
+                                }, 50);  // Small delay to ensure React processes the clear
                                 
                                 // Close warehouse modal
                                 setShowWarehouse(false);
-                                
-                                const count = hkiData.recognitionResults?.length || hkiData.detections?.length || 0;
-                                console.log(`📂 Loaded from warehouse: ${fileInfo.title} (${count} glyphs)`);
-                                
-                                // If file has detections, switch to reading view
-                                if (count > 0) {
-                                    setViewMode('reading');
-                                }
                             }}
                         />
                     )}
