@@ -141,19 +141,19 @@
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
     
-    <!-- UI Components (loaded as Babel) - v260118b cache-bust -->
+    <!-- UI Components (loaded as Babel) - v260118e cache-bust -->
     <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260117e"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260118b"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260118e"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260118b';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile + PDF Fixes!)');
+        const APP_VERSION = 'v260118e';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile Manual Box!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -367,6 +367,7 @@
             // Eraser tool state
             const [eraserMode, setEraserMode] = useState(false);
             const [eraserSize, setEraserSize] = useState(15);
+            const [brushPreviewPos, setBrushPreviewPos] = useState(null); // {x, y} for touch brush preview
             const [canvasDimensions, setCanvasDimensions] = useState({ width: 0, height: 0 });
             const eraserCanvasRef = useRef(null);
             const activeEraserCanvasRef = useRef(null); // Stores the VISIBLE canvas (not overwritten by React)
@@ -1167,6 +1168,14 @@
                     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
                     
+                    // Update brush preview position for touch devices (relative to canvas)
+                    if (e.touches) {
+                        setBrushPreviewPos({ 
+                            x: clientX - rect.left, 
+                            y: clientY - rect.top 
+                        });
+                    }
+                    
                     // Calculate position relative to canvas (accounting for scaling and zoom)
                     const scaleX = canvas.width / rect.width;
                     const scaleY = canvas.height / rect.height;
@@ -1218,6 +1227,7 @@
             
             const handleEraserEnd = useCallback(() => {
                 isDrawingRef.current = false;
+                setBrushPreviewPos(null); // Hide brush preview on touch end
             }, []);
             
             const applyEraser = useCallback(async () => {
@@ -3133,6 +3143,22 @@
                         </div>
                     )}
                     
+                    {/* Floating Manual Box Indicator - Mobile (when panel is closed) */}
+                    {manualBoxMode && !mobilePanel && (
+                        <div className="lg:hidden fixed top-20 right-4 z-40 bg-amber-500 text-white px-4 py-2 rounded-lg shadow-lg">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">➕ Manual Box Mode</span>
+                                <button 
+                                    onClick={() => setManualBoxMode(false)}
+                                    className="bg-white/20 hover:bg-white/30 px-2 py-1 rounded text-xs"
+                                >
+                                    Exit
+                                </button>
+                            </div>
+                            <p className="text-xs mt-1 opacity-80">Draw a box around a glyph</p>
+                        </div>
+                    )}
+                    
                     {/* Mobile Slide-out Panels */}
                     {/* Preprocessing Panel - Mobile */}
                     {mobilePanel === 'preprocessing' && (
@@ -3285,6 +3311,38 @@
                                                             className="flex-1 px-2 py-1.5 bg-patina text-white rounded text-sm">Apply Eraser</button>
                                                     </div>
                                                     <p className="text-xs text-gray-400">Draw on image to erase unwanted marks</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    
+                                    {/* Manual Box Tool - Mobile */}
+                                    {displayImage && (
+                                        <div className="bg-gray-50 rounded-lg p-3 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs text-gray-600 font-semibold">➕ Manual Box</span>
+                                                <button onClick={() => {
+                                                    setManualBoxMode(!manualBoxMode);
+                                                    if (!manualBoxMode) {
+                                                        setEraserMode(false); // Disable eraser when enabling manual box
+                                                        setCropMode(false); // Disable crop
+                                                    }
+                                                }}
+                                                    className={`w-10 h-5 rounded-full transition-colors ${manualBoxMode ? 'bg-amber-500' : 'bg-gray-300'}`}>
+                                                    <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${manualBoxMode ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                                </button>
+                                            </div>
+                                            {manualBoxMode && (
+                                                <div className="space-y-3">
+                                                    <button onClick={() => setMobilePanel(null)}
+                                                        className="w-full px-3 py-2 bg-amber-500 text-white rounded font-medium text-sm">
+                                                        ✏️ Hide Panel &amp; Draw Box
+                                                    </button>
+                                                    <button onClick={() => setManualBoxMode(false)}
+                                                        className="w-full px-2 py-1.5 bg-gray-200 text-gray-700 rounded text-sm">
+                                                        ✋ Exit Manual Mode
+                                                    </button>
+                                                    <p className="text-xs text-gray-400">Draw a box around a glyph the recognizer missed</p>
                                                 </div>
                                             )}
                                         </div>
@@ -4568,12 +4626,15 @@
                                 {displayImage ? (
                                     <div ref={imageContainerRef} 
                                         className="relative flex-1 flex items-center justify-center overflow-hidden"
-                                        style={{ cursor: (manualBoxMode || cropMode) ? 'crosshair' : 'default' }}
+                                        style={{ 
+                                            cursor: (manualBoxMode || cropMode) ? 'crosshair' : 'default',
+                                            touchAction: (manualBoxMode || cropMode) ? 'none' : 'auto'
+                                        }}
                                         onMouseDown={cropMode ? handleCropStart : (manualBoxMode ? handleManualBoxStart : undefined)}
                                         onMouseMove={cropMode ? handleCropMove : (manualBoxMode ? handleManualBoxMove : undefined)}
                                         onMouseUp={cropMode ? handleCropEnd : (manualBoxMode ? handleManualBoxEnd : undefined)}
-                                        onTouchStart={cropMode ? (e) => handleCropStart(e.touches[0]) : (manualBoxMode ? (e) => handleManualBoxStart(e.touches[0]) : undefined)}
-                                        onTouchMove={cropMode ? (e) => handleCropMove(e.touches[0]) : (manualBoxMode ? (e) => handleManualBoxMove(e.touches[0]) : undefined)}
+                                        onTouchStart={cropMode ? (e) => { e.preventDefault(); handleCropStart(e.touches[0]); } : (manualBoxMode ? (e) => { e.preventDefault(); handleManualBoxStart(e.touches[0]); } : undefined)}
+                                        onTouchMove={cropMode ? (e) => { e.preventDefault(); handleCropMove(e.touches[0]); } : (manualBoxMode ? (e) => { e.preventDefault(); handleManualBoxMove(e.touches[0]); } : undefined)}
                                         onTouchEnd={cropMode ? handleCropEnd : (manualBoxMode ? handleManualBoxEnd : undefined)}
                                     >
                                         <img src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" style={{ visibility: eraserMode ? 'hidden' : 'visible' }} />
@@ -4583,6 +4644,7 @@
                                             const cursorRadius = eraserSize - 1;
                                             const cursorSize = cursorRadius * 2 + 2;
                                             return (
+                                                <>
                                                 <canvas ref={eraserCanvasRef}
                                                     className="absolute inset-0"
                                                     style={{ 
@@ -4600,6 +4662,38 @@
                                                     onTouchStart={handleEraserStart}
                                                     onTouchMove={handleEraserDraw}
                                                     onTouchEnd={handleEraserEnd}
+                                                />
+                                                {/* Touch brush preview circle */}
+                                                {brushPreviewPos && (
+                                                    <div 
+                                                        className="absolute pointer-events-none"
+                                                        style={{
+                                                            left: brushPreviewPos.x - eraserSize,
+                                                            top: brushPreviewPos.y - eraserSize,
+                                                            width: eraserSize * 2,
+                                                            height: eraserSize * 2,
+                                                            borderRadius: '50%',
+                                                            border: '2px solid rgba(0,0,0,0.7)',
+                                                            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.7)',
+                                                            background: 'rgba(255,255,255,0.2)'
+                                                        }}
+                                                    />
+                                                )}
+                                                </>
+                                            );
+                                        })()}
+                                        
+                                        {/* Manual Box Drawing Overlay - mobile */}
+                                        {manualBoxMode && drawingBox && (() => {
+                                            const left = Math.min(drawingBox.startX, drawingBox.currentX);
+                                            const top = Math.min(drawingBox.startY, drawingBox.currentY);
+                                            const width = Math.abs(drawingBox.currentX - drawingBox.startX);
+                                            const height = Math.abs(drawingBox.currentY - drawingBox.startY);
+                                            
+                                            return (
+                                                <div 
+                                                    className="absolute border-2 border-dashed border-amber-500 bg-amber-500/20 pointer-events-none"
+                                                    style={{ left, top, width, height }}
                                                 />
                                             );
                                         })()}
@@ -4626,8 +4720,8 @@
                                             );
                                         })()}
                                         
-                                        {/* Detection boxes overlay - mobile */}
-                                        {recognitionResults.length > 0 && imageRef.current && (
+                                        {/* Detection boxes overlay - mobile (hidden in eraser mode) */}
+                                        {recognitionResults.length > 0 && imageRef.current && !eraserMode && (
                                             <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
                                                 {(() => {
                                                     const img = imageRef.current;
@@ -5336,7 +5430,7 @@
                                 
                                 {/* Glyph Grid */}
                                 <div className="flex-1 overflow-y-auto p-4">
-                                    <div className="grid grid-cols-6 gap-2">
+                                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
                                         {chartData.glyphs
                                             .filter(g => {
                                                 if (!glyphSelectorSearch) return true;
