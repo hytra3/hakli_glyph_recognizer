@@ -2,6 +2,7 @@
 // GOOGLE DRIVE SYNC - Warehouse Edition
 // Cloud storage for HKI inscription files
 // Supports: Public view (no auth) + Authenticated edit
+// v260118b - Fixed listDrafts to include 'review' items
 // ============================================
 
 const DriveSync = {
@@ -301,12 +302,13 @@ const DriveSync = {
             const data = await response.json();
             if (!data.files) return [];
 
-            // Filter to drafts owned by user
+            // Filter to drafts/review items owned by user (not published)
             return data.files
                 .filter(file => {
                     const visibility = file.appProperties?.visibility || 'draft';
                     const owner = file.appProperties?.owner;
-                    return visibility === 'draft' && owner === userEmail;
+                    // Include both 'draft' and 'review' items - they're both non-published user items
+                    return (visibility === 'draft' || visibility === 'review') && owner === userEmail;
                 })
                 .map(file => DriveSync._parseFileMetadata(file));
         } catch (error) {
