@@ -141,19 +141,19 @@
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
     
-    <!-- UI Components (loaded as Babel) - v260118e cache-bust -->
+    <!-- UI Components (loaded as Babel) - v260118h cache-bust -->
     <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260117e"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260118e"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260118h"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260118e';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile Manual Box!)');
+        const APP_VERSION = 'v260118h';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile Manual Box Fix!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -1567,15 +1567,23 @@
             
             // ========== MANUAL BOX DRAWING ==========
             const handleManualBoxStart = useCallback((e) => {
-                if (!manualBoxMode || !imageRef.current || !imageContainerRef.current) return;
+                if (!manualBoxMode || !imageContainerRef.current) return;
                 
-                const img = imageRef.current;
+                // Find the image - could be imageRef or query within container
+                const img = imageRef.current || imageContainerRef.current.querySelector('img');
+                if (!img) {
+                    console.warn('❌ Manual box: No image found');
+                    return;
+                }
+                
                 const imgRect = img.getBoundingClientRect();
                 
                 // Calculate position relative to the image element directly
                 // Account for zoom transform
                 const x = (e.clientX - imgRect.left) / canvasZoom;
                 const y = (e.clientY - imgRect.top) / canvasZoom;
+                
+                console.log('📦 Manual box start:', { x: Math.round(x), y: Math.round(y), imgW: img.clientWidth, imgH: img.clientHeight });
                 
                 // Only start if click is within image bounds
                 if (x >= 0 && x <= img.clientWidth && y >= 0 && y <= img.clientHeight) {
@@ -1584,9 +1592,11 @@
             }, [manualBoxMode, canvasZoom]);
             
             const handleManualBoxMove = useCallback((e) => {
-                if (!drawingBox || !imageRef.current) return;
+                if (!drawingBox || !imageContainerRef.current) return;
                 
-                const img = imageRef.current;
+                const img = imageRef.current || imageContainerRef.current.querySelector('img');
+                if (!img) return;
+                
                 const imgRect = img.getBoundingClientRect();
                 
                 // Calculate position relative to the image element directly
@@ -1598,9 +1608,11 @@
             }, [drawingBox, canvasZoom]);
             
             const handleManualBoxEnd = useCallback((e) => {
-                if (!drawingBox || !imageRef.current) return;
+                if (!drawingBox || !imageContainerRef.current) return;
                 
-                const img = imageRef.current;
+                const img = imageRef.current || imageContainerRef.current.querySelector('img');
+                if (!img) return;
+                
                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                 const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                 
@@ -1612,6 +1624,8 @@
                 const y = Math.min(drawingBox.startY, drawingBox.currentY) * scaleY;
                 const width = Math.abs(drawingBox.currentX - drawingBox.startX) * scaleX;
                 const height = Math.abs(drawingBox.currentY - drawingBox.startY) * scaleY;
+                
+                console.log('📦 Manual box end:', { x: Math.round(x), y: Math.round(y), w: Math.round(width), h: Math.round(height) });
                 
                 // Only create box if it has reasonable size
                 if (width > 5 && height > 5) {
@@ -4388,17 +4402,18 @@
                                                                                 </span>
                                                                             </div>
                                                                         )}
-                                                                        {/* Chart glyph thumbnail - click to change glyph */}
+                                                                        {/* Chart glyph thumbnail - click/touch to change glyph */}
                                                                         {glyphThumbnails[result.glyph.id] && (
                                                                             <div 
                                                                                 className="relative cursor-pointer group"
                                                                                 onClick={(e) => { e.stopPropagation(); openChartSelector(idx); }}
-                                                                                title="Click to change glyph"
+                                                                                onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); openChartSelector(idx); }}
+                                                                                title="Tap to change glyph"
                                                                             >
                                                                                 <div className="w-10 h-10 bg-white rounded overflow-hidden border-2 border-ancient-purple transition-colors group-hover:border-ochre">
                                                                                     <img src={glyphThumbnails[result.glyph.id]} alt="Chart" className="w-full h-full object-contain" />
                                                                                 </div>
-                                                                                <span className="absolute -bottom-1 left-0 right-0 text-center text-[8px] text-ancient-purple group-hover:text-ochre">📋chart</span>
+                                                                                <span className="absolute -bottom-1 left-0 right-0 text-center text-[8px] text-ancient-purple group-hover:text-ochre">📋tap</span>
                                                                             </div>
                                                                         )}
                                                                     </div>
@@ -4637,7 +4652,7 @@
                                         onTouchMove={cropMode ? (e) => { e.preventDefault(); handleCropMove(e.touches[0]); } : (manualBoxMode ? (e) => { e.preventDefault(); handleManualBoxMove(e.touches[0]); } : undefined)}
                                         onTouchEnd={cropMode ? handleCropEnd : (manualBoxMode ? handleManualBoxEnd : undefined)}
                                     >
-                                        <img src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" style={{ visibility: eraserMode ? 'hidden' : 'visible' }} />
+                                        <img src={displayImage} alt="Inscription" className="max-w-full max-h-full object-contain" style={{ visibility: eraserMode ? 'hidden' : 'visible', pointerEvents: (eraserMode || manualBoxMode || cropMode) ? 'none' : 'auto' }} />
                                         
                                         {/* Eraser canvas for mobile - activeEraserCanvasRef will find whichever is visible */}
                                         {eraserMode && (() => {
@@ -4720,51 +4735,8 @@
                                             );
                                         })()}
                                         
-                                        {/* Detection boxes overlay - mobile (hidden in eraser mode) */}
-                                        {recognitionResults.length > 0 && imageRef.current && !eraserMode && (
-                                            <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-                                                {(() => {
-                                                    const img = imageRef.current;
-                                                    const container = imageContainerRef.current;
-                                                    if (!img || !container) return null;
-                                                    
-                                                    const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
-                                                    const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
-                                                    
-                                                    // Simple scale calculation
-                                                    const scaleX = img.clientWidth / sourceWidth;
-                                                    const scaleY = img.clientHeight / sourceHeight;
-                                                    
-                                                    // Offset for centering in container
-                                                    const containerOffsetX = (container.clientWidth - img.clientWidth) / 2;
-                                                    const containerOffsetY = (container.clientHeight - img.clientHeight) / 2;
-                                                    
-                                                    return recognitionResults.map((result, index) => {
-                                                        if (excludedDetections.has(index)) return null;
-                                                        const isSelected = selectedRegions.has(index);
-                                                        return (
-                                                            <div key={`reading-${index}-${result.position.x}-${result.position.y}`}
-                                                                className={`absolute border-2 rounded ${isSelected ? 'border-ochre bg-ochre/20' : 'border-patina bg-patina/20'}`}
-                                                                style={{
-                                                                    left: containerOffsetX + result.position.x * scaleX,
-                                                                    top: containerOffsetY + result.position.y * scaleY,
-                                                                    width: result.position.width * scaleX,
-                                                                    height: result.position.height * scaleY,
-                                                                    pointerEvents: 'auto'
-                                                                }}
-                                                                onClick={() => setSelectedRegions(prev => {
-                                                                    const n = new Set(prev); n.has(index) ? n.delete(index) : n.add(index); return n;
-                                                                })}
-                                                            >
-                                                                <span className="absolute top-0.5 left-0.5 text-[10px] bg-white/80 px-1 rounded">
-                                                                    {result.glyph.transliteration || result.glyph.name}
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    });
-                                                })()}
-                                            </div>
-                                        )}
+                                        {/* Detection boxes overlay - REMOVED from mobile for cleaner view */}
+                                        {/* Detections are shown in the side panel instead */}
                                     </div>
                                 ) : (
                                     <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
