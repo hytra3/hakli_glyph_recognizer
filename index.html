@@ -141,7 +141,7 @@
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
     
-    <!-- UI Components (loaded as Babel) - v260118h cache-bust -->
+    <!-- UI Components (loaded as Babel) - v260121b cache-bust -->
     <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260117e"></script>
@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260118h';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile Manual Box Fix!)');
+        const APP_VERSION = 'v260121b';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile Feature Parity!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -1577,16 +1577,18 @@
                 }
                 
                 const imgRect = img.getBoundingClientRect();
+                const renderedWidth = imgRect.width;
+                const renderedHeight = imgRect.height;
                 
                 // Calculate position relative to the image element directly
                 // Account for zoom transform
                 const x = (e.clientX - imgRect.left) / canvasZoom;
                 const y = (e.clientY - imgRect.top) / canvasZoom;
                 
-                console.log('📦 Manual box start:', { x: Math.round(x), y: Math.round(y), imgW: img.clientWidth, imgH: img.clientHeight });
+                console.log('📦 Manual box start:', { x: Math.round(x), y: Math.round(y), imgW: Math.round(renderedWidth), imgH: Math.round(renderedHeight) });
                 
                 // Only start if click is within image bounds
-                if (x >= 0 && x <= img.clientWidth && y >= 0 && y <= img.clientHeight) {
+                if (x >= 0 && x <= renderedWidth && y >= 0 && y <= renderedHeight) {
                     setDrawingBox({ startX: x, startY: y, currentX: x, currentY: y });
                 }
             }, [manualBoxMode, canvasZoom]);
@@ -3396,18 +3398,93 @@
                                         {isProcessing ? `⏳ ${processingStatus || 'Processing...'}` : chartStatus !== 'loaded' ? '⏳ Loading chart...' : '🔍 Recognize Glyphs'}
                                     </button>
                                     
+                                    {/* Multi-selection actions */}
+                                    {selectedRegions.size > 0 && (
+                                        <div className="bg-ochre/10 rounded p-2 border border-ochre/30">
+                                            <div className="text-xs text-gray-600 mb-1.5 font-medium">
+                                                {selectedRegions.size} selected
+                                            </div>
+                                            <div className="flex gap-1 flex-wrap">
+                                                {selectedRegions.size === 2 && (
+                                                    <button onClick={mergeSelectedDetections}
+                                                        className="px-2 py-1 bg-ochre text-white rounded text-xs">
+                                                        🔗 Merge
+                                                    </button>
+                                                )}
+                                                <button 
+                                                    onClick={() => {
+                                                        const indices = Array.from(selectedRegions);
+                                                        const glyphIds = new Set(indices.map(i => recognitionResults[i]?.glyph?.id));
+                                                        if (glyphIds.size > 1) {
+                                                            alert('Selected detections are for different glyphs.');
+                                                            return;
+                                                        }
+                                                        if (confirm(`Save ${indices.length} as VARIANTS?`)) {
+                                                            indices.forEach(idx => saveAsTemplate(idx, 'variant'));
+                                                            setSelectedRegions(new Set());
+                                                        }
+                                                    }}
+                                                    className="px-2 py-1 bg-patina text-white rounded text-xs"
+                                                >
+                                                    ⭐ Variants
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        const indices = Array.from(selectedRegions);
+                                                        const glyphIds = new Set(indices.map(i => recognitionResults[i]?.glyph?.id));
+                                                        if (glyphIds.size > 1) {
+                                                            alert('Selected detections are for different glyphs.');
+                                                            return;
+                                                        }
+                                                        if (confirm(`Save ${indices.length} as EXAMPLES?`)) {
+                                                            indices.forEach(idx => saveAsTemplate(idx, 'example'));
+                                                            setSelectedRegions(new Set());
+                                                        }
+                                                    }}
+                                                    className="px-2 py-1 bg-ochre text-white rounded text-xs"
+                                                >
+                                                    📚 Examples
+                                                </button>
+                                                <button onClick={() => setSelectedRegions(new Set())}
+                                                    className="ml-auto px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs">
+                                                    Clear
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    
                                     {/* Top controls - Arabic toggle and Clear all */}
                                     {recognitionResults.length > 0 && (
-                                        <div className="flex gap-2">
-                                            <button onClick={() => setShowArabicLabels(!showArabicLabels)}
-                                                className={`flex-1 px-3 py-2 rounded text-sm font-medium ${showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-700'}`}>
-                                                {showArabicLabels ? 'عربي' : 'ABC'}
-                                            </button>
-                                            <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); setExcludedDetections(new Set()); setExpandedCards(new Set()); }}}
-                                                className="px-3 py-2 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200" title="Clear all detections">
-                                                🗑 Clear
-                                            </button>
-                                        </div>
+                                        <>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setShowArabicLabels(!showArabicLabels)}
+                                                    className={`flex-1 px-3 py-2 rounded text-sm font-medium ${showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-700'}`}>
+                                                    {showArabicLabels ? 'عربي' : 'ABC'}
+                                                </button>
+                                                <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); setExcludedDetections(new Set()); setExpandedCards(new Set()); }}}
+                                                    className="px-3 py-2 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200" title="Clear all detections">
+                                                    🗑 Clear
+                                                </button>
+                                            </div>
+                                            
+                                            {/* Confidence Filter */}
+                                            <div className="bg-gray-50 rounded p-2 border border-gray-200">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-xs text-gray-600">🎯 Confidence Filter</span>
+                                                    <span className={`text-xs font-medium ${confidenceThreshold > 0 ? 'text-ancient-purple' : 'text-gray-400'}`}>
+                                                        {confidenceThreshold > 0 ? `≥${confidenceThreshold}%` : 'Show All'}
+                                                    </span>
+                                                </div>
+                                                <input 
+                                                    type="range" 
+                                                    min="0" 
+                                                    max="99" 
+                                                    value={confidenceThreshold}
+                                                    onChange={(e) => setConfidenceThreshold(parseInt(e.target.value))}
+                                                    className="w-full h-1.5 accent-ancient-purple"
+                                                />
+                                            </div>
+                                        </>
                                     )}
                                     
                                     {/* Detection/Reading toggle */}
@@ -3467,8 +3544,8 @@
                                     ) : (
                                         <div className="space-y-2">
                                             {(viewMode === 'reading' 
-                                                ? readingOrder.filter(i => !excludedDetections.has(i))
-                                                : recognitionResults.map((_, i) => i)
+                                                ? readingOrder.filter(i => !excludedDetections.has(i) && Math.round(recognitionResults[i]?.confidence * 100) >= confidenceThreshold)
+                                                : recognitionResults.map((_, i) => i).filter(i => Math.round(recognitionResults[i]?.confidence * 100) >= confidenceThreshold)
                                             ).map((idx, displayIdx) => {
                                                 const result = recognitionResults[idx];
                                                 if (!result) return null;
@@ -3518,6 +3595,13 @@
                                                                 className={`px-2 py-1 rounded text-xs ${validation && !validation.isCorrect ? 'bg-rust text-white' : 'bg-gray-100'}`}
                                                                 title="Mark incorrect">
                                                                 ✗
+                                                            </button>
+                                                            
+                                                            {/* Exclude button */}
+                                                            <button onClick={() => toggleExcludeDetection(idx)}
+                                                                className={`px-2 py-1 rounded text-xs ${excludedDetections.has(idx) ? 'bg-patina text-white' : 'bg-gray-100'}`}
+                                                                title={excludedDetections.has(idx) ? 'Include in reading' : 'Exclude from reading'}>
+                                                                {excludedDetections.has(idx) ? '👁' : '🚫'}
                                                             </button>
                                                             
                                                             {/* Alts button */}
