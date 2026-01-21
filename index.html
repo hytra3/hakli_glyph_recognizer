@@ -153,8 +153,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260121h';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Manual Box Coordinates Fixed!)');
+        const APP_VERSION = 'v260121j';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Quick Glyph Substitution!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -175,6 +175,8 @@
             const [confidenceThreshold, setConfidenceThreshold] = useState(0); // 0-100, filter detections
             
             const [recognitionResults, setRecognitionResults] = useState([]);
+            const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+            const [chartVersion, setChartVersion] = useState(null);
             const [validations, setValidations] = useState({});
             const [changeLog, setChangeLog] = useState([]); // Track edit history
             const [isProcessing, setIsProcessing] = useState(false);
@@ -204,6 +206,7 @@
             
             // Enhanced detection card state
             const [expandedCards, setExpandedCards] = useState(new Set()); // Cards showing alternatives
+            const [quickSubstitutionCard, setQuickSubstitutionCard] = useState(null); // Card showing quick substitution modal
             const [excludedDetections, setExcludedDetections] = useState(new Set()); // Excluded from reading
             const [editMenuCardIdx, setEditMenuCardIdx] = useState(null); // Which card has edit menu open
             const [breaksMenuCardIdx, setBreaksMenuCardIdx] = useState(null); // Which card has breaks menu open
@@ -485,6 +488,8 @@
                     // Set up callback to update UI when save completes
                     LocalAutoSave.onSave((saveTime) => {
                         setLocalSaveTime(saveTime);
+                        setLastSavedTime(Date.now());
+                        setHasUnsavedChanges(false);
                     });
                     
                     // Check for saved work on page load
@@ -545,9 +550,26 @@
                 }
             }, []);
             
+            // ========== UNSAVED CHANGES WARNING ==========
+            useEffect(() => {
+                const handleBeforeUnload = (e) => {
+                    if (hasUnsavedChanges) {
+                        e.preventDefault();
+                        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+                        return e.returnValue;
+                    }
+                };
+                
+                window.addEventListener('beforeunload', handleBeforeUnload);
+                return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+            }, [hasUnsavedChanges]);
+            
             // ========== LOCAL AUTO-SAVE TRIGGER ==========
             useEffect(() => {
                 if (typeof LocalAutoSave !== 'undefined' && recognitionResults && recognitionResults.length > 0) {
+                    // Mark as having unsaved changes
+                    setHasUnsavedChanges(true);
+                    
                     // Schedule a save when data changes
                     LocalAutoSave.scheduleSave(() => ({
                         version: '2.0',
@@ -596,7 +618,11 @@
                         const response = await fetch('Hakli_glyphs.JSON');
                         const data = await response.json();
                         setChartData(data);
-                        console.log(`📜 Loaded chart with ${data.glyphs.length} glyphs`);
+                        
+                        // Extract and store chart version
+                        const version = data.version || data.chartVersion || '1.0.0';
+                        setChartVersion(version);
+                        console.log(`📜 Loaded chart v${version} with ${data.glyphs.length} glyphs`);
                         
                         // Count total templates to load
                         let totalTemplates = 0;
@@ -3049,8 +3075,9 @@
                                         onClick={() => setShowChartManager(true)}
                                         disabled={chartStatus !== 'loaded'}
                                         className={`px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-50 ${chartModified ? 'bg-ochre hover:bg-ochre/80' : 'bg-white/20 hover:bg-white/30'}`}
+                                        title={chartVersion ? `Chart version ${chartVersion}` : 'Manage glyph chart'}
                                     >
-                                        {chartModified ? '⚠️' : '📊'} Manage Chart{chartModified ? '*' : ''}
+                                        {chartModified ? '⚠️' : '📊'} Chart{chartVersion ? ` v${chartVersion}` : ''}{chartModified ? '*' : ''}
                                     </button>
                                     
                                     {/* Status indicators - grouped on right */}
@@ -3068,6 +3095,20 @@
                                         <div className={`px-2 py-1 rounded-full text-xs ${opencvReady ? 'bg-patina' : 'bg-ochre'}`}>
                                             {opencvReady ? '✅ CV' : '⏳ CV'}
                                         </div>
+                                        
+                                        {/* Save Status Indicator */}
+                                        {recognitionResults.length > 0 && (
+                                            <div 
+                                                className={`px-2 py-1 rounded-full text-xs ${hasUnsavedChanges ? 'bg-amber-400/30 border border-amber-400/50' : 'bg-patina/30 border border-patina/50'}`}
+                                                title={hasUnsavedChanges 
+                                                    ? 'Unsaved changes - will auto-save in a moment' 
+                                                    : lastSavedTime 
+                                                        ? `Last saved ${Math.round((Date.now() - lastSavedTime) / 1000)}s ago`
+                                                        : 'Saved'}
+                                            >
+                                                {hasUnsavedChanges ? '💾 Saving...' : '✅ Saved'}
+                                            </div>
+                                        )}
                                         
                                         {/* Sync Status / Drive Sign-in */}
                                         {currentUser ? (

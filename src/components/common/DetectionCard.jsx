@@ -59,7 +59,14 @@ const DetectionCard = ({
                     )}
                 </div>
                 
-                <div className="flex-1 min-w-0">
+                <div 
+                    className={`flex-1 min-w-0 ${isMobile && result.topMatches && result.topMatches.length > 1 ? 'cursor-pointer active:bg-gray-100' : ''}`}
+                    onClick={() => {
+                        if (isMobile && result.topMatches && result.topMatches.length > 1) {
+                            toggleCardExpansion(idx);
+                        }
+                    }}
+                >
                     <div className="flex items-center gap-1">
                         <span className="font-bold text-xs text-gray-500">
                             #{viewMode === 'reading' ? displayIdx + 1 : idx + 1}
@@ -67,6 +74,9 @@ const DetectionCard = ({
                         <span className={`text-xs ${conf >= 70 ? 'text-patina' : conf >= 50 ? 'text-ochre' : 'text-rust'}`}>
                             {conf}%
                         </span>
+                        {isMobile && result.topMatches && result.topMatches.length > 1 && (
+                            <span className="text-xs text-gray-400">({result.topMatches.length - 1} alts)</span>
+                        )}
                     </div>
                     <div className="font-semibold text-sm truncate">
                         {showArabicLabels && result.glyph.arabic ? result.glyph.arabic : result.glyph.name}
@@ -155,17 +165,22 @@ const DetectionCard = ({
             
             {/* Expanded: Alternative matches */}
             {isExpanded && result.topMatches && result.topMatches.length > 1 && (
-                <div className="px-2 pb-2 border-t border-gray-200 bg-gray-100 pt-2">
-                    <div className="text-xs text-gray-500 mb-1">Alternative matches:</div>
-                    <div className="flex flex-wrap gap-1">
+                <div className={`px-2 pb-2 border-t border-gray-200 ${isMobile ? 'bg-amber-50' : 'bg-gray-100'} pt-2`}>
+                    <div className={`text-xs ${isMobile ? 'text-amber-700 font-semibold' : 'text-gray-500'} mb-2`}>
+                        {isMobile ? '👆 Tap to switch glyph:' : 'Alternative matches:'}
+                    </div>
+                    <div className={`flex flex-wrap gap-${isMobile ? '2' : '1'}`}>
                         {result.topMatches.slice(1, 6).map((alt, altIdx) => (
                             <button 
                                 key={altIdx}
-                                onClick={() => changeGlyphAssignment(idx, alt.glyph)}
-                                className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-300 rounded text-xs"
+                                onClick={() => {
+                                    changeGlyphAssignment(idx, alt.glyph);
+                                    if (isMobile) toggleCardExpansion(idx); // Auto-close on mobile after selection
+                                }}
+                                className={`flex items-center gap-2 ${isMobile ? 'px-4 py-3' : 'px-2 py-1'} bg-white border-2 border-gray-300 hover:border-ancient-purple rounded ${isMobile ? 'text-sm' : 'text-xs'} active:scale-95 transition-transform`}
                                 title={`Switch to ${alt.glyph.name} (${Math.round(alt.confidence * 100)}%)`}>
                                 {glyphThumbnails[alt.glyph.id] && (
-                                    <img src={glyphThumbnails[alt.glyph.id]} alt="" className="w-5 h-5 object-contain" />
+                                    <img src={glyphThumbnails[alt.glyph.id]} alt="" className={`${isMobile ? 'w-8 h-8' : 'w-5 h-5'} object-contain`} />
                                 )}
                                 <span className="font-medium">{alt.glyph.transliteration || alt.glyph.name}</span>
                                 <span className="text-gray-400">{Math.round(alt.confidence * 100)}%</span>
