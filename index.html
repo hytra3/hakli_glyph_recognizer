@@ -141,7 +141,7 @@
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
     
-    <!-- UI Components (loaded as Babel) - v260121b cache-bust -->
+    <!-- UI Components (loaded as Babel) - v260121c cache-bust -->
     <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260117e"></script>
     <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260117e"></script>
@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260121b';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile Feature Parity!)');
+        const APP_VERSION = 'v260121c';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile Boxes Fixed!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -3387,7 +3387,10 @@
                         <div className="lg:hidden fixed inset-0 z-50 flex flex-row-reverse">
                             <div className="w-80 max-w-[85vw] bg-white shadow-xl overflow-y-auto flex flex-col">
                                 <div className="p-3 bg-patina text-white flex justify-between items-center">
-                                    <span className="font-semibold">🔍 Detections ({recognitionResults.length})</span>
+                                    <span className="font-semibold">
+                                        🔍 Detections ({recognitionResults.filter(r => Math.round(r.confidence * 100) >= confidenceThreshold).length}
+                                        {confidenceThreshold > 0 ? `/${recognitionResults.length}` : ''})
+                                    </span>
                                     <button onClick={() => setMobilePanel(null)} className="text-xl px-2">✕</button>
                                 </div>
                                 <div className="p-3 space-y-2 flex-1 overflow-y-auto">
@@ -4784,15 +4787,26 @@
                                         
                                         {/* Manual Box Drawing Overlay - mobile */}
                                         {manualBoxMode && drawingBox && (() => {
-                                            const left = Math.min(drawingBox.startX, drawingBox.currentX);
-                                            const top = Math.min(drawingBox.startY, drawingBox.currentY);
+                                            const container = imageContainerRef.current;
+                                            if (!container) return null;
+                                            
+                                            // Find the image element
+                                            const img = container.querySelector('img');
+                                            if (!img) return null;
+                                            
+                                            // Use offsetLeft/Top for actual image position within the centered container
+                                            const offsetX = img.offsetLeft || 0;
+                                            const offsetY = img.offsetTop || 0;
+                                            
+                                            const left = offsetX + Math.min(drawingBox.startX, drawingBox.currentX);
+                                            const top = offsetY + Math.min(drawingBox.startY, drawingBox.currentY);
                                             const width = Math.abs(drawingBox.currentX - drawingBox.startX);
                                             const height = Math.abs(drawingBox.currentY - drawingBox.startY);
                                             
                                             return (
                                                 <div 
                                                     className="absolute border-2 border-dashed border-amber-500 bg-amber-500/20 pointer-events-none"
-                                                    style={{ left, top, width, height }}
+                                                    style={{ left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` }}
                                                 />
                                             );
                                         })()}
@@ -4819,8 +4833,69 @@
                                             );
                                         })()}
                                         
-                                        {/* Detection boxes overlay - REMOVED from mobile for cleaner view */}
-                                        {/* Detections are shown in the side panel instead */}
+                                        {/* Detection boxes overlay - mobile */}
+                                        {!eraserMode && recognitionResults.map((result, index) => {
+                                            // Filter by confidence threshold
+                                            if (Math.round(result.confidence * 100) < confidenceThreshold) return null;
+                                            
+                                            const validation = validations[index];
+                                            const isSelected = selectedRegions.has(index);
+                                            const isExcluded = excludedDetections.has(index);
+                                            
+                                            let boxClass = 'detection-box unvalidated';
+                                            let labelBg = 'bg-stone';
+                                            
+                                            if (isSelected) { boxClass = 'detection-box selected'; labelBg = 'bg-ochre'; }
+                                            else if (validation?.isCorrect) { boxClass = 'detection-box validated-correct'; labelBg = 'bg-patina'; }
+                                            else if (validation && !validation.isCorrect) { boxClass = 'detection-box validated-incorrect'; labelBg = 'bg-rust'; }
+                                            if (result.confidence < 0.5) boxClass += ' uncertain';
+                                            if (isExcluded) boxClass += ' opacity-50';
+                                            
+                                            const container = imageContainerRef.current;
+                                            if (!container) return null;
+                                            
+                                            // Find the image element
+                                            const img = container.querySelector('img');
+                                            if (!img) return null;
+                                            
+                                            // Use tracked recognition source dimensions if available
+                                            const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
+                                            const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
+                                            
+                                            // Use getBoundingClientRect for display dimensions (more reliable on mobile)
+                                            const imgRect = img.getBoundingClientRect();
+                                            const displayWidth = imgRect.width;
+                                            const displayHeight = imgRect.height;
+                                            
+                                            // Skip rendering if dimensions aren't ready
+                                            if (!displayWidth || !displayHeight || !sourceWidth || !sourceHeight) return null;
+                                            
+                                            // Scale calculation
+                                            const scaleX = displayWidth / sourceWidth;
+                                            const scaleY = displayHeight / sourceHeight;
+                                            
+                                            // Get image offset position
+                                            const imgOffsetX = img.offsetLeft || 0;
+                                            const imgOffsetY = img.offsetTop || 0;
+                                            
+                                            return (
+                                                <div key={`box-${index}`} className={boxClass}
+                                                    style={{
+                                                        left: imgOffsetX + result.position.x * scaleX,
+                                                        top: imgOffsetY + result.position.y * scaleY,
+                                                        width: result.position.width * scaleX,
+                                                        height: result.position.height * scaleY
+                                                    }}
+                                                    onClick={() => setSelectedRegions(prev => {
+                                                        const next = new Set(prev);
+                                                        next.has(index) ? next.delete(index) : next.add(index);
+                                                        return next;
+                                                    })}
+                                                    title={`${result.glyph.name} (${Math.round(result.confidence * 100)}%)`}>
+                                                    {/* Don't show labels on mobile - too cluttered */}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
