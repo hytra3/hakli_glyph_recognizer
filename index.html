@@ -152,8 +152,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260121c';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Mobile Boxes Fixed!)');
+        const APP_VERSION = 'v260121e';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Unique Keys Fix!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -3551,13 +3551,13 @@
                                                 : recognitionResults.map((_, i) => i).filter(i => Math.round(recognitionResults[i]?.confidence * 100) >= confidenceThreshold)
                                             ).map((idx, displayIdx) => {
                                                 const result = recognitionResults[idx];
-                                                if (!result) return null;
+                                                if (!result || displayIdx < 0) return null;
                                                 const conf = Math.round(result.confidence * 100);
                                                 const validation = validations[idx];
                                                 const isExpanded = expandedCards.has(idx);
                                                 
                                                 return (
-                                                    <div key={idx} className="bg-gray-50 rounded border">
+                                                    <div key={`m-card-${idx}-${result.position.x}-${result.position.y}`} className="bg-gray-50 rounded border">
                                                         {/* Main card */}
                                                         <div className="flex items-center gap-2 p-2">
                                                             {/* Both thumbnails side by side */}
@@ -4420,7 +4420,7 @@
                                                     : recognitionResults.map((_, i) => i).filter(i => Math.round(recognitionResults[i]?.confidence * 100) >= confidenceThreshold)
                                                 ).map((idx, displayIdx) => {
                                                     const result = recognitionResults[idx];
-                                                    if (!result) return null;
+                                                    if (!result || displayIdx < 0) return null;
                                                     
                                                     const validation = validations[idx];
                                                     const isSelected = selectedRegions.has(idx);
@@ -4435,7 +4435,7 @@
                                                     else if (validation && !validation.isCorrect) borderColor = 'border-rust';
                                                     
                                                     return (
-                                                        <div key={idx} 
+                                                        <div key={`d-card-${idx}-${result.position.x}-${result.position.y}`} 
                                                             className={`border-2 ${borderColor} rounded-lg ${isSelected ? 'bg-yellow-50' : ''} ${isExcluded ? 'opacity-50' : ''} ${viewMode === 'reading' ? 'cursor-grab' : ''} ${draggedCardIdx === displayIdx ? 'opacity-50' : ''} ${dragOverCardIdx === displayIdx ? 'border-ochre border-dashed' : ''}`}
                                                             draggable={viewMode === 'reading'}
                                                             onDragStart={viewMode === 'reading' ? (e) => handleDragStart(e, displayIdx) : undefined}
