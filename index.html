@@ -153,8 +153,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260121g';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Manual Box Debug!)');
+        const APP_VERSION = 'v260121h';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Manual Box Coordinates Fixed!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -1577,41 +1577,60 @@
                     return;
                 }
                 
-                const imgRect = img.getBoundingClientRect();
-                let renderedWidth = imgRect.width;
-                let renderedHeight = imgRect.height;
+                // Wait a tick for the image to be fully rendered
+                if (!img.complete || img.naturalWidth === 0) {
+                    console.warn('❌ Image not fully loaded yet');
+                    return;
+                }
                 
-                // Fallback to natural dimensions if rendered dimensions are 0
-                if (renderedWidth === 0 || renderedHeight === 0) {
-                    console.warn('⚠️ Rendered dimensions are 0, using natural dimensions');
-                    renderedWidth = img.naturalWidth;
-                    renderedHeight = img.naturalHeight;
-                    
-                    if (renderedWidth === 0 || renderedHeight === 0) {
-                        console.error('❌ Image not loaded yet');
-                        return;
-                    }
+                const imgRect = img.getBoundingClientRect();
+                const containerRect = imageContainerRef.current.getBoundingClientRect();
+                
+                // The image is centered in the container, so we need to find its actual position
+                // Calculate how the image is sized within the container
+                const containerWidth = containerRect.width;
+                const containerHeight = containerRect.height;
+                const imageAspect = img.naturalWidth / img.naturalHeight;
+                const containerAspect = containerWidth / containerHeight;
+                
+                let renderedWidth, renderedHeight, offsetX, offsetY;
+                
+                if (containerAspect > imageAspect) {
+                    // Container is wider than image - image is constrained by height
+                    renderedHeight = containerHeight;
+                    renderedWidth = renderedHeight * imageAspect;
+                    offsetX = (containerWidth - renderedWidth) / 2;
+                    offsetY = 0;
+                } else {
+                    // Container is taller than image - image is constrained by width
+                    renderedWidth = containerWidth;
+                    renderedHeight = renderedWidth / imageAspect;
+                    offsetX = 0;
+                    offsetY = (containerHeight - renderedHeight) / 2;
                 }
                 
                 console.log('📦 Manual box start:', { 
-                    x: Math.round((e.clientX - imgRect.left) / canvasZoom), 
-                    y: Math.round((e.clientY - imgRect.top) / canvasZoom), 
-                    imgW: Math.round(renderedWidth), 
-                    imgH: Math.round(renderedHeight),
+                    containerW: Math.round(containerWidth),
+                    containerH: Math.round(containerHeight),
+                    renderedW: Math.round(renderedWidth),
+                    renderedH: Math.round(renderedHeight),
+                    offsetX: Math.round(offsetX),
+                    offsetY: Math.round(offsetY),
                     naturalW: img.naturalWidth,
-                    naturalH: img.naturalHeight,
-                    rectW: imgRect.width,
-                    rectH: imgRect.height
+                    naturalH: img.naturalHeight
                 });
                 
-                // Calculate position relative to the image element directly
-                // Account for zoom transform
-                const x = (e.clientX - imgRect.left) / canvasZoom;
-                const y = (e.clientY - imgRect.top) / canvasZoom;
+                // Calculate position relative to the container
+                const x = (e.clientX - containerRect.left - offsetX) / canvasZoom;
+                const y = (e.clientY - containerRect.top - offsetY) / canvasZoom;
+                
+                console.log('Touch at:', { x: Math.round(x), y: Math.round(y) });
                 
                 // Only start if click is within image bounds
                 if (x >= 0 && x <= renderedWidth && y >= 0 && y <= renderedHeight) {
                     setDrawingBox({ startX: x, startY: y, currentX: x, currentY: y });
+                } else {
+                    console.warn('Touch outside image bounds');
                 }
             }, [manualBoxMode, canvasZoom]);
             
@@ -1619,14 +1638,27 @@
                 if (!drawingBox || !imageContainerRef.current) return;
                 
                 const img = imageRef.current || imageContainerRef.current.querySelector('img');
-                if (!img) return;
+                if (!img || !img.complete) return;
                 
-                const imgRect = img.getBoundingClientRect();
+                const containerRect = imageContainerRef.current.getBoundingClientRect();
+                const containerWidth = containerRect.width;
+                const containerHeight = containerRect.height;
+                const imageAspect = img.naturalWidth / img.naturalHeight;
+                const containerAspect = containerWidth / containerHeight;
                 
-                // Calculate position relative to the image element directly
-                // Account for zoom transform
-                const x = (e.clientX - imgRect.left) / canvasZoom;
-                const y = (e.clientY - imgRect.top) / canvasZoom;
+                let offsetX, offsetY;
+                if (containerAspect > imageAspect) {
+                    const renderedWidth = containerHeight * imageAspect;
+                    offsetX = (containerWidth - renderedWidth) / 2;
+                    offsetY = 0;
+                } else {
+                    const renderedHeight = containerWidth / imageAspect;
+                    offsetX = 0;
+                    offsetY = (containerHeight - renderedHeight) / 2;
+                }
+                
+                const x = (e.clientX - containerRect.left - offsetX) / canvasZoom;
+                const y = (e.clientY - containerRect.top - offsetY) / canvasZoom;
                 
                 setDrawingBox(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
             }, [drawingBox, canvasZoom]);
@@ -1635,14 +1667,29 @@
                 if (!drawingBox || !imageContainerRef.current) return;
                 
                 const img = imageRef.current || imageContainerRef.current.querySelector('img');
-                if (!img) return;
+                if (!img || !img.complete) return;
                 
                 const sourceWidth = recognitionSourceDims?.width || img.naturalWidth;
                 const sourceHeight = recognitionSourceDims?.height || img.naturalHeight;
                 
-                // Simple scale calculation
-                const scaleX = sourceWidth / img.clientWidth;
-                const scaleY = sourceHeight / img.clientHeight;
+                const containerRect = imageContainerRef.current.getBoundingClientRect();
+                const containerWidth = containerRect.width;
+                const containerHeight = containerRect.height;
+                const imageAspect = img.naturalWidth / img.naturalHeight;
+                const containerAspect = containerWidth / containerHeight;
+                
+                let renderedWidth, renderedHeight;
+                if (containerAspect > imageAspect) {
+                    renderedHeight = containerHeight;
+                    renderedWidth = renderedHeight * imageAspect;
+                } else {
+                    renderedWidth = containerWidth;
+                    renderedHeight = renderedWidth / imageAspect;
+                }
+                
+                // Scale from rendered size to source size
+                const scaleX = sourceWidth / renderedWidth;
+                const scaleY = sourceHeight / renderedHeight;
                 
                 const x = Math.min(drawingBox.startX, drawingBox.currentX) * scaleX;
                 const y = Math.min(drawingBox.startY, drawingBox.currentY) * scaleY;
