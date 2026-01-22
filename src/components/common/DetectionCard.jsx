@@ -35,7 +35,8 @@ const DetectionCard = ({
     changeGlyphAssignment,
     toggleWordBoundary,
     toggleColumnBreak,
-    toggleLineBreak
+    toggleLineBreak,
+    openGlyphSelector // Function to open chart for manual selection
 }) => {
     const conf = Math.round(result.confidence * 100);
     
@@ -186,6 +187,19 @@ const DetectionCard = ({
                                 <span className="text-gray-400">{Math.round(alt.confidence * 100)}%</span>
                             </button>
                         ))}
+                        
+                        {/* More button to open full chart */}
+                        {openGlyphSelector && (
+                            <button 
+                                onClick={() => {
+                                    openGlyphSelector(idx);
+                                    if (isMobile) toggleCardExpansion(idx); // Close alternatives when opening chart
+                                }}
+                                className={`flex items-center gap-2 ${isMobile ? 'px-4 py-3' : 'px-2 py-1'} bg-ancient-purple text-white border-2 border-ancient-purple rounded ${isMobile ? 'text-sm font-semibold' : 'text-xs'} active:scale-95 transition-transform`}
+                                title="Browse full glyph chart">
+                                📊 {isMobile ? 'More...' : 'Chart'}
+                            </button>
+                        )}
                     </div>
                 </div>
             )}

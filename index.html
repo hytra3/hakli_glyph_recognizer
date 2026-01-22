@@ -153,8 +153,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260121j';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Quick Glyph Substitution!)');
+        const APP_VERSION = 'v260122a';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Quick Glyph Substitution + More Button!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -3691,6 +3691,13 @@
                                                         toggleWordBoundary={toggleWordBoundary}
                                                         toggleColumnBreak={toggleColumnBreak}
                                                         toggleLineBreak={toggleLineBreak}
+                                                        openGlyphSelector={(detectionIdx) => {
+                                                            setShowGlyphSelector({ 
+                                                                mode: 'relabel', 
+                                                                detectionIndex: detectionIdx 
+                                                            });
+                                                            setGlyphSelectorSearch('');
+                                                        }}
                                                     />
                                                 );
                                             })}
