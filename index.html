@@ -153,8 +153,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260122a';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Quick Glyph Substitution + More Button!)');
+        const APP_VERSION = 'v260122b';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (More Button in All Alternatives!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -4699,6 +4699,22 @@
                                                                                 <span className="text-xs text-gray-400">{Math.round(alt.confidence * 100)}%</span>
                                                                             </button>
                                                                         ))}
+                                                                        
+                                                                        {/* More button to open full chart */}
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setShowGlyphSelector({ 
+                                                                                    mode: 'relabel', 
+                                                                                    detectionIndex: idx 
+                                                                                });
+                                                                                setGlyphSelectorSearch('');
+                                                                                toggleCardExpansion(idx); // Close alternatives
+                                                                            }}
+                                                                            className="flex items-center gap-1 px-2 py-1 bg-ancient-purple text-white border border-ancient-purple rounded hover:bg-ancient-purple/80 transition-colors"
+                                                                            title="Browse full glyph chart">
+                                                                            <span className="text-xs font-semibold">📊 Chart</span>
+                                                                        </button>
                                                                     </div>
                                                                 </div>
                                                             )}
