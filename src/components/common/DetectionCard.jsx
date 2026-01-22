@@ -36,7 +36,8 @@ const DetectionCard = ({
     toggleWordBoundary,
     toggleColumnBreak,
     toggleLineBreak,
-    openGlyphSelector // Function to open chart for manual selection
+    openGlyphSelector, // Function to open chart for manual selection
+    addToChart // Function to add detection as new template to chart
 }) => {
     const conf = Math.round(result.confidence * 100);
     
@@ -48,22 +49,40 @@ const DetectionCard = ({
             <div className="flex items-center gap-2 p-2">
                 {/* Both thumbnails side by side */}
                 <div className="flex gap-1 flex-shrink-0">
+                    {/* First thumbnail (detected) - tap to add to chart */}
                     {result.thumbnail && (
-                        <img src={result.thumbnail} alt="det" 
-                            className="w-10 h-10 object-contain bg-white rounded border" 
-                            title="Detected" />
+                        <img 
+                            src={result.thumbnail} 
+                            alt="det" 
+                            onClick={() => {
+                                if (addToChart) {
+                                    addToChart(idx);
+                                }
+                            }}
+                            className={`w-10 h-10 object-contain bg-white rounded border ${addToChart ? 'cursor-pointer hover:border-patina hover:border-2 active:scale-95 transition-transform' : ''}`}
+                            title={addToChart ? "Tap to add as training template" : "Detected"} 
+                        />
                     )}
+                    {/* Second thumbnail (chart) - tap to see alternatives */}
                     {glyphThumbnails[result.glyph.id] && (
-                        <img src={glyphThumbnails[result.glyph.id]} alt="chart" 
-                            className="w-10 h-10 object-contain bg-white rounded border-2 border-ancient-purple" 
-                            title="Chart" />
+                        <img 
+                            src={glyphThumbnails[result.glyph.id]} 
+                            alt="chart" 
+                            onClick={() => {
+                                if (result.topMatches && result.topMatches.length > 1) {
+                                    toggleCardExpansion(idx);
+                                }
+                            }}
+                            className={`w-10 h-10 object-contain bg-white rounded border-2 border-ancient-purple ${result.topMatches && result.topMatches.length > 1 ? 'cursor-pointer hover:border-ochre active:scale-95 transition-transform' : ''}`}
+                            title={result.topMatches && result.topMatches.length > 1 ? "Tap to see alternatives" : "Chart template"} 
+                        />
                     )}
                 </div>
                 
                 <div 
-                    className={`flex-1 min-w-0 ${isMobile && result.topMatches && result.topMatches.length > 1 ? 'cursor-pointer active:bg-gray-100' : ''}`}
+                    className={`flex-1 min-w-0 ${result.topMatches && result.topMatches.length > 1 ? 'cursor-pointer hover:bg-gray-50 active:bg-gray-100 rounded transition-colors' : ''}`}
                     onClick={() => {
-                        if (isMobile && result.topMatches && result.topMatches.length > 1) {
+                        if (result.topMatches && result.topMatches.length > 1) {
                             toggleCardExpansion(idx);
                         }
                     }}
@@ -75,7 +94,7 @@ const DetectionCard = ({
                         <span className={`text-xs ${conf >= 70 ? 'text-patina' : conf >= 50 ? 'text-ochre' : 'text-rust'}`}>
                             {conf}%
                         </span>
-                        {isMobile && result.topMatches && result.topMatches.length > 1 && (
+                        {result.topMatches && result.topMatches.length > 1 && (
                             <span className="text-xs text-gray-400">({result.topMatches.length - 1} alts)</span>
                         )}
                     </div>

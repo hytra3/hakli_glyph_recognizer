@@ -130,7 +130,7 @@
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v260122b -->
+    <!-- Current version: v260122d -->
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -146,19 +146,19 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260122b"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260122b"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260122b"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260122b"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260122b"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260122b"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260122b"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260122b"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260122d"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260122d"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260122d"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260122d"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260122d"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260122d"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260122d"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260122d"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260122b';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (More Button in All Alternatives!)');
+        const APP_VERSION = 'v260122d';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Smart Thumbnail Taps!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -1050,6 +1050,61 @@
                     setRecognitionSourceDims(null);
                 }
             }, [originalImage, recognitionResults.length]);
+            
+            // ========== START NEW INSCRIPTION ==========
+            const startNewInscription = useCallback(() => {
+                // Check for unsaved work
+                const hasWork = recognitionResults.length > 0 || inscriptionTitle || inscriptionNotes;
+                
+                if (hasWork) {
+                    const message = hasUnsavedChanges 
+                        ? "You have UNSAVED changes! Starting a new inscription will discard all current work.\n\nAre you sure you want to continue?"
+                        : "Starting a new inscription will clear all current work.\n\nAre you sure you want to continue?";
+                    
+                    if (!confirm(message)) {
+                        return; // User cancelled
+                    }
+                }
+                
+                // Clear everything
+                setOriginalImage(null);
+                setDisplayImage(null);
+                setRecognitionResults([]);
+                setValidations({});
+                setChangeLog([]);
+                setReadingOrder([]);
+                setSelectedRegions(new Set());
+                setExcludedDetections(new Set());
+                setWordBoundaries(new Set());
+                setColumnBreaks(new Set());
+                setLineBreaks(new Set());
+                setExpandedCards(new Set());
+                setInscriptionTitle('');
+                setInscriptionNotes('');
+                setInscriptionComplete(false);
+                setCurrentInscriptionId(null);
+                setRecognitionSourceDims(null);
+                setHasUnsavedChanges(false);
+                
+                // Clear canvas
+                const canvas = canvasRef.current;
+                if (canvas) {
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+                
+                // Clear OpenCV mats
+                if (originalMatRef.current) {
+                    originalMatRef.current.delete();
+                    originalMatRef.current = null;
+                }
+                if (preprocessedMatRef.current) {
+                    preprocessedMatRef.current.delete();
+                    preprocessedMatRef.current = null;
+                }
+                
+                console.log('🆕 Started new inscription - all data cleared');
+            }, [recognitionResults.length, inscriptionTitle, inscriptionNotes, hasUnsavedChanges]);
             
             // ========== REAL-TIME PREPROCESSING ==========
             // Auto-apply preprocessing when settings change (with debounce)
@@ -3303,6 +3358,13 @@
                                     <div className="bg-gray-50 rounded-lg p-3">
                                         <h3 className="font-bold text-gray-700 mb-2 text-sm">📷 Image</h3>
                                         <div className="flex gap-2">
+                                            <button 
+                                                onClick={startNewInscription}
+                                                className="px-3 py-2 bg-rust text-white rounded-lg text-sm font-medium"
+                                                title="Start new inscription (clears all data)"
+                                            >
+                                                🆕
+                                            </button>
                                             <button onClick={() => { fileInputRef.current?.click(); setMobilePanel(null); }} disabled={isImageLoading}
                                                 className="flex-1 px-3 py-2 bg-ancient-purple text-white rounded-lg text-sm font-medium disabled:bg-gray-300">
                                                 {isImageLoading ? '⏳ Loading...' : (originalImage ? '🔄 Change Image' : '📤 Upload Image')}
@@ -3702,6 +3764,13 @@
                                                             });
                                                             setGlyphSelectorSearch('');
                                                         }}
+                                                        addToChart={(detectionIdx) => {
+                                                            // Open chart manager in training mode with this detection
+                                                            setShowChartManager(true);
+                                                            setTrainingMode(true);
+                                                            // TODO: Could pre-select this detection for adding
+                                                            console.log('📚 Add to chart:', detectionIdx);
+                                                        }}
                                                     />
                                                 );
                                             })}
@@ -3829,6 +3898,13 @@
                                         }}
                                     />
                                     <div className="flex gap-2">
+                                        <button 
+                                            onClick={startNewInscription}
+                                            className="px-3 py-2 bg-rust text-white rounded-lg hover:bg-rust/80 text-sm font-medium"
+                                            title="Start new inscription (clears all data)"
+                                        >
+                                            🆕 New
+                                        </button>
                                         <button onClick={() => fileInputRef.current?.click()} disabled={isImageLoading}
                                             className="flex-1 px-3 py-2 bg-ancient-purple text-white rounded-lg hover:bg-[#4a3d5a] text-sm font-medium disabled:bg-gray-300">
                                             {isImageLoading ? '⏳ Loading...' : (originalImage ? '🔄 Change Image' : '📤 Upload Image')}
