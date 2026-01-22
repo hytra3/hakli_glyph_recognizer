@@ -157,8 +157,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260122d';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Smart Thumbnail Taps!)');
+        const APP_VERSION = 'v260122e';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (New Button in Mobile Header!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -3287,12 +3287,19 @@
                     )}
                     
                     {/* Mobile Navigation Bar - Only visible on small screens */}
-                    <div className="lg:hidden flex items-center justify-between px-4 py-2 bg-white border-b shadow-sm">
+                    <div className="lg:hidden flex items-center justify-between px-4 py-2 bg-white border-b shadow-sm gap-2">
                         <button 
                             onClick={() => setMobilePanel(mobilePanel === 'preprocessing' ? null : 'preprocessing')}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium ${mobilePanel === 'preprocessing' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}
+                            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium ${mobilePanel === 'preprocessing' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}
                         >
                             ☰ Preprocess
+                        </button>
+                        <button 
+                            onClick={startNewInscription}
+                            className="px-2 py-2 bg-rust text-white rounded-lg text-sm font-medium"
+                            title="Start new inscription"
+                        >
+                            🆕
                         </button>
                         <button 
                             onClick={() => fileInputRef.current?.click()} 
@@ -3303,7 +3310,7 @@
                         </button>
                         <button 
                             onClick={() => setMobilePanel(mobilePanel === 'detections' ? null : 'detections')}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium ${mobilePanel === 'detections' ? 'bg-patina text-white' : 'bg-gray-100'}`}
+                            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium ${mobilePanel === 'detections' ? 'bg-patina text-white' : 'bg-gray-100'}`}
                         >
                             Detections {recognitionResults.length > 0 ? `(${recognitionResults.length})` : ''} ☰
                         </button>
