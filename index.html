@@ -157,8 +157,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260122e';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (New Button in Mobile Header!)');
+        const APP_VERSION = 'v260122f';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Collapsible Header!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -202,6 +202,7 @@
             
             // Mobile responsive state
             const [mobilePanel, setMobilePanel] = useState(null); // null, 'preprocessing', or 'detections'
+            const [headerCollapsed, setHeaderCollapsed] = useState(false); // Mobile header collapsed state
             
             // Force re-render of detection boxes when layout changes
             const [boxLayoutKey, setBoxLayoutKey] = useState(0);
@@ -3115,16 +3116,29 @@
                     <header className="bg-ancient-purple text-white shadow-lg flex-shrink-0">
                         <div className="max-w-7xl mx-auto px-4 py-2">
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <img src="hh-logo.png" alt="Hoopoe Holdings" className="w-10 h-10 rounded-full object-cover" />
-                                    <div>
-                                        <h1 className="text-base font-bold leading-tight">Hakli Glyph Recognizer</h1>
-                                        <p className="text-xs text-purple-200 leading-tight">
-                                            Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em>
-                                        </p>
-                                        <p className="text-xs text-purple-300 leading-tight">
-                                            beta {APP_VERSION} © hoopoe holdings
-                                        </p>
+                                <div 
+                                    className="flex items-center gap-3 flex-1 cursor-pointer lg:cursor-default"
+                                    onClick={() => setHeaderCollapsed(!headerCollapsed)}
+                                >
+                                    <img src="hh-logo.png" alt="Hoopoe Holdings" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <h1 className={`font-bold leading-tight ${headerCollapsed ? 'text-sm' : 'text-base'}`}>
+                                            Hakli Glyph Recognizer
+                                        </h1>
+                                        {!headerCollapsed && (
+                                            <>
+                                                <p className="text-[10px] text-purple-200 leading-tight">
+                                                    Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em>
+                                                </p>
+                                                <p className="text-[10px] text-purple-300 leading-tight">
+                                                    beta {APP_VERSION} © hoopoe holdings
+                                                </p>
+                                            </>
+                                        )}
+                                    </div>
+                                    {/* Collapse indicator (mobile only) */}
+                                    <div className="lg:hidden text-white/50 text-xs">
+                                        {headerCollapsed ? '▼' : '▲'}
                                     </div>
                                 </div>
                                 
