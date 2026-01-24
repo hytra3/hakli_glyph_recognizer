@@ -157,8 +157,8 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260122f';
-        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Collapsible Header!)');
+        const APP_VERSION = 'v260124a';
+        console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
             const { useState, useEffect, useRef, useCallback, useMemo } = React;
@@ -241,6 +241,21 @@
             const [showTranscription, setShowTranscription] = useState(true);
             const [showEnhancedTranscription, setShowEnhancedTranscription] = useState(false);
             const [transcriptionFormat, setTranscriptionFormat] = useState('horizontal-ltr');
+            
+            // Sync transcription format with reading direction
+            useEffect(() => {
+                const formatMap = {
+                    'ltr': 'horizontal-ltr',
+                    'rtl': 'horizontal-rtl',
+                    'ttb-rtl': 'vertical-rtl',
+                    'ttb-ltr': 'vertical-ltr',
+                    'btt-rtl': 'vertical-rtl', // Bottom-to-top same as top-to-bottom in transcription
+                    'btt-ltr': 'vertical-ltr',
+                    'boustrophedon': 'horizontal-rtl' // Default to RTL for boustrophedon
+                };
+                const newFormat = formatMap[readingDirection] || 'horizontal-ltr';
+                setTranscriptionFormat(newFormat);
+            }, [readingDirection]);
             
             // Storage state
             const [showStorageSection, setShowStorageSection] = useState(true);
