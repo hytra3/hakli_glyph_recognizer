@@ -1,11 +1,12 @@
 // ============================================
-// WAREHOUSE MODAL v260117d
+// WAREHOUSE MODAL v260210
 // Browse and load HKI files from Google Drive
 // Public view (published) + authenticated view (drafts, review, shared)
 // Fixed: thumbnail blinking due to dependency cycle
 // Added: Delete functionality for owned inscriptions
 // Updated: "Generate PDF" → "Generate Booklet" (supports HTML + PDF)
 // Added: Separate "In Review" section for review visibility items
+// Added: 🔄 Refresh Connection button to clear stale auth tokens
 // ============================================
 
 const WarehouseModal = ({
@@ -467,12 +468,32 @@ const WarehouseModal = ({
                                 </button>
                                 <div className="text-sm">
                                     <div className="font-medium">{currentUserEmail}</div>
-                                    <button 
-                                        onClick={onSignOut}
-                                        className="text-white/70 hover:text-white text-xs"
-                                    >
-                                        Sign out
-                                    </button>
+                                    <div className="flex gap-2 items-center">
+                                        <button 
+                                            onClick={onSignOut}
+                                            className="text-white/70 hover:text-white text-xs"
+                                        >
+                                            Sign out
+                                        </button>
+                                        <span className="text-white/30">|</span>
+                                        <button 
+                                            onClick={() => {
+                                                // Clear Drive auth tokens
+                                                localStorage.removeItem('driveAccessToken');
+                                                localStorage.removeItem('driveRefreshToken');
+                                                localStorage.removeItem('driveTokenExpiry');
+                                                // Sign out and prompt fresh sign-in
+                                                onSignOut();
+                                                setTimeout(() => {
+                                                    alert('✅ Auth refreshed! Please sign in again.');
+                                                }, 100);
+                                            }}
+                                            className="text-white/70 hover:text-white text-xs"
+                                            title="Clear auth tokens and sign in fresh"
+                                        >
+                                            🔄 Refresh
+                                        </button>
+                                    </div>
                                 </div>
                             </>
                         ) : (
