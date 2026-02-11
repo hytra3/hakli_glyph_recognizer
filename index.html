@@ -146,18 +146,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260122d"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260122d"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260122d"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260122d"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260122d"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260122d"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260122d"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260122d"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260210b"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260210b"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260210b"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260210b"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260210b"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260210b"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260210b"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260210b"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260124a';
+        const APP_VERSION = 'v260210b';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -1101,13 +1101,6 @@
                 setCurrentInscriptionId(null);
                 setRecognitionSourceDims(null);
                 setHasUnsavedChanges(false);
-                
-                // Clear canvas
-                const canvas = canvasRef.current;
-                if (canvas) {
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                }
                 
                 // Clear OpenCV mats
                 if (originalMatRef.current) {
