@@ -146,18 +146,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260210d"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260210d"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260210d"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260210d"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260210d"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260210d"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260210d"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260210d"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260210e"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260210e"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260210e"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260210e"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260210e"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260210e"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260210e"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260210e"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260210d';
+        const APP_VERSION = 'v260210e';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -1132,6 +1132,19 @@
             useEffect(() => {
                 // Only auto-apply if we have an image and OpenCV
                 if (!originalMatRef.current || !opencvReady) return;
+                
+                // Skip auto-apply if ALL preprocessing is disabled (neutral state)
+                const isNeutral = 
+                    preprocessing.rotation === 0 &&
+                    preprocessing.gaussianBlur === 0 &&
+                    !preprocessing.useAdaptiveThreshold &&
+                    preprocessing.morphologyOperation === 'none' &&
+                    !preprocessing.invertColors;
+                
+                if (isNeutral) {
+                    console.log('⏸️ Skipping auto-apply - preprocessing is neutral');
+                    return;
+                }
                 
                 // Clear previous timeout
                 if (preprocessDebounceRef.current) {
