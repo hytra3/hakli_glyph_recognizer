@@ -2,7 +2,7 @@
 // GOOGLE DRIVE SYNC - Warehouse Edition
 // Cloud storage for HKI inscription files
 // Supports: Public view (no auth) + Authenticated edit
-// v260118b - Fixed listDrafts to include 'review' items
+// v260210 - Added privacy notice before OAuth to explain Drive access
 // ============================================
 
 const DriveSync = {
@@ -129,6 +129,25 @@ const DriveSync = {
                     resolve(false);
                 }
             };
+            
+            // Show privacy notice before OAuth
+            const privacyNotice = `📂 Drive Access Permission
+
+This app requests full Google Drive access for these reasons:
+
+✅ Create and manage your Hakli inscription files
+✅ Access team-shared inscriptions in collaborative folders
+✅ Browse published inscriptions from the community
+
+🔒 PRIVACY PROMISE:
+The app will ONLY access files in the "Hakli_Inscriptions" folder and collaborative team folders. Your personal documents, photos, and other Drive files will never be accessed or modified.
+
+Click OK to proceed to Google's permission screen.`;
+
+            if (!confirm(privacyNotice)) {
+                resolve(false);
+                return;
+            }
             
             try {
                 DriveSync._tokenClient.requestAccessToken({ prompt: 'consent' });
