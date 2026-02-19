@@ -2,12 +2,13 @@
   "name": "Hakli Glyph Recognizer",
   "short_name": "Hakli",
   "description": "Ancient South Arabian script recognition tool for field documentation",
-  "start_url": "/hakli_glyph_recognizer/",
+  "id": "https://hudhud.dev/",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#5d4e6d",
   "orientation": "portrait",
-  "scope": "/hakli_glyph_recognizer/",
+  "scope": "/",
   "icons": [
     {
       "src": "favicon.svg",
@@ -34,7 +35,7 @@
       "name": "New Recognition",
       "short_name": "New",
       "description": "Start analyzing a new inscription",
-      "url": "/hakli_glyph_recognizer/",
+      "url": "/",
       "icons": [{ "src": "favicon.svg", "sizes": "any" }]
     }
   ]

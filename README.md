@@ -1,395 +1,202 @@
-# 📜 Hakli Glyph Recognizer - Modular Edition
+# 📜 Hakli Glyph Recognizer
 
 **Computer vision tool for documenting ancient Dhofari script inscriptions**
 
-![Progress](https://img.shields.io/badge/Progress-67%25-blue)
-![Modules](https://img.shields.io/badge/Modules-10%2F15-green)
-![Lines](https://img.shields.io/badge/Lines-3767-lightgrey)
+![Version](https://img.shields.io/badge/Version-v260218-blue)
+![Status](https://img.shields.io/badge/Status-Production-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
+![PWA](https://img.shields.io/badge/PWA-Enabled-purple)
 
 ---
 
-## 🎯 Project Status
+## 🎯 Overview
 
-### ✅ **Phase 1 Complete** (67%)
+The Hakli Glyph Recognizer is a browser-based tool for field documentation of ancient South Arabian inscriptions found in Dhofar, Oman. It uses computer vision (OpenCV.js) to detect and identify glyphs in inscription photographs, with full offline capability, Google Drive collaboration, and PDF booklet export for community review.
 
-**10 core modules extracted and tested:**
-- Core configuration & utilities
-- Complete storage system (.hki, cache, corrections)
-- Full recognition pipeline (isolation, matching, preprocessing, NMS)
-- Multi-format export (JSON, HTML, CSV, TXT, PNG)
+Built on the decipherment work of Ahmad Al-Jallad. Developed during active fieldwork with Jibbali/Hakli-speaking communities in Salalah, Dhofar.
 
-### ⏳ **Phase 2 In Progress** (33%)
-
-**Remaining work:**
-- Reading order & transcription modules
-- Validation & editing functions
-- React UI component
-- CSS extraction
-- Full integration
+**Live app:** [hudhud.dev](https://hudhud.dev)  
+**Repository:** [github.com/hytra3/hakli_glyph_recognizer](https://github.com/hytra3/hakli_glyph_recognizer)
 
 ---
 
-## 📁 Architecture
+## ✅ Features
+
+### Computer Vision
+- Template matching via OpenCV.js (multi-scale, rotation-aware)
+- Glyph isolation and segmentation
+- Non-maximum suppression for duplicate removal
+- Image preprocessing pipeline (contrast, threshold, denoise)
+- Template learning from validated corrections
+
+### Inscription Management
+- `.hki` file format — complete inscription packages with metadata
+- Sequential inscription IDs (e.g. `DH-2026-001`)
+- Version history and change tracking
+- Local autosave with IndexedDB
+- Undo/redo support
+
+### Collaboration (Google Drive)
+- Sign in with Google to sync `.hki` files to a shared Drive folder
+- Access control — owner/collaborator/public read roles
+- Change tracking with attribution (`addedBy`, `addedAt`)
+- Cloud chart sync — shared glyph chart for team training
+- Warehouse: browse and load community inscriptions
+
+### Export
+- PDF booklets for tribal elder review
+- HTML reports
+- JSON detection data
+- Annotated PNG images
+- Plain text transcriptions
+
+### PWA / Offline
+- Installable as a Progressive Web App
+- Service worker caches core assets and OpenCV.js
+- Full offline capability after first load
+- Works in remote field locations without connectivity
+
+---
+
+## 📁 File Structure
 
 ```
-hakli-modular/
-├── index.html (118 lines)
-│   └── Loads modules in dependency order
+hakli_glyph_recognizer/
+├── index.html                  # Main app (React, ~7200 lines)
+├── sw.js                       # Service worker (offline/PWA)
+├── manifest.json               # PWA manifest
+├── chart-hakli.json            # Glyph chart (auto-loads)
+├── favicon.png / hh-logo.png
 │
 ├── src/
 │   ├── core/
-│   │   └── config.js (130 lines)
-│   │       └── All constants & settings
+│   │   └── config.js           # App constants & settings
 │   │
 │   ├── utils/
-│   │   └── helpers.js (180 lines)
-│   │       └── Common utility functions
+│   │   └── helpers.js          # Shared utility functions
 │   │
 │   ├── storage/
-│   │   ├── hki.js (260 lines)
-│   │   │   └── .hki inscription package system
-│   │   ├── cache.js (240 lines)
-│   │   │   └── localStorage management
-│   │   ├── corrections.js (280 lines)
-│   │   │   └── Learning from user corrections
-│   │   └── export.js (340 lines)
-│   │       └── Multi-format export
+│   │   ├── hki.js              # .hki file format & versioning
+│   │   ├── cache.js            # localStorage management
+│   │   ├── corrections.js      # Correction learning & memory
+│   │   ├── change-tracker.js   # Attribution & audit trail
+│   │   ├── drive-sync.js       # Google Drive integration
+│   │   ├── access-control.js   # Owner/collaborator/public roles
+│   │   ├── sync-manager.js     # Battery-efficient sync coordination
+│   │   └── local-autosave.js   # IndexedDB autosave
 │   │
-│   └── recognition/
-│       ├── isolation.js (180 lines)
-│       │   └── Glyph detection & segmentation
-│       ├── matching.js (250 lines)
-│       │   └── Template matching pipeline
-│       ├── preprocessing.js (200 lines)
-│       │   └── Image enhancement
-│       └── nms.js (220 lines)
-│           └── Duplicate removal & filtering
+│   ├── recognition/
+│   │   ├── preprocessing.js    # Image enhancement pipeline
+│   │   ├── isolation.js        # Glyph detection & segmentation
+│   │   ├── matching.js         # Multi-scale template matching
+│   │   ├── nms.js              # Duplicate removal & filtering
+│   │   ├── validation.js       # Result validation
+│   │   └── template-learning.js # Learn from user corrections
+│   │
+│   ├── reading/
+│   │   ├── reading.js          # Reading order management
+│   │   └── transcription.js    # Transcription generation
+│   │
+│   └── components/
+│       ├── common/
+│       │   ├── CommonComponents.jsx    # Shared UI elements
+│       │   ├── DetectionCard.jsx       # Individual glyph card
+│       │   └── AccessControlUI.jsx     # Permission controls
+│       ├── panels/
+│       │   ├── InscriptionPanel.jsx    # Main inscription view
+│       │   └── ExportPanel.jsx         # Export options
+│       └── modals/
+│           ├── WarehouseModal.jsx      # Community inscription browser
+│           ├── CollaboratorManager.jsx # Team access management
+│           └── BookletGenerator.jsx    # PDF booklet creation
 │
-├── QUICKSTART.md (Quick start & testing)
-├── COMPLETION_STATUS.md (Current status & examples)
-└── REFACTORING_GUIDE.md (Complete technical guide)
+├── primary/                    # Primary glyph template images
+├── variant/                    # Variant template images
+└── examples/                   # Sample inscription photos
 ```
-
-**Total:** ~2,300 lines of modular, documented code
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Clone & Open
+### Use the live app
+Visit [hudhud.dev](https://hudhud.dev) — no installation needed. Sign in with Google to enable Drive sync and collaboration.
+
+### Run locally
 ```bash
-cd hakli-modular
+git clone https://github.com/hytra3/hakli_glyph_recognizer.git
+cd hakli_glyph_recognizer
 python3 -m http.server 8000
 # Open http://localhost:8000
 ```
 
-### 2. Test in Console (F12)
-```javascript
-// Check modules
-console.log('Modules loaded:', {
-    config: typeof CONFIG !== 'undefined',
-    utils: typeof Utils !== 'undefined',
-    hki: typeof HKIStorage !== 'undefined',
-    cache: typeof CacheStorage !== 'undefined'
-});
-
-// Generate inscription ID
-const id = HKIStorage.generateInscriptionId();
-console.log('Generated ID:', id); // "DH-2025-001"
-
-// Test storage
-CacheStorage.saveToCache({ test: 'data' }, 'test_key');
-const loaded = CacheStorage.loadFromCache('test_key');
-console.log('Cache works:', loaded.test === 'data');
-
-// Test corrections
-CorrectionMemory.saveCorrection('h', 'kh', 0.75);
-const suggestion = CorrectionMemory.getSuggestion('h');
-console.log('Suggestion:', suggestion.correctedGlyph);
-```
-
-**See:** `QUICKSTART.md` for full testing guide
+> Note: Must be served over HTTP/HTTPS — opening `index.html` directly as a file will not work due to module loading.
 
 ---
 
-## 💡 Module Overview
+## 🔬 Basic Workflow
 
-### **Core** - Foundation
-- `config.js` - All configuration & constants
-- `helpers.js` - Utility functions (coordinates, IoU, dates, etc.)
-
-### **Storage** - Data Management
-- `hki.js` - Complete .hki file system with version control
-- `cache.js` - localStorage with quota management
-- `corrections.js` - Learn from user corrections
-- `export.js` - Export to JSON/HTML/CSV/TXT/PNG
-
-### **Recognition** - Computer Vision
-- `isolation.js` - Detect & segment glyphs using OpenCV
-- `matching.js` - Multi-scale/rotation template matching
-- `preprocessing.js` - Image enhancement pipeline
-- `nms.js` - Remove duplicates & filter results
+1. **Load image** — upload a photo of a stone inscription
+2. **Preprocess** — adjust contrast, threshold, and denoise settings
+3. **Detect** — run auto-detection or draw manual bounding boxes
+4. **Validate** — confirm or correct each glyph identification
+5. **Transcribe** — set reading order and generate transcription
+6. **Save** — autosaved locally; sync to Drive when signed in
+7. **Export** — PDF booklet, HTML report, or raw data
 
 ---
 
-## 📚 Usage Examples
+## ☁️ Google Drive Setup
 
-### Storage System
-```javascript
-// Generate sequential IDs
-const id1 = HKIStorage.generateInscriptionId(); // "DH-2025-001"
-const id2 = HKIStorage.generateInscriptionId(); // "DH-2025-002"
+Sign in with your Google account to:
+- Sync `.hki` inscription files to the shared `Hakli_Inscriptions` folder
+- Access inscriptions shared by collaborators
+- Contribute to the shared glyph chart (training mode)
 
-// Save complete inscription
-await HKIStorage.saveAsHkiFile(state, id, updateMetadata);
-// ✅ Saves to localStorage
-// ✅ Downloads .hki file
-// ✅ Tracks version history
-
-// Load inscription
-HKIStorage.loadHkiFile(hkiData, {
-    setImage, setRecognitionResults, setValidations,
-    // ... all your state setters
-});
-```
-
-### Recognition Pipeline
-```javascript
-// Preprocess image
-const settings = Preprocessing.getDefaultSettings();
-const processed = Preprocessing.processImageWithSettings(mat, settings);
-
-// Isolate glyphs
-const regions = Isolation.isolateGlyphs(processed);
-const filtered = Isolation.filterOverlappingRegions(regions, 0.3);
-
-// Match templates
-const detections = [];
-for (const region of filtered) {
-    const match = await Matching.matchAllTemplates(regionMat, glyph);
-    if (match.confidence >= 0.30) {
-        detections.push({ glyph, confidence: match.confidence, position: region.bounds });
-    }
-}
-
-// Remove duplicates
-const final = NMS.applyNMS(detections, 0.3);
-
-// Apply learning
-const enhanced = CorrectionMemory.applyLearning(final);
-```
-
-### Export System
-```javascript
-// Export transcription
-ExportUtils.exportTranscription(state);
-// Downloads: DH-2025-001-transcription.txt
-
-// Export detection data
-ExportUtils.exportDetectionData(state);
-// Downloads: DH-2025-001-data.json
-
-// Export HTML report
-ExportUtils.exportHtmlReport(state);
-// Downloads: DH-2025-001-report.html
-
-// Export annotated image
-ExportUtils.exportAnnotatedImage(state, imageElement);
-// Downloads: DH-2025-001-annotated.png
-```
-
-### Correction Learning
-```javascript
-// Save corrections
-CorrectionMemory.saveCorrection('h', 'kh', 0.75);
-CorrectionMemory.saveCorrection('h', 'kh', 0.82);
-
-// Get suggestions
-const suggestion = CorrectionMemory.getSuggestion('h');
-// Returns: { correctedGlyph: 'kh', frequency: 2, score: ... }
-
-// View statistics
-CorrectionMemory.showStatistics();
-// Logs: Total corrections, most frequent patterns, recent corrections
-
-// Export/import
-CorrectionMemory.exportCorrections();
-CorrectionMemory.importCorrections(data, merge);
-```
+> **Note:** The app requests full Drive access in order to support collaboration across team members' files. The app only accesses files in the designated `Hakli_Inscriptions` folder.
 
 ---
 
-## 🎯 Benefits
+## 📊 Tech Stack
 
-### Before (Monolithic)
-- ❌ 4000+ lines in one file
-- ❌ Hard to debug
-- ❌ Can't test parts independently
-- ❌ Scary to modify
-- ❌ Merge conflicts
-
-### After (Modular)
-- ✅ ~150-300 lines per module
-- ✅ Easy to locate bugs
-- ✅ Test modules independently
-- ✅ Clear dependencies
-- ✅ Collaborate on separate files
-- ✅ Scale cleanly
-
----
-
-## 🔬 Testing
-
-Each module includes:
-- ✅ Comprehensive documentation
-- ✅ Usage examples
-- ✅ Error handling
-- ✅ Console logging
-- ✅ Type checking (via JSDoc)
-
-**Test individual modules:**
-```javascript
-// Config
-console.assert(CONFIG.APP_NAME === 'Hakli Glyph Recognizer');
-
-// Utils
-const coords = Utils.getImageCoordinates(event, ref);
-console.assert(coords.x >= 0 && coords.y >= 0);
-
-// HKI
-const id = HKIStorage.generateInscriptionId();
-console.assert(/^DH-\d{4}-\d{3}$/.test(id));
-
-// Cache
-CacheStorage.saveToCache({ test: true }, 'key');
-const data = CacheStorage.loadFromCache('key');
-console.assert(data.test === true);
-```
-
----
-
-## 📖 Documentation
-
-- **QUICKSTART.md** - Get started in 5 minutes
-- **COMPLETION_STATUS.md** - Current status, examples, roadmap
-- **REFACTORING_GUIDE.md** - Complete technical guide
-- **Individual modules** - Inline JSDoc documentation
-
----
-
-## 🛣️ Roadmap
-
-### ✅ Phase 1: Core Modules (COMPLETE)
-- [x] Configuration system
-- [x] Utility functions
-- [x] Storage system (.hki, cache, corrections)
-- [x] Recognition pipeline
-- [x] Export utilities
-
-### ⏳ Phase 2: Remaining Modules (IN PROGRESS)
-- [ ] Reading order management
-- [ ] Transcription generation
-- [ ] Validation & editing functions
-- [ ] UI components (React)
-- [ ] CSS extraction
-
-### 🔮 Phase 3: Integration & Polish
-- [ ] Full end-to-end testing
-- [ ] Performance optimization
-- [ ] Error handling improvements
-- [ ] Deploy to GitHub Pages
-
-### 🚀 Phase 4: Advanced Features
-- [ ] Real-time collaboration
-- [ ] Cloud sync (Google Drive)
-- [ ] Mobile-friendly interface
-- [ ] Community contributions
-
----
-
-## 🤝 Contributing
-
-The modular structure makes contributions easy:
-
-1. **Pick a module** - Work on one file at a time
-2. **Follow the pattern** - Use existing modules as templates
-3. **Test independently** - Each module can be tested alone
-4. **Document thoroughly** - Add JSDoc comments
-5. **Submit PR** - Clear, focused changes
-
----
-
-## 📊 Project Stats
-
-- **Total Lines:** 3,767
-- **Modules:** 10 / 15 (67%)
-- **Functions:** ~80+
-- **Documentation:** Comprehensive
-- **Test Coverage:** Manual (console-based)
-- **Dependencies:** OpenCV.js, React, Tailwind CSS
+- **React 18** — UI framework (in-browser Babel transpilation)
+- **OpenCV.js 4.5** — Computer vision
+- **Tailwind CSS** — Styling
+- **jsPDF** — PDF booklet generation
+- **Google Identity Services** — OAuth 2.0
+- **Google Drive API v3** — Cloud storage
+- **IndexedDB** — Local autosave
+- **Service Worker** — Offline/PWA support
 
 ---
 
 ## 🎓 For Researchers
 
-This tool is designed for:
-- **Field Documentation** - Quick capture in remote locations
-- **Offline Work** - No internet required
-- **Version Control** - Track changes over time
-- **Collaboration** - Share .hki files with colleagues
-- **Data Export** - Multiple formats for analysis
-
-**Perfect for February 2026 fieldwork in Salalah, Oman!**
+This tool is designed for linguistic and epigraphic fieldwork:
+- **Offline-first** — works in remote areas without connectivity
+- **Non-destructive** — original images never modified
+- **Attributable** — all changes tracked with user and timestamp
+- **Portable** — `.hki` files are self-contained and shareable
+- **Printable** — booklet export suitable for community consultation
 
 ---
 
 ## 🏆 Credits
-**Author:** marty heaton (©hudhud holdings)  
-**Project:** Hakli Glyph Recognizer  
+
+**Author:** marty heaton (© hudhud holdings)  
 **Purpose:** Documenting endangered Dhofari script  
-**Language:** Jibbali/Hakli (Semitic, Modern South Arabian)  
-**Location:** Dhofar, Oman
+**Language:** Jibbali/Hakli (Modern South Arabian, Semitic)  
+**Location:** Dhofar, Oman  
+**Fieldwork:** Salalah, January–June 2026
 
 Based on Al-Jallad's decipherment of ancient Dhofari script.
 
 ---
 
-## 📞 Contact
-
-- **GitHub:** [github.com/hytra3/hakli_glyph_recognizer](https://github.com/hytra3/hakli_glyph_recognizer)
-- **Documentation:** See `QUICKSTART.md` for immediate help
-- **Issues:** Use GitHub Issues for bugs/features
-- **Questions:** Check `COMPLETION_STATUS.md` for examples
-
----
-
 ## 📄 License
 
-MIT License - See LICENSE file for details
+MIT License — see LICENSE file for details.
 
 ---
 
-## 🎉 Get Started
-
-```bash
-# 1. Clone
-git clone https://github.com/hytra3/hakli_glyph_recognizer.git
-cd hakli_glyph_recognizer/hakli-modular
-
-# 2. Open
-python3 -m http.server 8000
-
-# 3. Test
-# Open http://localhost:8000
-# Press F12 for console
-# Run tests from QUICKSTART.md
-```
-
-**Ready to document ancient inscriptions!** 📜🔍
-
----
-
-**Last Updated:** November 26, 2025  
-**Version:** Modular v1.0 (67% complete)  
-**Status:** Production-ready core, UI in progress
+**Last Updated:** February 2026 | **Version:** v260218
