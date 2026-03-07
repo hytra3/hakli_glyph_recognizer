@@ -2269,7 +2269,7 @@
     
     <div class="footer">
         <p>Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></p>
-        <p>© 2026 hudhud holdings · Hakli Glyph Recognizer · hudhud.dev</p>
+        <p>© 2026 · Hakli Glyph Recognizer · hudhud.dev</p>
     </div>
 </body>
 </html>`;
@@ -2433,7 +2433,7 @@
                 pdf.setFontSize(8);
                 pdf.setFont('helvetica', 'italic');
                 pdf.text('Based on Ahmad Al-Jallad (2025), The Decipherment of the Dhofari Script', pageWidth / 2, pageHeight - 20, { align: 'center' });
-                pdf.text('© 2026 hudhud holdings · Hakli Glyph Recognizer', pageWidth / 2, pageHeight - 15, { align: 'center' });
+                pdf.text('© 2026 · Hakli Glyph Recognizer', pageWidth / 2, pageHeight - 15, { align: 'center' });
                 
                 // Save
                 pdf.save(`${inscriptionTitle || 'booklet'}_${new Date().toISOString().slice(0,10)}.pdf`);
@@ -3157,7 +3157,7 @@
                                     className="flex items-center gap-3 flex-1 cursor-pointer lg:cursor-default"
                                     onClick={() => setHeaderCollapsed(!headerCollapsed)}
                                 >
-                                    <img src="hh-logo.png" alt="hudhud holdings" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                                    <img src="hh-logo.png" alt="hudhud.dev" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
                                     <div className="flex-1 min-w-0">
                                         <h1 className={`font-bold leading-tight ${headerCollapsed ? 'text-sm' : 'text-base'}`}>
                                             Hakli Glyph Recognizer
@@ -3168,7 +3168,7 @@
                                                     Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em>
                                                 </p>
                                                 <p className="text-[10px] text-purple-300 leading-tight">
-                                                    beta {APP_VERSION} © 2026 hudhud holdings · hudhud.dev
+                                                    beta {APP_VERSION} © 2026 · hudhud.dev
                                                 </p>
                                             </>
                                         )}
