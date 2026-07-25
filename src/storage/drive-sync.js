@@ -3,6 +3,7 @@
 // Cloud storage for HKI inscription files
 // Supports: Public view (no auth) + Authenticated edit
 // v260210 - Added privacy notice before OAuth to explain Drive access
+// v260724a - Grant real Drive permissions on share; fix shared-with-me listing
 // ============================================
 
 const DriveSync = {
@@ -341,35 +342,20 @@ Click OK to proceed to Google's permission screen.`;
      */
     listSharedWithMe: async (userEmail) => {
         if (!DriveSync.isSignedIn()) return [];
-        
-        try {
-            // Check both user's folder and shared folder
-            const folders = [DriveSync.CONFIG.SHARED_FOLDER_ID];
-            if (DriveSync._folderId) folders.push(DriveSync._folderId);
-            
-            const allItems = [];
-            
-            for (const folderId of folders.filter(Boolean)) {
-                const url = `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and trashed=false&fields=files(id,name,properties,appProperties,thumbnailLink,modifiedTime)`;
-                
-                const response = await DriveSync._apiRequest(url);
-                const data = await response.json();
-                if (!data.files) continue;
 
-                // Filter to items shared with this user (not owned by them)
-                const sharedItems = data.files
-                    .filter(file => {
-                        const owner = file.appProperties?.owner;
-                        const collaborators = file.appProperties?.collaborators;
-                        const collabList = collaborators ? JSON.parse(collaborators) : [];
-                        return owner !== userEmail && collabList.includes(userEmail);
-                    })
-                    .map(file => DriveSync._parseFileMetadata(file));
-                
-                allItems.push(...sharedItems);
-            }
-            
-            return allItems;
+        try {
+            // Ask Drive directly for files shared with this user. The old version
+            // searched by parent folder, which never returns individually-shared
+            // files — which is exactly why collaborators saw nothing.
+            const url = `https://www.googleapis.com/drive/v3/files?q=sharedWithMe=true and trashed=false and name contains '.hki'&fields=files(id,name,properties,appProperties,thumbnailLink,modifiedTime)`;
+
+            const response = await DriveSync._apiRequest(url);
+            const data = await response.json();
+            if (!data.files) return [];
+
+            return data.files
+                .filter(file => (file.appProperties?.owner || '') !== userEmail)
+                .map(file => DriveSync._parseFileMetadata(file));
         } catch (error) {
             console.error('Failed to list shared:', error);
             return [];
@@ -528,22 +514,77 @@ Click OK to proceed to Google's permission screen.`;
      * Update HKI collaborators only (without re-uploading content)
      */
     updateHkiCollaborators: async (fileId, collaborators) => {
-        if (!DriveSync.isSignedIn()) {
-            throw new Error('Must be signed in');
+    if (!DriveSync.isSignedIn()) {
+        throw new Error('Must be signed in');
+    }
+
+    // 1. The part that was missing: actually grant/revoke Drive access
+    await DriveSync._syncPermissions(fileId, collaborators, 'reader');
+
+    // 2. Existing behavior: keep the app-level metadata in sync
+    const url = `https://www.googleapis.com/drive/v3/files/${fileId}`;
+    await DriveSync._apiRequest(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            appProperties: { collaborators: JSON.stringify(collaborators) }
+        })
+    });
+
+    console.log('☁️ Updated collaborators for:', fileId);
+    },
+
+    /**
+     * Grant Drive access to a single user (reader by default).
+     */
+    shareFileWithUser: async (fileId, email, role = 'reader') => {
+        const url = `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?sendNotificationEmail=false`;
+        await DriveSync._apiRequest(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role, type: 'user', emailAddress: email })
+        });
+        console.log(`🔓 Shared ${fileId} with ${email} (${role})`);
+    },
+
+    /**
+     * Reconcile a file's real Drive permissions to match the desired collaborator list.
+     * Grants access to added emails, revokes access for removed ones.
+     * NOTE: this makes the app the source of truth — any share you added by hand
+     * in the Drive UI on a .hki file will be removed on the next Save.
+     */
+    _syncPermissions: async (fileId, desiredEmails = [], role = 'reader') => {
+        const desired = new Set(desiredEmails.map(e => e.toLowerCase()).filter(Boolean));
+        const ownerEmail = (DriveSync._userEmail || '').toLowerCase();
+
+        const listUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?fields=permissions(id,emailAddress,role,type)`;
+        const resp = await DriveSync._apiRequest(listUrl);
+        const { permissions = [] } = await resp.json();
+
+        const existingByEmail = {};
+        permissions.forEach(p => {
+            if (p.type === 'user' && p.emailAddress) {
+                existingByEmail[p.emailAddress.toLowerCase()] = p;
+            }
+        });
+
+        // Grant to newly-added collaborators
+        for (const email of desired) {
+            if (email === ownerEmail) continue;
+            if (!existingByEmail[email]) {
+                await DriveSync.shareFileWithUser(fileId, email, role);
+            }
         }
 
-        const url = `https://www.googleapis.com/drive/v3/files/${fileId}`;
-        await DriveSync._apiRequest(url, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                appProperties: {
-                    collaborators: JSON.stringify(collaborators)
-                }
-            })
-        });
-        
-        console.log('☁️ Updated collaborators for:', fileId);
+        // Revoke anyone removed (never the owner)
+        for (const [email, perm] of Object.entries(existingByEmail)) {
+            if (email === ownerEmail || perm.role === 'owner') continue;
+            if (!desired.has(email)) {
+                const delUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/permissions/${perm.id}`;
+                await DriveSync._apiRequest(delUrl, { method: 'DELETE' });
+                console.log(`🔒 Revoked ${email} from ${fileId}`);
+            }
+        }
     },
 
     /**
