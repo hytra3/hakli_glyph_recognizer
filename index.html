@@ -157,7 +157,7 @@
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260724b';
+        const APP_VERSION = 'v260725a';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -167,6 +167,8 @@
             const [originalImage, setOriginalImage] = useState(null);
             const [displayImage, setDisplayImage] = useState(null);
             const [isImageLoading, setIsImageLoading] = useState(false);
+            // When true, recognition auto-runs once the example image + chart + CV are ready
+            const [pendingExampleRecognition, setPendingExampleRecognition] = useState(false);
             
             const [chartData, setChartData] = useState(null);
             const [chartStatus, setChartStatus] = useState('not-loaded');
@@ -925,7 +927,28 @@
                 };
                 reader.readAsDataURL(file);
             }, [opencvReady, loadImageToMat]);
-            
+
+            // ========== TRY AN EXAMPLE ==========
+            // Loads a bundled sample inscription through the same path as a real upload,
+            // then flags it for auto-recognition (handled by an effect once chart + CV are ready).
+            const EXAMPLE_IMAGE_URL = 'examples/KMG_120-126.png';
+            const loadExampleInscription = useCallback(async () => {
+                try {
+                    setIsImageLoading(true);
+                    const resp = await fetch(EXAMPLE_IMAGE_URL);
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    const blob = await resp.blob();
+                    const file = new File([blob], 'sample-inscription.png', { type: blob.type || 'image/png' });
+                    setPendingExampleRecognition(true);
+                    await handleImageUpload({ target: { files: [file], value: '' } });
+                } catch (err) {
+                    console.error('Failed to load example inscription:', err);
+                    setPendingExampleRecognition(false);
+                    setIsImageLoading(false);
+                    alert('❌ Could not load the example inscription. Please try uploading your own image.');
+                }
+            }, [handleImageUpload]);
+
             // ========== PREPROCESSING ==========
             const applyPreprocessing = useCallback(async () => {
                 if (!originalMatRef.current || !opencvReady) {
@@ -2840,7 +2863,18 @@
                     setProcessingStatus('');
                 }
             }, [displayImage, chartData, loadedGlyphImages, opencvReady, loadImageToMat, readingDirection]);
-            
+
+            // Auto-run recognition after the "Try an example" image loads.
+            // Waits until the image, glyph chart, and OpenCV are all ready so it works
+            // even if the user clicks the example button before loading finishes.
+            useEffect(() => {
+                if (pendingExampleRecognition && displayImage && chartStatus === 'loaded'
+                        && opencvReady && !isProcessing && !isImageLoading) {
+                    setPendingExampleRecognition(false);
+                    recognizeGlyphs();
+                }
+            }, [pendingExampleRecognition, displayImage, chartStatus, opencvReady, isProcessing, isImageLoading, recognizeGlyphs]);
+
             // Fallback isolation
             const fallbackIsolation = async (mat) => {
                 const regions = [];
@@ -3197,14 +3231,19 @@
                                             title={chartStatus === 'loaded' ? `${Object.keys(loadedGlyphImages).length} template images loaded for ${chartData?.glyphs?.length || 0} glyphs` : 'Loading glyph chart...'}
                                         >
                                             {chartStatus === 'loaded' 
-                                                ? `✅ ${chartData?.glyphs?.length || 0} glyphs` 
+                                                ? <span>✅ {chartData?.glyphs?.length || 0}<span className="hidden sm:inline"> glyphs</span></span>
                                                 : chartLoadProgress.total > 0 
                                                     ? `⏳ ${Math.round((chartLoadProgress.loaded / chartLoadProgress.total) * 100)}%`
                                                     : `⏳ Loading...`}
                                         </div>
-                                        <div className={`px-2 py-1 rounded-full text-xs ${opencvReady ? 'bg-patina' : 'bg-ochre'}`}>
-                                            {opencvReady ? '✅ CV' : '⏳ CV'}
-                                        </div>
+                                        {!opencvReady && (
+                                            <div
+                                                className="px-2 py-1 rounded-full text-xs bg-ochre animate-pulse"
+                                                title="Loading the computer-vision engine (OpenCV). Glyph recognition becomes available once this finishes."
+                                            >
+                                                ⏳ CV
+                                            </div>
+                                        )}
                                         
                                         {/* Save Status Indicator */}
                                         {recognitionResults.length > 0 && (
@@ -4350,9 +4389,18 @@
                                             </div>{/* End padding wrapper */}
                                         </div>
                                     ) : (
-                                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 px-4 text-center">
                                             <span className="text-5xl mb-3">📷</span>
-                                            <p>Upload an inscription image to begin</p>
+                                            <p className="mb-1">Upload an inscription image to begin</p>
+                                            <p className="text-xs text-gray-400 mb-4">…or see how it works with a sample inscription</p>
+                                            <button
+                                                onClick={loadExampleInscription}
+                                                disabled={isImageLoading}
+                                                className="px-4 py-2 bg-rust text-white rounded-lg hover:bg-rust/80 text-sm font-medium shadow disabled:opacity-50 flex items-center gap-2"
+                                                title="Load a sample Dhofari inscription and run recognition automatically"
+                                            >
+                                                {isImageLoading ? '⏳ Loading…' : '✨ Try an example'}
+                                            </button>
                                         </div>
                                     )}
                                 </div>
