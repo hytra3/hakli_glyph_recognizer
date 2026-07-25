@@ -93,7 +93,7 @@ const CONFIG = {
     
     // Google Drive settings
     DRIVE: {
-        CLIENT_ID: '894554328044-5ocv2t6g8h9ssj80sscniuqgl2t3021m.apps.googleusercontent.com',
+        CLIENT_ID: '533670139668-51vdk21n97p2e9lgubfvmdsnqu3ie2jr.apps.googleusercontent.com',
         SCOPES: 'https://www.googleapis.com/auth/drive.file',
         FOLDER_NAME: 'Hakli_Inscriptions'
     },

@@ -9,7 +9,7 @@
 const DriveSync = {
     // Configuration
     CONFIG: {
-        CLIENT_ID: '894554328044-5ocv2t6g8h9ssj80sscniuqgl2t3021m.apps.googleusercontent.com',
+        CLIENT_ID: '533670139668-51vdk21n97p2e9lgubfvmdsnqu3ie2jr.apps.googleusercontent.com',
         API_KEY: 'AIzaSyAZ6ptZw3XfBZJDUdV9V-GKClCej0iEkRI',
         SCOPES: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email',
         FOLDER_NAME: 'Hakli_Inscriptions',

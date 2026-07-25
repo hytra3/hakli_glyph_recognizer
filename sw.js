@@ -1,7 +1,7 @@
 // Hakli Glyph Recognizer - Service Worker
 // Version 260724a - updated for hudhud.dev
 
-const CACHE_VERSION = 'v260724a';
+const CACHE_VERSION = 'v260724b';
 const CACHE_NAME = `hakli-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `hakli-runtime-${CACHE_VERSION}`;
 
