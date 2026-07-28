@@ -1,7 +1,7 @@
 // Hakli Glyph Recognizer - Service Worker
-// Version 260724a - updated for hudhud.dev
+// Version 260728a - Network First for same-origin app code (no more stale .js)
 
-const CACHE_VERSION = 'v260724b';
+const CACHE_VERSION = 'v260728a';
 const CACHE_NAME = `hakli-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `hakli-runtime-${CACHE_VERSION}`;
 
@@ -103,7 +103,29 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache First strategy for other assets
+  // Same-origin app code & assets (our own .js, .json, etc.) → Network First.
+  // Always fetch the latest when online; fall back to cache only when offline.
+  // THIS is what prevents stale .js modules after a deploy, regardless of
+  // whether CACHE_VERSION was bumped.
+  if (url.origin === self.location.origin) {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => {
+              cache.put(request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Cross-origin CDN libraries (React, Babel, OpenCV, jsPDF...) → Cache First.
+  // These are pinned by URL/version, so caching them is safe and fast.
   event.respondWith(
     caches.match(request)
       .then((cachedResponse) => {
