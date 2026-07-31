@@ -148,7 +148,7 @@
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v260728d --> v260724b
+    <!-- Current version: v260728e --> v260724b
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -164,18 +164,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260728d"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260728d"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260728d"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260728d"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260728d"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260728d"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260728d"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260728d"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260728e"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260728e"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260728e"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260728e"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260728e"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260728e"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260728e"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260728e"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260728d';
+        const APP_VERSION = 'v260728e';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -4557,8 +4557,8 @@
                                                         className="px-1 py-1 rounded border border-gray-300 bg-white text-xs max-w-[90px]"
                                                         title="Reading direction"
                                                     >
-                                                        <option value="rtl">→ RTL</option>
-                                                        <option value="ltr">← LTR</option>
+                                                        <option value="rtl">← RTL</option>
++                                                        <option value="ltr">→ LTR</option>
                                                         <option value="ttb-rtl">↓ TTB-R</option>
                                                         <option value="ttb-ltr">↓ TTB-L</option>
                                                         <option value="boustrophedon">↔ Boust</option>
