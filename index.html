@@ -154,7 +154,7 @@
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v260728i --> 
+    <!-- Current version: v20260801a --> 
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -170,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260728i"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260728i"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260728i"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260728i"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260728i"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260728i"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260728i"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260728i"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=20260801a"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=20260801a"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=20260801a"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=20260801a"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=20260801a"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=20260801a"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=20260801a"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=20260801a"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260728i';
+        const APP_VERSION = 'v20260801a';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -260,6 +260,7 @@
             const [showTranslationSection, setShowTranslationSection] = useState(false);
             const [inscriptionNotes, setInscriptionNotes] = useState('');
             const [inscriptionTitle, setInscriptionTitle] = useState('');
+            const [inscriptionSource, setInscriptionSource] = useState(''); // provenance / citation (e.g. "Al-Jallad 2025, KMH 9-10")
             const [inscriptionComplete, setInscriptionComplete] = useState(false);
             const [transcriptionScript, setTranscriptionScript] = useState('english');
             
@@ -565,6 +566,7 @@
                                     if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
                                     if (data.title) setInscriptionTitle(data.title);
                                     if (data.notes) setInscriptionNotes(data.notes);
+                                    if (data.source) setInscriptionSource(data.source);
                                     if (data.translationEnglish) setTranslationEnglish(data.translationEnglish);
                                     if (data.translationArabic) setTranslationArabic(data.translationArabic);
                                     if (data.readingData) {
@@ -639,6 +641,7 @@
                     inscriptionId: currentInscriptionId,
                     inscriptionTitle: inscriptionTitle || 'Untitled',
                     inscriptionNotes,
+                    inscriptionSource,
                     image: originalImage,
                     displayImage,
                     preprocessing,
@@ -654,7 +657,7 @@
                     visibility,
                     changeLog: changeLog || []
                 };
-            }, [recognitionResults, currentInscriptionId, inscriptionTitle, inscriptionNotes, originalImage,
+            }, [recognitionResults, currentInscriptionId, inscriptionTitle, inscriptionNotes, inscriptionSource, originalImage,
                 displayImage, preprocessing, readingOrder, readingDirection, wordBoundaries, lineBreaks,
                 validations, translationEnglish, translationArabic, audioData, visibility, changeLog]);
 
@@ -670,6 +673,7 @@
                         inscriptionId: currentInscriptionId,
                         title: inscriptionTitle,
                         notes: inscriptionNotes,
+                        source: inscriptionSource,
                         complete: inscriptionComplete,
                         visibility: visibility,
                         image: originalImage,
@@ -702,7 +706,7 @@
                     }));
                 }
             }, [recognitionResults, recognitionSourceDims, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, 
-                translationEnglish, translationArabic, inscriptionTitle, inscriptionNotes, visibility]);
+                translationEnglish, translationArabic, inscriptionTitle, inscriptionNotes, inscriptionSource, visibility]);
             
             // ========== DRIVE AUTO-SYNC (Option A: only after first manual Save) ==========
             // Once an inscription has been saved to Drive at least once (currentFileId is
@@ -994,6 +998,7 @@
                 setCurrentInscriptionId(null);
                 setInscriptionTitle('');
                 setInscriptionNotes('');
+                setInscriptionSource('');
                 setInscriptionComplete(false);
                 setTranslationEnglish('');
                 setTranslationArabic('');
@@ -1032,7 +1037,7 @@
             // ========== TRY AN EXAMPLE ==========
             // Loads a bundled sample inscription through the same path as a real upload,
             // then flags it for auto-recognition (handled by an effect once chart + CV are ready).
-            const EXAMPLE_IMAGE_URL = 'examples/KMG_120-126.png';
+            const EXAMPLE_IMAGE_URL = 'examples/KMH_9-10.png';
             const loadExampleInscription = useCallback(async () => {
                 try {
                     setIsImageLoading(true);
@@ -1042,6 +1047,8 @@
                     const file = new File([blob], 'sample-inscription.png', { type: blob.type || 'image/png' });
                     setPendingExampleRecognition(true);
                     await handleImageUpload({ target: { files: [file], value: '' } });
+                    // Pre-fill provenance for the example (it's from Al-Jallad's 2025 corpus)
+                    setInscriptionSource('Al-Jallad 2025, KMH 9-10');
                 } catch (err) {
                     console.error('Failed to load example inscription:', err);
                     setPendingExampleRecognition(false);
@@ -1233,6 +1240,7 @@
                 setExpandedCards(new Set());
                 setInscriptionTitle('');
                 setInscriptionNotes('');
+                setInscriptionSource('');
                 setInscriptionComplete(false);
                 setCurrentInscriptionId(null);
                 setRecognitionSourceDims(null);
@@ -2192,6 +2200,7 @@
                     '='.repeat(60),
                     'HAKLI INSCRIPTION TRANSCRIPTION',
                     `Title: ${inscriptionTitle || 'Untitled'}`,
+                    ...(inscriptionSource ? [`Source: ${inscriptionSource}`] : []),
                     `Date: ${new Date().toLocaleString()}`,
                     '='.repeat(60),
                     '',
@@ -2350,6 +2359,7 @@
 <body>
     <div class="cover">
         <h1>📜 ${inscriptionTitle || 'Hakli Inscription'}</h1>
+        ${inscriptionSource ? `<p style="font-size:0.85em;color:#666;font-style:italic;">Source: ${inscriptionSource}</p>` : ''}
         <p>${inscriptionNotes || ''}</p>
         <p class="metadata">
             ID: ${currentInscriptionId || 'Unknown'}<br>
@@ -2476,6 +2486,14 @@
                 if (inscriptionNotes) {
                     const notesLines = pdf.splitTextToSize(inscriptionNotes, contentWidth);
                     pdf.text(notesLines, pageWidth / 2, 70, { align: 'center' });
+                }
+                
+                if (inscriptionSource) {
+                    pdf.setFontSize(11);
+                    pdf.setFont('helvetica', 'italic');
+                    const srcLines = pdf.splitTextToSize(`Source: ${inscriptionSource}`, contentWidth);
+                    pdf.text(srcLines, pageWidth / 2, 88, { align: 'center' });
+                    pdf.setFont('helvetica', 'normal');
                 }
                 
                 pdf.setFontSize(10);
@@ -3879,11 +3897,11 @@
                                                 onChange={(e) => setReadingDirection(e.target.value)}
                                                 className="text-xs px-2 py-1 rounded border border-gray-300 bg-white flex-1"
                                             >
-                                                <option value="rtl">RTL</option>
-                                                <option value="ltr">LTR</option>
-                                                <option value="ttb-rtl">TTB-RTL</option>
-                                                <option value="ttb-ltr">TTB-LTR</option>
-                                                <option value="boustrophedon">Boustrophedon</option>
+                                                <option value="rtl">← RTL</option>
+                                                <option value="ltr">→ LTR</option>
+                                                <option value="ttb-rtl">↓ TTB-RTL</option>
+                                                <option value="ttb-ltr">↓ TTB-LTR</option>
+                                                <option value="boustrophedon">↔ Boustrophedon</option>
                                             </select>
                                             <button 
                                                 onClick={() => {
@@ -4041,6 +4059,7 @@
                                                         setCurrentInscriptionId(null);
                                                         setInscriptionTitle('');
                                                         setInscriptionNotes('');
+                                                        setInscriptionSource('');
                                                         setInscriptionComplete(false);
                                                         setTranslationEnglish('');
                                                         setTranslationArabic('');
@@ -4068,6 +4087,7 @@
                                                         if (data.translationArabic) setTranslationArabic(data.translationArabic);
                                                         if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
                                                         if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                        if (data.inscriptionSource) setInscriptionSource(data.inscriptionSource);
                                                         if (data.inscriptionComplete) setInscriptionComplete(data.inscriptionComplete);
                                                         if (data.currentInscriptionId) setCurrentInscriptionId(data.currentInscriptionId);
                                                         if (data.visibility) setVisibility(data.visibility);
@@ -5559,6 +5579,22 @@
                         {/* ===== INSCRIPTION PANEL (Translation & Notes) ===== */}
                         {viewMode === 'reading' && recognitionResults.length > 0 && (
                             <div className="mt-6">
+                                {/* Source / provenance — attribution travels with the .hki data */}
+                                <div className="mb-3 bg-white rounded-lg border border-gray-200 p-3">
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                                        📜 source / provenance
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inscriptionSource}
+                                        onChange={(e) => setInscriptionSource(e.target.value)}
+                                        placeholder="e.g. Al-Jallad 2025, KMH 9-10"
+                                        className="w-full text-sm px-2 py-1 rounded border border-gray-300 bg-white focus:outline-none focus:border-ancient-purple"
+                                    />
+                                    <p className="text-[11px] text-gray-400 mt-1">
+                                        citation or origin for this inscription; saved with the file and shown on exports.
+                                    </p>
+                                </div>
                                 <InscriptionPanel
                                     inscriptionTitle={inscriptionTitle}
                                     inscriptionNotes={inscriptionNotes}
@@ -5784,6 +5820,7 @@
                                                     setTranslationArabic(data.translationArabic || data.translations?.arabic || '');
                                                 if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
                                                 if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                if (data.inscriptionSource) setInscriptionSource(data.inscriptionSource);
                                                 if (data.inscriptionComplete || data.complete) setInscriptionComplete(data.inscriptionComplete || data.complete);
                                                 if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
                                                 if (data.visibility) setVisibility(data.visibility);
@@ -6641,6 +6678,7 @@
                                                     setTranslationArabic(data.translationArabic || data.translations?.arabic || '');
                                                 if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
                                                 if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                if (data.inscriptionSource) setInscriptionSource(data.inscriptionSource);
                                                 if (data.inscriptionComplete || data.complete) setInscriptionComplete(data.inscriptionComplete || data.complete);
                                                 if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
                                                 if (data.accessControl) setAccessControl(data.accessControl);
@@ -6703,6 +6741,7 @@
                                                         setTranslationArabic(data.translationArabic || data.translations?.arabic || '');
                                                     if (data.inscriptionTitle) setInscriptionTitle(data.inscriptionTitle);
                                                     if (data.inscriptionNotes) setInscriptionNotes(data.inscriptionNotes);
+                                                    if (data.inscriptionSource) setInscriptionSource(data.inscriptionSource);
                                                     if (data.inscriptionComplete || data.complete) setInscriptionComplete(data.inscriptionComplete || data.complete);
                                                     if (data.inscriptionId) setCurrentInscriptionId(data.inscriptionId);
                                                     if (data.accessControl) setAccessControl(data.accessControl);
@@ -6901,6 +6940,7 @@
                                 setCurrentInscriptionId(null);
                                 setInscriptionTitle('');
                                 setInscriptionNotes('');
+                                setInscriptionSource('');
                                 setInscriptionComplete(false);
                                 setTranslationEnglish('');
                                 setTranslationArabic('');
