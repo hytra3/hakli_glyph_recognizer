@@ -344,17 +344,16 @@ Click OK to proceed to Google's permission screen.`;
         if (!DriveSync.isSignedIn()) return [];
 
         try {
-            // Ask Drive directly for files shared with this user. The old version
-            // searched by parent folder, which never returns individually-shared
-            // files — which is exactly why collaborators saw nothing.
-            const url = `https://www.googleapis.com/drive/v3/files?q=sharedWithMe=true and trashed=false and name contains '.hki'&fields=files(id,name,properties,appProperties,thumbnailLink,modifiedTime)`;
+            // Drive's `name contains` does PREFIX matching, so `name contains '.hki'`
+            // never matches "Untitled.hki". Filter by mimeType, match the suffix client-side.
+            const url = `https://www.googleapis.com/drive/v3/files?q=sharedWithMe=true and trashed=false and mimeType='application/json'&fields=files(id,name,properties,appProperties,thumbnailLink,modifiedTime)`;
 
             const response = await DriveSync._apiRequest(url);
             const data = await response.json();
             if (!data.files) return [];
 
             return data.files
-                .filter(file => (file.appProperties?.owner || '') !== userEmail)
+                .filter(file => file.name?.endsWith('.hki') && (file.appProperties?.owner || '') !== userEmail)
                 .map(file => DriveSync._parseFileMetadata(file));
         } catch (error) {
             console.error('Failed to list shared:', error);
