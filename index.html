@@ -130,7 +130,7 @@
         }
     </script>
     
-    <<div id="root">
+    <div id="root">
         <div id="app-loading" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f3f4f6;color:#5d4e6d;font-family:system-ui,-apple-system,sans-serif;">
             <div style="width:40px;height:40px;border:3px solid #d6d3d1;border-top-color:#5d4e6d;border-radius:50%;animation:hgr-spin 0.8s linear infinite;"></div>
             <div style="margin-top:16px;font-size:14px;letter-spacing:0.02em;">loading hakli glyph recognizer…</div>
@@ -610,6 +610,54 @@
                 return () => window.removeEventListener('beforeunload', handleBeforeUnload);
             }, [hasUnsavedChanges]);
             
+            // ========== SHARED .hki BUILDER ==========
+            // Single source of truth for the .hki payload, used by BOTH the manual
+            // Save handler and the Drive auto-sync effect so they can't drift apart.
+            const buildHkiData = useCallback(() => {
+                const cleanResults = recognitionResults.map(r => ({
+                    glyph: {
+                        id: r.glyph?.id,
+                        name: r.glyph?.name,
+                        transliteration: r.glyph?.transliteration,
+                        arabic: r.glyph?.arabic,
+                        description: r.glyph?.description
+                    },
+                    confidence: r.confidence,
+                    position: r.position,
+                    thumbnail: r.thumbnail,
+                    matchType: r.matchType,
+                    corrected: r.corrected,
+                    originalGlyph: r.originalGlyph ? {
+                        id: r.originalGlyph.id,
+                        name: r.originalGlyph.name,
+                        transliteration: r.originalGlyph.transliteration
+                    } : null
+                }));
+                return {
+                    version: '2.0',
+                    created: new Date().toISOString(),
+                    inscriptionId: currentInscriptionId,
+                    inscriptionTitle: inscriptionTitle || 'Untitled',
+                    inscriptionNotes,
+                    image: originalImage,
+                    displayImage,
+                    preprocessing,
+                    recognitionResults: cleanResults,
+                    readingOrder: Array.isArray(readingOrder) ? readingOrder : Array.from(readingOrder),
+                    readingDirection,
+                    wordBoundaries: Array.from(wordBoundaries),
+                    lineBreaks: Array.from(lineBreaks),
+                    validations,
+                    translationEnglish,
+                    translationArabic,
+                    audioData,
+                    visibility,
+                    changeLog: changeLog || []
+                };
+            }, [recognitionResults, currentInscriptionId, inscriptionTitle, inscriptionNotes, originalImage,
+                displayImage, preprocessing, readingOrder, readingDirection, wordBoundaries, lineBreaks,
+                validations, translationEnglish, translationArabic, audioData, visibility, changeLog]);
+
             // ========== LOCAL AUTO-SAVE TRIGGER ==========
             useEffect(() => {
                 if (typeof LocalAutoSave !== 'undefined' && recognitionResults && recognitionResults.length > 0) {
@@ -655,6 +703,35 @@
                 }
             }, [recognitionResults, recognitionSourceDims, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, 
                 translationEnglish, translationArabic, inscriptionTitle, inscriptionNotes, visibility]);
+            
+            // ========== DRIVE AUTO-SYNC (Option A: only after first manual Save) ==========
+            // Once an inscription has been saved to Drive at least once (currentFileId is
+            // set) and the user is signed in, keep THAT SAME file updated automatically.
+            // Because it always passes currentFileId, it updates in place and never
+            // creates duplicates. Debounced so we don't hammer the Drive API.
+            useEffect(() => {
+                if (!driveSignedIn || !currentFileId) return;                 // only sync already-saved drafts
+                if (!recognitionResults || recognitionResults.length === 0) return;
+                if (fileOwner && fileOwner !== driveUserEmail) return;        // don't auto-write someone else's file
+
+                const handle = setTimeout(async () => {
+                    try {
+                        const result = await DriveSync.saveHki(buildHkiData(), {
+                            fileId: currentFileId,
+                            title: inscriptionTitle || 'Untitled',
+                            visibility
+                        });
+                        if (result && result.id) setCurrentFileId(result.id);
+                        console.log('☁️ Auto-synced to Drive');
+                    } catch (e) {
+                        console.warn('Auto-sync failed (will retry on next change):', e);
+                    }
+                }, 4000);
+
+                return () => clearTimeout(handle);
+            }, [recognitionResults, validations, readingOrder, wordBoundaries, lineBreaks,
+                translationEnglish, translationArabic, inscriptionTitle, inscriptionNotes,
+                readingDirection, visibility, currentFileId, driveSignedIn, buildHkiData]);
             
             // ========== LOAD CHART ==========
             useEffect(() => {
@@ -5534,55 +5611,13 @@
                                         }
                                         
                                         try {
-                                            // Clean recognition results to remove circular references
-                                            const cleanResults = recognitionResults.map(r => ({
-                                                glyph: {
-                                                    id: r.glyph?.id,
-                                                    name: r.glyph?.name,
-                                                    transliteration: r.glyph?.transliteration,
-                                                    arabic: r.glyph?.arabic,
-                                                    description: r.glyph?.description
-                                                },
-                                                confidence: r.confidence,
-                                                position: r.position,
-                                                thumbnail: r.thumbnail,
-                                                matchType: r.matchType,
-                                                corrected: r.corrected,
-                                                originalGlyph: r.originalGlyph ? {
-                                                    id: r.originalGlyph.id,
-                                                    name: r.originalGlyph.name,
-                                                    transliteration: r.originalGlyph.transliteration
-                                                } : null
-                                            }));
-                                            
-                                            const hkiData = {
-                                                version: '2.0',
-                                                created: new Date().toISOString(),
-                                                inscriptionId: currentInscriptionId,
-                                                inscriptionTitle: inscriptionTitle || 'Untitled',
-                                                inscriptionNotes,
-                                                image: originalImage,
-                                                displayImage,
-                                                preprocessing,
-                                                recognitionResults: cleanResults,
-                                                readingOrder: Array.isArray(readingOrder) ? readingOrder : Array.from(readingOrder),
-                                                readingDirection,
-                                                wordBoundaries: Array.from(wordBoundaries),
-                                                lineBreaks: Array.from(lineBreaks),
-                                                validations,
-                                                translationEnglish,
-                                                translationArabic,
-                                                audioData, // Audio recording/notes
-                                                visibility,
-                                                changeLog: changeLog || []
-                                            };
+                                            // Build the .hki payload via the shared builder (see buildHkiData above)
+                                            const hkiData = buildHkiData();
                                             
                                             const result = await DriveSync.saveHki(hkiData, {
                                                 fileId: currentFileId,
                                                 title: inscriptionTitle || 'Untitled',
                                                 visibility
-                                            });
-                                            
                                             });
                                             
                                             // Remember the Drive file id so the NEXT save updates this
