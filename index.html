@@ -130,7 +130,13 @@
         }
     </script>
     
-    <div id="root"></div>
+    <<div id="root">
+        <div id="app-loading" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f3f4f6;color:#5d4e6d;font-family:system-ui,-apple-system,sans-serif;">
+            <div style="width:40px;height:40px;border:3px solid #d6d3d1;border-top-color:#5d4e6d;border-radius:50%;animation:hgr-spin 0.8s linear infinite;"></div>
+            <div style="margin-top:16px;font-size:14px;letter-spacing:0.02em;">loading hakli glyph recognizer…</div>
+            <style>@keyframes hgr-spin{to{transform:rotate(360deg)}}</style>
+        </div>
+    </div>
 
     <!-- Core modules (must load first) -->
     <script src="src/core/config.js"></script>
@@ -148,7 +154,7 @@
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v260728g --> 
+    <!-- Current version: v260728h --> 
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -164,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260728g"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260728g"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260728g"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260728g"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260728g"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260728g"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260728g"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260728g"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260728h"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260728h"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260728h"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260728h"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260728h"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260728h"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260728h"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260728h"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260728g';
+        const APP_VERSION = 'v260728h';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -5576,6 +5582,12 @@
                                                 title: inscriptionTitle || 'Untitled',
                                                 visibility
                                             });
+                                            
+                                            });
+                                            
+                                            // Remember the Drive file id so the NEXT save updates this
+                                            // same file instead of creating a duplicate.
+                                            if (result && result.id) setCurrentFileId(result.id);
                                             
                                             alert('✅ Saved to Drive!');
                                         } catch (err) {
