@@ -20,6 +20,7 @@ const ExportPanel = ({
     translationArabic,
     currentInscriptionId,
     inscriptionTitle,
+    inscriptionSource,
     inscriptionNotes,
     inscriptionComplete,
     transcriptionFormat = 'horizontal-rtl', // Added for vertical layout support
@@ -296,7 +297,7 @@ const ExportPanel = ({
                 
                 // Title
                 ctx.font = 'bold 14px Arial, sans-serif';
-                ctx.fillText(inscriptionTitle || currentInscriptionId || 'Inscription', padding, textY);
+                ctx.fillText(inscriptionTitle || inscriptionSource || currentInscriptionId || 'Inscription', padding, textY);
                 
                 // Transcription - use serif for better Unicode support
                 ctx.font = '18px Georgia, "Times New Roman", serif';
@@ -314,7 +315,7 @@ const ExportPanel = ({
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = (inscriptionTitle || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '.png';
+                a.download = (inscriptionTitle || inscriptionSource || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '.png';
                 a.click();
                 URL.revokeObjectURL(url);
             }, 'image/png');
@@ -354,7 +355,7 @@ const ExportPanel = ({
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${inscriptionTitle || currentInscriptionId || 'Hakli Inscription'}</title>
+    <title>${inscriptionTitle || inscriptionSource || currentInscriptionId || 'Hakli Inscription'}</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -524,7 +525,7 @@ const ExportPanel = ({
 </head>
 <body>
     <div class="header">
-        <h1>${inscriptionTitle || 'Hakli Inscription'}</h1>
+        <h1>${inscriptionTitle || inscriptionSource || 'Hakli Inscription'}</h1>
         <div class="subtitle">${currentInscriptionId || ''}</div>
         <div class="date">${dateStr}</div>
     </div>
@@ -639,7 +640,7 @@ const ExportPanel = ({
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = (inscriptionTitle || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '-report.html';
+            a.download = (inscriptionTitle || inscriptionSource || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '-report.html';
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {
@@ -741,7 +742,7 @@ const ExportPanel = ({
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = (inscriptionTitle || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '.hki';
+            a.download = (inscriptionTitle || inscriptionSource || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '.hki';
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {

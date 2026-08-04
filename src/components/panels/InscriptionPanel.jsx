@@ -5,6 +5,7 @@
 
 const InscriptionPanel = ({
     inscriptionTitle,
+    inscriptionSource,
     inscriptionNotes,
     inscriptionComplete,
     translationEnglish,
@@ -50,10 +51,14 @@ const InscriptionPanel = ({
                         value={inscriptionTitle}
                         onChange={(e) => onTitleChange(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-patina focus:border-transparent"
-                        placeholder="e.g., Salalah Temple Inscription, Site A Fragment 3..."
+                        placeholder={inscriptionSource
+                            ? `Defaults to "${inscriptionSource}"`
+                            : "e.g., Salalah Temple Inscription, Site A Fragment 3..."}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                        This title will be used in the filename and reports
+                        Used in the filename and reports.{inscriptionSource
+                            ? ' Leave blank to use the source / provenance above.'
+                            : ''}
                     </p>
                     
                     {/* Completion Checkbox */}

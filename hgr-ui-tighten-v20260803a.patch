@@ -1,0 +1,380 @@
+diff --git a/index.html b/index.html
+index d8924d8..2873b48 100644
+--- a/index.html
++++ b/index.html
+@@ -154,7 +154,7 @@
+     
+     <!-- ============================================ -->
+     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
+-    <!-- Current version: v20260801a --> 
++    <!-- Current version: v20260803a --> 
+     <!-- ============================================ -->
+     
+     <!-- Recognition modules -->
+@@ -170,18 +170,18 @@
+     <script src="src/reading/transcription.js"></script>
+     
+     <!-- UI Components (loaded as Babel) -->
+-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=20260801a"></script>
+-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=20260801a"></script>
+-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=20260801a"></script>
+-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=20260801a"></script>
+-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=20260801a"></script>
+-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=20260801a"></script>
+-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=20260801a"></script>
+-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=20260801a"></script>
++    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=20260803a"></script>
++    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=20260803a"></script>
++    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=20260803a"></script>
++    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=20260803a"></script>
++    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=20260803a"></script>
++    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=20260803a"></script>
++    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=20260803a"></script>
++    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=20260803a"></script>
+ 
+     <!-- Main Application -->
+     <script type="text/babel">
+-        const APP_VERSION = 'v20260801a';
++        const APP_VERSION = 'v20260803a';
+         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
+ 
+         function HakliGlyphRecognizer() {
+@@ -639,7 +639,7 @@
+                     version: '2.0',
+                     created: new Date().toISOString(),
+                     inscriptionId: currentInscriptionId,
+-                    inscriptionTitle: inscriptionTitle || 'Untitled',
++                    inscriptionTitle: inscriptionTitle || inscriptionSource || 'Untitled',
+                     inscriptionNotes,
+                     inscriptionSource,
+                     image: originalImage,
+@@ -722,7 +722,7 @@
+                     try {
+                         const result = await DriveSync.saveHki(buildHkiData(), {
+                             fileId: currentFileId,
+-                            title: inscriptionTitle || 'Untitled',
++                            title: inscriptionTitle || inscriptionSource || 'Untitled',
+                             visibility
+                         });
+                         if (result && result.id) setCurrentFileId(result.id);
+@@ -2199,7 +2199,7 @@
+                 const content = [
+                     '='.repeat(60),
+                     'HAKLI INSCRIPTION TRANSCRIPTION',
+-                    `Title: ${inscriptionTitle || 'Untitled'}`,
++                    `Title: ${inscriptionTitle || inscriptionSource || 'Untitled'}`,
+                     ...(inscriptionSource ? [`Source: ${inscriptionSource}`] : []),
+                     `Date: ${new Date().toLocaleString()}`,
+                     '='.repeat(60),
+@@ -2253,7 +2253,7 @@
+ <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>Hakli Inscription Booklet - ${inscriptionTitle || 'Untitled'}</title>
++    <title>Hakli Inscription Booklet - ${inscriptionTitle || inscriptionSource || 'Untitled'}</title>
+     <style>
+         @page { size: A5 portrait; margin: 1.5cm; }
+         body { 
+@@ -3341,20 +3341,23 @@
+                                         title={chartVersion ? `Chart version ${chartVersion}` : 'Manage glyph chart'}
+                                     >
+                                         {chartModified ? '⚠️' : '📊'} Chart{chartVersion ? ` v${chartVersion}` : ''}{chartModified ? '*' : ''}
++                                        {chartStatus === 'loaded' && (
++                                            <span className="opacity-80"> · {chartData?.glyphs?.length || 0}<span className="hidden sm:inline"> glyphs</span></span>
++                                        )}
+                                     </button>
+                                     
+                                     {/* Status indicators - grouped on right */}
+                                     <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
+-                                        <div 
+-                                            className={`px-3 py-1 rounded-full text-xs font-bold ${chartStatus === 'loaded' ? 'bg-patina' : 'bg-amber-400 text-amber-900 animate-pulse'}`}
+-                                            title={chartStatus === 'loaded' ? `${Object.keys(loadedGlyphImages).length} template images loaded for ${chartData?.glyphs?.length || 0} glyphs` : 'Loading glyph chart...'}
+-                                        >
+-                                            {chartStatus === 'loaded' 
+-                                                ? <span>✅ {chartData?.glyphs?.length || 0}<span className="hidden sm:inline"> glyphs</span></span>
+-                                                : chartLoadProgress.total > 0 
++                                        {chartStatus !== 'loaded' && (
++                                            <div 
++                                                className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-amber-900 animate-pulse"
++                                                title="Loading glyph chart..."
++                                            >
++                                                {chartLoadProgress.total > 0 
+                                                     ? `⏳ ${Math.round((chartLoadProgress.loaded / chartLoadProgress.total) * 100)}%`
+                                                     : `⏳ Loading...`}
+-                                        </div>
++                                            </div>
++                                        )}
+                                         {!opencvReady && (
+                                             <div
+                                                 className="px-2 py-1 rounded-full text-xs bg-ochre animate-pulse"
+@@ -4883,14 +4886,14 @@
+                                                                 </div>
+                                                             </div>
+                                                             
+-                                                            {/* Action buttons row - compact */}
+-                                                            <div className="px-2 pb-2 flex gap-1 flex-wrap items-center">
++                                                            {/* Secondary controls row — alts, breaks, edit, drag (merged into one line) */}
++                                                            <div className="px-2 pb-2 flex items-center gap-1 flex-wrap border-t border-gray-100 pt-1">
+                                                                 <button onClick={(e) => { e.stopPropagation(); toggleCardExpansion(idx); }}
+                                                                     className={`px-2 py-0.5 rounded text-xs ${isExpanded ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                                                     title="Show alternative matches">
+                                                                     {isExpanded ? '▼' : '▶'} Alts {result.topMatches?.length > 1 ? `(${result.topMatches.length - 1})` : ''}
+                                                                 </button>
+-                                                                
++
+                                                                 {isExcluded && (
+                                                                     <button onClick={(e) => { e.stopPropagation(); toggleExcludeDetection(idx); }}
+                                                                         className="px-2 py-0.5 rounded text-xs bg-gray-500 text-white"
+@@ -4898,15 +4901,49 @@
+                                                                         👁 Include
+                                                                     </button>
+                                                                 )}
+-                                                                
++
++                                                                {/* Active break badges — sit just left of the Break control */}
++                                                                {(wordBoundaries.has(idx) || columnBreaks.has(idx) || lineBreaks.has(idx)) && (
++                                                                    <div className="flex gap-0.5 ml-auto mr-0.5">
++                                                                        {wordBoundaries.has(idx) && <span className="text-xs font-bold text-stone bg-stone/20 px-1 rounded">|</span>}
++                                                                        {columnBreaks.has(idx) && <span className="text-xs font-bold text-amber-700 bg-amber-100 px-1 rounded">‖</span>}
++                                                                        {lineBreaks.has(idx) && <span className="text-xs font-bold text-ancient-purple bg-ancient-purple/20 px-1 rounded">⏎</span>}
++                                                                    </div>
++                                                                )}
++                                                                {/* Breaks popover button (right cluster starts here) */}
++                                                                <div className={`relative ${(wordBoundaries.has(idx) || columnBreaks.has(idx) || lineBreaks.has(idx)) ? '' : 'ml-auto'}`}>
++                                                                    <button onClick={(e) => { e.stopPropagation(); setBreaksMenuCardIdx(breaksMenuCardIdx === idx ? null : idx); setEditMenuCardIdx(null); }}
++                                                                        onBlur={() => setTimeout(() => setBreaksMenuCardIdx(null), 150)}
++                                                                        className={`px-2 py-0.5 rounded text-xs ${breaksMenuCardIdx === idx ? 'bg-stone text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
++                                                                        title="Add break after this glyph">
++                                                                        Break ▾
++                                                                    </button>
++                                                                    {breaksMenuCardIdx === idx && (
++                                                                        <div className="absolute left-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[100px]">
++                                                                            <button onClick={(e) => { e.stopPropagation(); toggleWordBoundary(idx); }}
++                                                                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${wordBoundaries.has(idx) ? 'text-stone font-bold' : ''}`}>
++                                                                                | Word {wordBoundaries.has(idx) && '✓'}
++                                                                            </button>
++                                                                            <button onClick={(e) => { e.stopPropagation(); toggleColumnBreak(idx); }}
++                                                                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${columnBreaks.has(idx) ? 'text-amber-700 font-bold' : ''}`}>
++                                                                                ‖ Column {columnBreaks.has(idx) && '✓'}
++                                                                            </button>
++                                                                            <button onClick={(e) => { e.stopPropagation(); toggleLineBreak(idx); }}
++                                                                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${lineBreaks.has(idx) ? 'text-ancient-purple font-bold' : ''}`}>
++                                                                                ⏎ Line {lineBreaks.has(idx) && '✓'}
++                                                                            </button>
++                                                                        </div>
++                                                                    )}
++                                                                </div>
++
+                                                                 {/* Edit menu toggle */}
+-                                                                <div className="relative ml-auto">
++                                                                <div className="relative">
+                                                                     <button onClick={(e) => { e.stopPropagation(); setEditMenuCardIdx(editMenuCardIdx === idx ? null : idx); setBreaksMenuCardIdx(null); }}
+                                                                         className={`px-2 py-0.5 rounded text-xs ${editMenuCardIdx === idx ? 'bg-stone text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                                                         title="Edit options">
+                                                                         ✏️ Edit
+                                                                     </button>
+-                                                                    
++
+                                                                     {/* Edit dropdown menu */}
+                                                                     {editMenuCardIdx === idx && (
+                                                                         <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[140px]">
+@@ -4940,46 +4977,9 @@
+                                                                         </div>
+                                                                     )}
+                                                                 </div>
+-                                                            </div>
+-                                                            
+-                                                            {/* Bottom row: Break button + drag handle */}
+-                                                            <div className="px-2 pb-2 flex items-center gap-1 border-t border-gray-100 pt-1">
+-                                                                {/* Show active breaks as badges */}
+-                                                                {(wordBoundaries.has(idx) || columnBreaks.has(idx) || lineBreaks.has(idx)) && (
+-                                                                    <div className="flex gap-0.5 mr-1">
+-                                                                        {wordBoundaries.has(idx) && <span className="text-xs font-bold text-stone bg-stone/20 px-1 rounded">|</span>}
+-                                                                        {columnBreaks.has(idx) && <span className="text-xs font-bold text-amber-700 bg-amber-100 px-1 rounded">‖</span>}
+-                                                                        {lineBreaks.has(idx) && <span className="text-xs font-bold text-ancient-purple bg-ancient-purple/20 px-1 rounded">⏎</span>}
+-                                                                    </div>
+-                                                                )}
+-                                                                {/* Breaks popover button */}
+-                                                                <div className="relative">
+-                                                                    <button onClick={(e) => { e.stopPropagation(); setBreaksMenuCardIdx(breaksMenuCardIdx === idx ? null : idx); setEditMenuCardIdx(null); }}
+-                                                                        onBlur={() => setTimeout(() => setBreaksMenuCardIdx(null), 150)}
+-                                                                        className={`px-2 py-0.5 rounded text-xs ${breaksMenuCardIdx === idx ? 'bg-stone text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+-                                                                        title="Add break after this glyph">
+-                                                                        Break ▾
+-                                                                    </button>
+-                                                                    {breaksMenuCardIdx === idx && (
+-                                                                        <div className="absolute left-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[100px]">
+-                                                                            <button onClick={(e) => { e.stopPropagation(); toggleWordBoundary(idx); }}
+-                                                                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${wordBoundaries.has(idx) ? 'text-stone font-bold' : ''}`}>
+-                                                                                | Word {wordBoundaries.has(idx) && '✓'}
+-                                                                            </button>
+-                                                                            <button onClick={(e) => { e.stopPropagation(); toggleColumnBreak(idx); }}
+-                                                                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${columnBreaks.has(idx) ? 'text-amber-700 font-bold' : ''}`}>
+-                                                                                ‖ Column {columnBreaks.has(idx) && '✓'}
+-                                                                            </button>
+-                                                                            <button onClick={(e) => { e.stopPropagation(); toggleLineBreak(idx); }}
+-                                                                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${lineBreaks.has(idx) ? 'text-ancient-purple font-bold' : ''}`}>
+-                                                                                ⏎ Line {lineBreaks.has(idx) && '✓'}
+-                                                                            </button>
+-                                                                        </div>
+-                                                                    )}
+-                                                                </div>
+                                                                 {/* Drag handle - only in reading mode */}
+                                                                 {viewMode === 'reading' && (
+-                                                                    <div className="ml-auto px-2 py-0.5 bg-ochre/20 text-ochre text-xs rounded cursor-grab hover:bg-ochre/30 font-medium select-none"
++                                                                    <div className="px-2 py-0.5 bg-ochre/20 text-ochre text-xs rounded cursor-grab hover:bg-ochre/30 font-medium select-none"
+                                                                         title="Drag to reorder">
+                                                                         ⋮⋮ drag
+                                                                     </div>
+@@ -5597,6 +5597,7 @@
+                                 </div>
+                                 <InscriptionPanel
+                                     inscriptionTitle={inscriptionTitle}
++                                    inscriptionSource={inscriptionSource}
+                                     inscriptionNotes={inscriptionNotes}
+                                     inscriptionComplete={inscriptionComplete}
+                                     translationEnglish={translationEnglish}
+@@ -5629,6 +5630,7 @@
+                                     translationArabic={translationArabic}
+                                     currentInscriptionId={currentInscriptionId}
+                                     inscriptionTitle={inscriptionTitle}
++                                    inscriptionSource={inscriptionSource}
+                                     inscriptionNotes={inscriptionNotes}
+                                     inscriptionComplete={inscriptionComplete}
+                                     transcriptionFormat={transcriptionFormat}
+@@ -5652,7 +5654,7 @@
+                                             
+                                             const result = await DriveSync.saveHki(hkiData, {
+                                                 fileId: currentFileId,
+-                                                title: inscriptionTitle || 'Untitled',
++                                                title: inscriptionTitle || inscriptionSource || 'Untitled',
+                                                 visibility
+                                             });
+                                             
+@@ -5724,7 +5726,7 @@
+                                                 version: '2.0',
+                                                 created: new Date().toISOString(),
+                                                 inscriptionId: newId,
+-                                                inscriptionTitle: inscriptionTitle || 'Untitled',
++                                                inscriptionTitle: inscriptionTitle || inscriptionSource || 'Untitled',
+                                                 inscriptionNotes,
+                                                 image: originalImage,
+                                                 displayImage,
+@@ -5744,7 +5746,7 @@
+                                             
+                                             const result = await DriveSync.saveHki(hkiData, {
+                                                 fileId: null, // null = create new
+-                                                title: inscriptionTitle || 'Untitled',
++                                                title: inscriptionTitle || inscriptionSource || 'Untitled',
+                                                 visibility: 'draft'
+                                             });
+                                             
+diff --git a/src/components/panels/ExportPanel.jsx b/src/components/panels/ExportPanel.jsx
+index fd04363..bd91dc6 100644
+--- a/src/components/panels/ExportPanel.jsx
++++ b/src/components/panels/ExportPanel.jsx
+@@ -20,6 +20,7 @@ const ExportPanel = ({
+     translationArabic,
+     currentInscriptionId,
+     inscriptionTitle,
++    inscriptionSource,
+     inscriptionNotes,
+     inscriptionComplete,
+     transcriptionFormat = 'horizontal-rtl', // Added for vertical layout support
+@@ -296,7 +297,7 @@ const ExportPanel = ({
+                 
+                 // Title
+                 ctx.font = 'bold 14px Arial, sans-serif';
+-                ctx.fillText(inscriptionTitle || currentInscriptionId || 'Inscription', padding, textY);
++                ctx.fillText(inscriptionTitle || inscriptionSource || currentInscriptionId || 'Inscription', padding, textY);
+                 
+                 // Transcription - use serif for better Unicode support
+                 ctx.font = '18px Georgia, "Times New Roman", serif';
+@@ -314,7 +315,7 @@ const ExportPanel = ({
+                 const url = URL.createObjectURL(blob);
+                 const a = document.createElement('a');
+                 a.href = url;
+-                a.download = (inscriptionTitle || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '.png';
++                a.download = (inscriptionTitle || inscriptionSource || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '.png';
+                 a.click();
+                 URL.revokeObjectURL(url);
+             }, 'image/png');
+@@ -354,7 +355,7 @@ const ExportPanel = ({
+ <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>${inscriptionTitle || currentInscriptionId || 'Hakli Inscription'}</title>
++    <title>${inscriptionTitle || inscriptionSource || currentInscriptionId || 'Hakli Inscription'}</title>
+     <style>
+         * { box-sizing: border-box; margin: 0; padding: 0; }
+         body { 
+@@ -524,7 +525,7 @@ const ExportPanel = ({
+ </head>
+ <body>
+     <div class="header">
+-        <h1>${inscriptionTitle || 'Hakli Inscription'}</h1>
++        <h1>${inscriptionTitle || inscriptionSource || 'Hakli Inscription'}</h1>
+         <div class="subtitle">${currentInscriptionId || ''}</div>
+         <div class="date">${dateStr}</div>
+     </div>
+@@ -639,7 +640,7 @@ const ExportPanel = ({
+             const url = URL.createObjectURL(blob);
+             const a = document.createElement('a');
+             a.href = url;
+-            a.download = (inscriptionTitle || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '-report.html';
++            a.download = (inscriptionTitle || inscriptionSource || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '-report.html';
+             a.click();
+             URL.revokeObjectURL(url);
+         } catch (error) {
+@@ -741,7 +742,7 @@ const ExportPanel = ({
+             const url = URL.createObjectURL(blob);
+             const a = document.createElement('a');
+             a.href = url;
+-            a.download = (inscriptionTitle || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '.hki';
++            a.download = (inscriptionTitle || inscriptionSource || currentInscriptionId || 'inscription').replace(/\s+/g, '-') + '.hki';
+             a.click();
+             URL.revokeObjectURL(url);
+         } catch (error) {
+diff --git a/src/components/panels/InscriptionPanel.jsx b/src/components/panels/InscriptionPanel.jsx
+index 693c18f..3cc6531 100644
+--- a/src/components/panels/InscriptionPanel.jsx
++++ b/src/components/panels/InscriptionPanel.jsx
+@@ -5,6 +5,7 @@
+ 
+ const InscriptionPanel = ({
+     inscriptionTitle,
++    inscriptionSource,
+     inscriptionNotes,
+     inscriptionComplete,
+     translationEnglish,
+@@ -50,10 +51,14 @@ const InscriptionPanel = ({
+                         value={inscriptionTitle}
+                         onChange={(e) => onTitleChange(e.target.value)}
+                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-patina focus:border-transparent"
+-                        placeholder="e.g., Salalah Temple Inscription, Site A Fragment 3..."
++                        placeholder={inscriptionSource
++                            ? `Defaults to "${inscriptionSource}"`
++                            : "e.g., Salalah Temple Inscription, Site A Fragment 3..."}
+                     />
+                     <p className="text-xs text-gray-500 mt-1">
+-                        This title will be used in the filename and reports
++                        Used in the filename and reports.{inscriptionSource
++                            ? ' Leave blank to use the source / provenance above.'
++                            : ''}
+                     </p>
+                     
+                     {/* Completion Checkbox */}
+diff --git a/sw.js b/sw.js
+index bf9e19c..862cfac 100644
+--- a/sw.js
++++ b/sw.js
+@@ -1,7 +1,7 @@
+ // Hakli Glyph Recognizer - Service Worker
+-// Version 20260801a - Network First for same-origin app code (no more stale .js)
++// Version 20260803a - Network First for same-origin app code (no more stale .js)
+ 
+-const CACHE_VERSION = 'v20260801a';
++const CACHE_VERSION = 'v20260803a';
+ const CACHE_NAME = `hakli-${CACHE_VERSION}`;
+ const RUNTIME_CACHE = `hakli-runtime-${CACHE_VERSION}`;
+ 
