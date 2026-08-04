@@ -193,8 +193,8 @@ const DetectionCard = ({
                                 <div className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-100 rounded overflow-hidden border-2 transition-colors ${result.thumbnailEdited ? 'border-patina' : 'border-gray-300'} group-hover:border-blue-400`}>
                                     <img src={result.thumbnail} alt="Detected" className="w-full h-full object-contain" />
                                 </div>
-                                <span className="absolute -bottom-1 left-0 right-0 text-center text-[8px] text-gray-400 group-hover:text-blue-500">
-                                    {result.thumbnailEdited ? '✓det' : '✏️det'}
+                                <span className={`absolute -top-1 -left-1 bg-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] shadow-sm border opacity-80 group-hover:opacity-100 ${result.thumbnailEdited ? 'border-patina text-patina' : 'border-gray-200 group-hover:text-blue-500'}`}>
+                                    {result.thumbnailEdited ? '✓' : '✏️'}
                                 </span>
                             </div>
                         )}
@@ -206,7 +206,7 @@ const DetectionCard = ({
                                 <div className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-white rounded overflow-hidden border-2 border-ancient-purple transition-colors group-hover:border-ochre`}>
                                     <img src={glyphThumbnails[result.glyph.id]} alt="Chart" className="w-full h-full object-contain" />
                                 </div>
-                                <span className="absolute -bottom-1 left-0 right-0 text-center text-[8px] text-ancient-purple group-hover:text-ochre">📋tap</span>
+                                <span className="absolute -top-1 -right-1 bg-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] shadow-sm border border-ancient-purple/40 text-ancient-purple opacity-80 group-hover:opacity-100 group-hover:text-ochre">⇄</span>
                             </div>
                         )}
                     </div>
@@ -277,15 +277,18 @@ const DetectionCard = ({
                 {/* Breaks control (right cluster starts here) */}
                 <div className={`relative ${hasBreaks ? '' : 'ml-auto'}`}>
                     <button onClick={(e) => { e.stopPropagation(); setBreaksMenuCardIdx(breaksOpen ? null : idx); setEditMenuCardIdx(null); }}
-                        onBlur={!isMobile ? () => setTimeout(() => setBreaksMenuCardIdx(null), 150) : undefined}
                         className={`px-2 py-0.5 rounded text-xs ${breaksOpen ? 'bg-stone text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                         title="Add break after this glyph">
                         Break ▾
                     </button>
                     {!isMobile && breaksOpen && (
-                        <div className="absolute left-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[100px]">
-                            {breakMenuItems}
-                        </div>
+                        <>
+                            {/* Click-away backdrop — closes the menu; selections stay open until then, so word+line can both be toggled */}
+                            <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setBreaksMenuCardIdx(null); }} />
+                            <div className="absolute left-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[100px]">
+                                {breakMenuItems}
+                            </div>
+                        </>
                     )}
                 </div>
 

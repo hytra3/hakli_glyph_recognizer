@@ -154,7 +154,7 @@
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v20260803b --> 
+    <!-- Current version: v20260803c --> 
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -170,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=20260803b"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=20260803b"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=20260803b"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=20260803b"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=20260803b"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=20260803b"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=20260803b"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=20260803b"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=20260803c"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=20260803c"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=20260803c"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=20260803c"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=20260803c"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=20260803c"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=20260803c"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=20260803c"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v20260803b';
+        const APP_VERSION = 'v20260803c';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -3759,8 +3759,8 @@
                                         </div>
                                     )}
                                     
-                                    {/* Apply/Reset Buttons - Mobile */}
-                                    {originalImage && (
+                                    {/* Apply/Reset Buttons - Mobile (hidden in eraser mode; Apply Eraser commits there) */}
+                                    {!eraserMode && originalImage && (
                                         <div className="bg-gray-50 rounded-lg p-3">
                                             <div className="flex gap-2">
                                                 <button onClick={resetPreprocessing} className="flex-1 px-2 py-1.5 bg-gray-200 rounded text-sm">↩️ Reset</button>
@@ -4272,7 +4272,8 @@
                                                     )}
                                                 </div>
                                                 
-                                                {/* Buttons */}
+                                                {/* Buttons — hidden in eraser mode (Apply Eraser is the commit action there) */}
+                                                {!eraserMode && (
                                                 <div className="flex gap-2 pt-2">
                                                     <button onClick={resetPreprocessing} 
                                                         className="flex-1 px-2 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-sm border border-gray-300">
@@ -4283,6 +4284,7 @@
                                                         ✅ Apply
                                                     </button>
                                                 </div>
+                                                )}
                                                 
                                                 {/* Confidence Filter */}
                                                 <div className="pt-3 border-t border-gray-200 mt-3">
@@ -5022,9 +5024,18 @@
                                         })}
                                     </div>
                                 ) : (
-                                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400 px-4 text-center">
                                         <span className="text-5xl mb-3">📷</span>
-                                        <p>Tap "Image" to upload</p>
+                                        <p className="mb-1">Tap "Image" to upload</p>
+                                        <p className="text-xs text-gray-400 mb-4">…or see how it works with a sample inscription</p>
+                                        <button
+                                            onClick={loadExampleInscription}
+                                            disabled={isImageLoading}
+                                            className="px-4 py-2 bg-rust text-white rounded-lg hover:bg-rust/80 text-sm font-medium shadow disabled:opacity-50 flex items-center gap-2"
+                                            title="Load a sample Dhofari inscription and run recognition automatically"
+                                        >
+                                            {isImageLoading ? '⏳ Loading…' : '✨ Try an example'}
+                                        </button>
                                     </div>
                                 )}
                             </div>
