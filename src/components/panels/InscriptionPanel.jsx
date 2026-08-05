@@ -12,6 +12,7 @@ const InscriptionPanel = ({
     translationArabic,
     onTitleChange,
     onNotesChange,
+    onSourceChange,
     onCompleteChange,
     onTranslationEnglishChange,
     onTranslationArabicChange,
@@ -38,13 +39,18 @@ const InscriptionPanel = ({
                         <label className="block text-sm font-semibold text-gray-700">
                             🏷️ Inscription Title
                         </label>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                            inscriptionComplete 
-                                ? 'bg-green-100 text-green-700' 
-                                : 'bg-yellow-100 text-yellow-700'
-                        }`}>
+                        <button
+                            type="button"
+                            onClick={() => onCompleteChange(!inscriptionComplete)}
+                            title={inscriptionComplete ? 'Mark as in progress' : 'Mark as complete'}
+                            className={`text-xs px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                                inscriptionComplete 
+                                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                                    : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                            }`}
+                        >
                             {inscriptionComplete ? '✅ Complete' : '⏳ In Progress'}
-                        </span>
+                        </button>
                     </div>
                     <input
                         type="text"
@@ -60,20 +66,6 @@ const InscriptionPanel = ({
                             ? ' Leave blank to use the source / provenance above.'
                             : ''}
                     </p>
-                    
-                    {/* Completion Checkbox */}
-                    <div className="mt-3 flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            id="inscription-complete"
-                            checked={inscriptionComplete}
-                            onChange={(e) => onCompleteChange(e.target.checked)}
-                            className="w-4 h-4 text-patina border-gray-300 rounded focus:ring-patina"
-                        />
-                        <label htmlFor="inscription-complete" className="text-sm text-gray-700">
-                            Mark this inscription as complete
-                        </label>
-                    </div>
                 </div>
 
                 {/* Language Toggle */}
@@ -145,6 +137,23 @@ const InscriptionPanel = ({
                         rows="3"
                         placeholder="Add any notes, observations, or context about this inscription..."
                     />
+                </div>
+
+                {/* Source / Provenance Field */}
+                <div className="pt-4 border-t border-[#b5d4c8]">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        📜 Source / Provenance
+                    </label>
+                    <input
+                        type="text"
+                        value={inscriptionSource || ''}
+                        onChange={(e) => onSourceChange(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-patina focus:border-transparent"
+                        placeholder="e.g. Al-Jallad 2025, KMH 9-10"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                        Citation or origin; saved with the file and shown on exports.
+                    </p>
                 </div>
 
                 {/* Preview */}

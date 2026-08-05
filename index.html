@@ -154,7 +154,7 @@
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v20260803d --> 
+    <!-- Current version: v260805a --> 
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -170,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=20260803d"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=20260803d"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=20260803d"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=20260803d"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=20260803d"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=20260803d"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=20260803d"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=20260803d"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260805a"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260805a"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260805a"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260805a"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260805a"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260805a"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260805a"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260805a"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v20260803d';
+        const APP_VERSION = 'v260805a';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -221,6 +221,7 @@
             const [selectedRegions, setSelectedRegions] = useState(new Set());
             const [lastSelectedIdx, setLastSelectedIdx] = useState(null); // For Shift+click range selection
             const [showArabicLabels, setShowArabicLabels] = useState(false);
+            const [showSourceLightbox, setShowSourceLightbox] = useState(false);
             const [isPreprocessingCollapsed, setIsPreprocessingCollapsed] = useState(false);
             const [isLeftPanelHidden, setIsLeftPanelHidden] = useState(false); // Hide entire left panel
             const [isRightPanelHidden, setIsRightPanelHidden] = useState(false); // Hide entire right panel
@@ -3593,6 +3594,14 @@
                                                 📂
                                             </button>
                                         </div>
+                                        {originalImage && (
+                                            <button onClick={() => setShowSourceLightbox(true)}
+                                                className="mt-2 w-full flex items-center gap-2 p-1.5 rounded-lg border border-gray-200 bg-white"
+                                                title="View the original color source image">
+                                                <img src={originalImage} alt="Source" className="w-10 h-10 object-cover rounded border border-gray-200 flex-shrink-0" />
+                                                <span className="text-xs text-gray-500 text-left leading-tight">source image<br/><span className="text-gray-400">tap to view color original</span></span>
+                                            </button>
+                                        )}
                                     </div>
                                     
                                     {/* Preprocessing Controls */}
@@ -3849,10 +3858,14 @@
                                     {recognitionResults.length > 0 && (
                                         <>
                                             <div className="flex gap-2">
-                                                <button onClick={() => setShowArabicLabels(!showArabicLabels)}
-                                                    className={`flex-1 px-3 py-2 rounded text-sm font-medium ${showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-700'}`}>
-                                                    {showArabicLabels ? 'عربي' : 'ABC'}
-                                                </button>
+                                                <div className="flex-1 flex rounded overflow-hidden border border-gray-300 text-sm font-medium">
+                                                    <button onClick={() => setShowArabicLabels(false)}
+                                                        className={`flex-1 px-3 py-2 ${!showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-600'}`}
+                                                        title="Show Latin transliteration">ABC</button>
+                                                    <button onClick={() => setShowArabicLabels(true)}
+                                                        className={`flex-1 px-3 py-2 border-l border-gray-300 ${showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-600'}`}
+                                                        title="Show Arabic script">عربي</button>
+                                                </div>
                                                 <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); setExcludedDetections(new Set()); setExpandedCards(new Set()); }}}
                                                     className="px-3 py-2 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200" title="Clear all detections">
                                                     🗑 Clear
@@ -4137,6 +4150,14 @@
                                             📂
                                         </button>
                                     </div>
+                                    {originalImage && (
+                                        <button onClick={() => setShowSourceLightbox(true)}
+                                            className="mt-2 w-full flex items-center gap-2 p-1.5 rounded-lg border border-gray-200 hover:border-ancient-purple bg-white transition-colors"
+                                            title="View the original color source image">
+                                            <img src={originalImage} alt="Source" className="w-10 h-10 object-cover rounded border border-gray-200 flex-shrink-0" />
+                                            <span className="text-xs text-gray-500 text-left leading-tight">source image<br/><span className="text-gray-400">click to view color original</span></span>
+                                        </button>
+                                    )}
                                 </div>
                                 
                                 {/* Preprocessing */}
@@ -4634,10 +4655,14 @@
                                                 </div>
                                             </div>
                                             {recognitionResults.length > 0 && (
-                                                <button onClick={() => setShowArabicLabels(!showArabicLabels)}
-                                                    className={`px-2 py-1 rounded text-xs ${showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-200'}`}>
-                                                    {showArabicLabels ? 'عربي' : 'ABC'}
-                                                </button>
+                                                <div className="inline-flex rounded overflow-hidden border border-gray-300 text-xs">
+                                                    <button onClick={() => setShowArabicLabels(false)}
+                                                        className={`px-2 py-1 ${!showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-600'}`}
+                                                        title="Show Latin transliteration">ABC</button>
+                                                    <button onClick={() => setShowArabicLabels(true)}
+                                                        className={`px-2 py-1 border-l border-gray-300 ${showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-600'}`}
+                                                        title="Show Arabic script">عربي</button>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -5354,25 +5379,9 @@
                             </div>
                         )}
                         
-                        {/* ===== INSCRIPTION PANEL (Translation & Notes) ===== */}
-                        {viewMode === 'reading' && recognitionResults.length > 0 && (
+                        {/* ===== INSCRIPTION PANEL (Translation & Notes) — shown in both Detection and Reading ===== */}
+                        {recognitionResults.length > 0 && (
                             <div className="mt-6">
-                                {/* Source / provenance — attribution travels with the .hki data */}
-                                <div className="mb-3 bg-white rounded-lg border border-gray-200 p-3">
-                                    <label className="block text-xs font-semibold text-gray-600 mb-1">
-                                        📜 source / provenance
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={inscriptionSource}
-                                        onChange={(e) => setInscriptionSource(e.target.value)}
-                                        placeholder="e.g. Al-Jallad 2025, KMH 9-10"
-                                        className="w-full text-sm px-2 py-1 rounded border border-gray-300 bg-white focus:outline-none focus:border-ancient-purple"
-                                    />
-                                    <p className="text-[11px] text-gray-400 mt-1">
-                                        citation or origin for this inscription; saved with the file and shown on exports.
-                                    </p>
-                                </div>
                                 <InscriptionPanel
                                     inscriptionTitle={inscriptionTitle}
                                     inscriptionSource={inscriptionSource}
@@ -5382,6 +5391,7 @@
                                     translationArabic={translationArabic}
                                     onTitleChange={setInscriptionTitle}
                                     onNotesChange={setInscriptionNotes}
+                                    onSourceChange={setInscriptionSource}
                                     onCompleteChange={setInscriptionComplete}
                                     onTranslationEnglishChange={setTranslationEnglish}
                                     onTranslationArabicChange={setTranslationArabic}
@@ -5644,6 +5654,22 @@
                                 />
                         </div>
                     </main>
+                    
+                    {/* ===== SOURCE IMAGE LIGHTBOX ===== */}
+                    {showSourceLightbox && originalImage && (
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[80] p-4"
+                            onClick={() => setShowSourceLightbox(false)}>
+                            <div className="relative max-w-4xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+                                <img src={originalImage} alt="Source inscription" className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" />
+                                <button onClick={() => setShowSourceLightbox(false)}
+                                    className="absolute -top-3 -right-3 w-9 h-9 bg-white text-gray-700 rounded-full shadow-lg flex items-center justify-center hover:bg-gray-100 text-lg"
+                                    title="Close">✕</button>
+                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-3 py-2 rounded-b-lg text-center">
+                                    original source image{inscriptionSource ? ` · ${inscriptionSource}` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     
                     {/* ===== GLYPH SELECTOR MODAL (for manual box or changing glyph) ===== */}
                     {showGlyphSelector && chartData && (

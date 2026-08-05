@@ -228,10 +228,21 @@ const DetectionCard = ({
                             {columnBreaks.has(idx) && <span className="text-xs font-bold text-amber-700 px-1 bg-stone/20 rounded">‖</span>}
                             {lineBreaks.has(idx) && <span className="text-xs font-bold text-ancient-purple px-1 bg-ancient-purple/20 rounded">⏎</span>}
                         </div>
-                        <div className="font-medium text-gray-900 text-sm truncate">
-                            {showArabicLabels && result.glyph.arabic ? result.glyph.arabic : result.glyph.name}
-                        </div>
-                        <div className="text-lg text-ancient-purple leading-tight">{result.glyph.transliteration || result.glyph.name}</div>
+                        {(() => {
+                            const latin = result.glyph.transliteration || result.glyph.name;
+                            const arabic = result.glyph.arabic;
+                            const featuredIsArabic = showArabicLabels && !!arabic;
+                            const featured = featuredIsArabic ? arabic : latin;
+                            const complement = showArabicLabels ? latin : arabic;
+                            return (
+                                <>
+                                    {complement && complement !== featured && (
+                                        <div className="text-xs text-gray-500 leading-tight" dir={featuredIsArabic ? 'ltr' : 'rtl'}>{complement}</div>
+                                    )}
+                                    <div className="text-lg text-ancient-purple leading-tight truncate" dir={featuredIsArabic ? 'rtl' : 'ltr'}>{featured}</div>
+                                </>
+                            );
+                        })()}
                     </div>
                     <div className="flex flex-col gap-1">
                         {!validation ? (
