@@ -154,7 +154,7 @@
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v20260803c --> 
+    <!-- Current version: v20260803d --> 
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -170,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=20260803c"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=20260803c"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=20260803c"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=20260803c"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=20260803c"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=20260803c"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=20260803c"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=20260803c"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=20260803d"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=20260803d"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=20260803d"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=20260803d"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=20260803d"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=20260803d"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=20260803d"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=20260803d"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v20260803c';
+        const APP_VERSION = 'v20260803d';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -3338,12 +3338,9 @@
                                         onClick={() => setShowChartManager(true)}
                                         disabled={chartStatus !== 'loaded'}
                                         className={`px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-50 ${chartModified ? 'bg-ochre hover:bg-ochre/80' : 'bg-white/20 hover:bg-white/30'}`}
-                                        title={chartVersion ? `Chart version ${chartVersion}` : 'Manage glyph chart'}
+                                        title={chartVersion ? `Chart v${chartVersion} · ${chartData?.glyphs?.length || 0} glyphs — click to manage` : 'Manage glyph chart'}
                                     >
-                                        {chartModified ? '⚠️' : '📊'} Chart{chartVersion ? ` v${chartVersion}` : ''}{chartModified ? '*' : ''}
-                                        {chartStatus === 'loaded' && (
-                                            <span className="opacity-80"> · {chartData?.glyphs?.length || 0}<span className="hidden sm:inline"> glyphs</span></span>
-                                        )}
+                                        {chartModified ? '⚠️' : '📊'} Chart{chartModified ? '*' : ''}
                                     </button>
                                     
                                     {/* Status indicators - grouped on right */}
@@ -5741,7 +5738,7 @@
                                     <div>
                                         <h3 className="text-xl font-bold text-gray-900">📊 Glyph Chart Manager</h3>
                                         <p className="text-sm text-gray-500">
-                                            {chartData?.glyphs?.length || 0} glyphs · {(() => {
+                                            {chartVersion ? `v${chartVersion} · ` : ''}{chartData?.glyphs?.length || 0} glyphs · {(() => {
                                                 const total = chartData?.glyphs?.reduce((sum, g) => {
                                                     return sum + (g.images?.primary ? 1 : 0) + (g.images?.variants?.length || 0) + (g.images?.examples?.length || 0);
                                                 }, 0) || 0;

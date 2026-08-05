@@ -139,6 +139,10 @@ const DetectionCard = ({
                 className={`w-full px-3 ${isMobile ? 'py-2.5' : 'py-1.5'} text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${isExcluded ? 'text-patina' : 'text-rust'}`}>
                 {isExcluded ? '👁 Include' : '🚫 Exclude'}
             </button>
+            <button onClick={(e) => { e.stopPropagation(); if (confirm('Delete this detection?')) { deleteDetection(idx); setEditMenuCardIdx(null); } }}
+                className={`w-full px-3 ${isMobile ? 'py-2.5' : 'py-1.5'} text-left text-xs hover:bg-gray-100 flex items-center gap-2 text-red-600`}>
+                🗑 Delete detection
+            </button>
             {historyEnabled && (
                 <>
                     <div className="border-t border-gray-100 my-1"></div>
@@ -193,9 +197,7 @@ const DetectionCard = ({
                                 <div className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-100 rounded overflow-hidden border-2 transition-colors ${result.thumbnailEdited ? 'border-patina' : 'border-gray-300'} group-hover:border-blue-400`}>
                                     <img src={result.thumbnail} alt="Detected" className="w-full h-full object-contain" />
                                 </div>
-                                <span className={`absolute -top-1 -left-1 bg-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] shadow-sm border opacity-80 group-hover:opacity-100 ${result.thumbnailEdited ? 'border-patina text-patina' : 'border-gray-200 group-hover:text-blue-500'}`}>
-                                    {result.thumbnailEdited ? '✓' : '✏️'}
-                                </span>
+                                <span className={`absolute -bottom-1 left-1 right-1 h-0.5 rounded-full ${result.thumbnailEdited ? 'bg-patina' : 'bg-blue-400/70 group-hover:bg-blue-500'}`}></span>
                             </div>
                         )}
                         {glyphThumbnails[result.glyph.id] && (
@@ -206,7 +208,7 @@ const DetectionCard = ({
                                 <div className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-white rounded overflow-hidden border-2 border-ancient-purple transition-colors group-hover:border-ochre`}>
                                     <img src={glyphThumbnails[result.glyph.id]} alt="Chart" className="w-full h-full object-contain" />
                                 </div>
-                                <span className="absolute -top-1 -right-1 bg-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] shadow-sm border border-ancient-purple/40 text-ancient-purple opacity-80 group-hover:opacity-100 group-hover:text-ochre">⇄</span>
+                                <span className="absolute -bottom-1 left-1 right-1 h-0.5 rounded-full bg-ancient-purple/60 group-hover:bg-ochre"></span>
                             </div>
                         )}
                     </div>
@@ -235,16 +237,14 @@ const DetectionCard = ({
                         {!validation ? (
                             <>
                                 <button onClick={(e) => { e.stopPropagation(); validateDetection(idx, true); }}
-                                    className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} bg-patina text-white rounded text-xs hover:bg-[#5a7d6e]`} title="Mark correct">✓</button>
+                                    className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} bg-patina text-white rounded text-xs hover:bg-[#5a7d6e]`} title="Confirm — mark reviewed">✓</button>
                                 <button onClick={(e) => { e.stopPropagation(); validateDetection(idx, false); }}
-                                    className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} bg-rust text-white rounded text-xs hover:bg-[#8a574a]`} title="Mark incorrect">✗</button>
+                                    className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} bg-rust text-white rounded text-xs hover:bg-[#8a574a]`} title="Flag for review">✗</button>
                             </>
                         ) : (
                             <button onClick={(e) => { e.stopPropagation(); setValidations(prev => { const n = { ...prev }; delete n[idx]; return n; }); }}
-                                className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} bg-gray-400 text-white rounded text-xs hover:bg-gray-500`} title="Clear validation">↩</button>
+                                className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} bg-gray-400 text-white rounded text-xs hover:bg-gray-500`} title="Clear review status">↩</button>
                         )}
-                        <button onClick={(e) => { e.stopPropagation(); if (confirm('Delete?')) deleteDetection(idx); }}
-                            className={`${isMobile ? 'w-7 h-7' : 'w-6 h-6'} bg-red-500 text-white rounded text-xs hover:bg-red-600`} title="Delete">🗑</button>
                     </div>
                 </div>
             </div>
