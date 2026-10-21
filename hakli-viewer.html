@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hakli Inscriptions · نقوش الحكلي</title>
-    <meta name="description" content="Browse and listen to published Hakli (Əḥklí / Shaḥri) inscriptions from Dhofar, Oman. No account needed.">
+    <title>نقوش الحكلي · Hakli Inscriptions</title>
+    <meta name="description" content="تصفّح واستمع إلى نقوش الحكلي المنشورة من ظفار، عُمان. بدون حساب. — Browse and listen to published Hakli inscriptions from Dhofar, Oman.">
     <link rel="icon" href="favicon.svg">
     <link rel="apple-touch-icon" href="hh-logo.png">
     <style>
@@ -27,18 +27,20 @@
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; }
         body {
-            font-family: "Segoe UI", system-ui, -apple-system, "Noto Sans", Roboto, sans-serif;
+            font-family: "Noto Naskh Arabic", "Segoe UI", system-ui, -apple-system, "Noto Sans", Roboto, sans-serif;
             background: var(--sand);
             color: var(--ink);
             font-size: 18px;
-            line-height: 1.6;
+            line-height: 1.7;
             min-height: 100vh;
         }
-        .arabic {
+        /* Arabic is the primary voice of the page */
+        .ar {
             font-family: "Traditional Arabic", "Arabic Typesetting", "Scheherazade New", "Scheherazade", "Noto Naskh Arabic", serif;
-            font-size: 1.35em;
-            line-height: 1.9;
         }
+        /* English is the quieter secondary voice */
+        .en { font-family: "Segoe UI", system-ui, -apple-system, "Noto Sans", Roboto, sans-serif; direction: ltr; unicode-bidi: isolate; }
+        .en-muted { color: var(--muted); font-size: .8em; font-weight: 400; }
         /* ---------- Header ---------- */
         header {
             background: linear-gradient(135deg, var(--purple) 0%, var(--patina) 140%);
@@ -48,13 +50,15 @@
             position: sticky; top: 0; z-index: 20;
         }
         .header-inner { max-width: 960px; margin: 0 auto; display: flex; align-items: center; gap: 14px; }
-        .header-inner img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: rgba(255,255,255,.15); }
-        .header-titles h1 { margin: 0; font-size: 1.25rem; font-weight: 700; letter-spacing: .2px; }
-        .header-titles .sub { margin: 0; font-size: .82rem; color: rgba(255,255,255,.85); }
-        .header-titles .sub-ar { font-size: 1.05rem; }
+        .header-inner img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: rgba(255,255,255,.15); }
+        .header-titles h1 { margin: 0; font-size: 1.6rem; font-weight: 700; letter-spacing: .2px; }
+        .header-titles .sub-en { margin: 0; font-size: .95rem; color: rgba(255,255,255,.9); }
+        .header-titles .place { margin: 2px 0 0; font-size: 1rem; color: rgba(255,255,255,.82); }
         /* ---------- Layout ---------- */
         main { max-width: 960px; margin: 0 auto; padding: 18px 16px 48px; }
-        .intro { text-align: center; color: var(--muted); margin: 6px 0 22px; font-size: .95rem; }
+        .intro { text-align: center; margin: 8px 0 24px; }
+        .intro .ar { font-size: 1.25rem; color: var(--ink); }
+        .intro .en { display: block; margin-top: 4px; color: var(--muted); font-size: .9rem; }
         /* ---------- Gallery ---------- */
         .gallery { display: grid; grid-template-columns: 1fr; gap: 14px; }
         @media (min-width: 560px) { .gallery { grid-template-columns: 1fr 1fr; } }
@@ -68,79 +72,83 @@
             cursor: pointer;
             transition: transform .12s ease, box-shadow .12s ease;
             display: flex; flex-direction: column; gap: 8px;
-            min-height: 96px;
-            text-align: left;
+            min-height: 100px;
+            text-align: right;
             width: 100%;
             font: inherit; color: inherit;
         }
         .card:hover, .card:focus-visible { transform: translateY(-2px); box-shadow: var(--shadow-lg); outline: none; border-color: var(--ochre); }
-        .card .title { font-size: 1.1rem; font-weight: 650; color: var(--purple); line-height: 1.3; }
-        .card .meta { font-size: .85rem; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-        .card .chip { background: var(--sand-deep); color: var(--stone); border-radius: 20px; padding: 2px 10px; font-size: .78rem; }
-        .card .go { margin-top: auto; color: var(--patina); font-size: .9rem; font-weight: 600; }
+        .card .title { font-size: 1.2rem; font-weight: 650; color: var(--purple); line-height: 1.35; }
+        .card .meta { font-size: .88rem; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+        .card .chip { background: var(--sand-deep); color: var(--stone); border-radius: 20px; padding: 2px 10px; font-size: .82rem; }
+        .card .go { margin-top: auto; color: var(--patina); font-size: 1rem; font-weight: 600; }
+        .card .go .en-muted { font-size: .75em; }
         /* ---------- Detail ---------- */
         .back-btn {
             display: inline-flex; align-items: center; gap: 8px;
             background: var(--card); border: 1px solid var(--sand-deep);
-            color: var(--purple); font-size: 1rem; font-weight: 600;
-            padding: 12px 18px; border-radius: 30px; cursor: pointer;
+            color: var(--purple); font-size: 1.1rem; font-weight: 600;
+            padding: 12px 20px; border-radius: 30px; cursor: pointer;
             box-shadow: var(--shadow); margin-bottom: 18px;
             min-height: 48px;
         }
         .back-btn:hover { background: var(--sand-deep); }
-        .detail-title { font-size: 1.5rem; font-weight: 700; color: var(--purple); margin: 0 0 4px; }
-        .detail-source { color: var(--muted); font-size: .95rem; margin: 0 0 18px; }
+        .detail-title { font-size: 1.55rem; font-weight: 700; color: var(--purple); margin: 0 0 4px; }
+        .detail-source { color: var(--muted); font-size: .98rem; margin: 0 0 18px; }
         .panel {
             background: var(--card); border: 1px solid var(--sand-deep);
             border-radius: var(--radius); box-shadow: var(--shadow);
             padding: 18px; margin-bottom: 16px;
         }
         .panel h2 {
-            margin: 0 0 12px; font-size: 1.05rem; color: var(--stone);
-            display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            font-weight: 650;
+            margin: 0 0 12px; font-weight: 650;
+            display: flex; align-items: baseline; gap: 10px;
         }
-        .panel h2 .ar-label { font-size: 1.15rem; color: var(--stone); font-weight: 600; }
+        .panel h2 .lbl-ar { font-size: 1.3rem; color: var(--stone); }
+        .panel h2 .lbl-en { font-size: .9rem; color: var(--muted); font-weight: 500; }
         .source-img { width: 100%; border-radius: 10px; display: block; background: var(--sand-deep); }
         /* Audio - the hero element */
         .audio-panel { background: #fbf7ef; border: 1px solid var(--ochre); }
-        .audio-lead { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-        .audio-lead .icon { font-size: 1.6rem; }
-        .audio-lead .label { font-size: 1.15rem; font-weight: 700; color: var(--rust); }
-        .audio-lead .label-ar { font-size: 1.3rem; font-weight: 600; color: var(--rust); margin-left: auto; }
+        .audio-lead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+        .audio-lead .icon { font-size: 1.7rem; align-self: center; }
+        .audio-lead .label-ar { font-size: 1.5rem; font-weight: 700; color: var(--rust); }
+        .audio-lead .label-en { font-size: .95rem; font-weight: 500; color: var(--rust); opacity: .8; }
         audio { width: 100%; height: 48px; }
-        .no-audio { color: var(--muted); font-style: italic; font-size: .92rem; }
+        .no-audio { color: var(--muted); font-size: 1rem; }
         /* Transcription */
-        .translit { font-size: 1.5rem; letter-spacing: .5px; color: var(--ink); word-break: break-word; }
-        .translit .word { margin-right: .5em; }
-        .trans-ar { word-break: break-word; }
+        .translit { font-size: 1.4rem; letter-spacing: .5px; color: var(--ink); word-break: break-word; }
+        .trans-ar { word-break: break-word; font-size: 1.6rem; }
         .line-break { display: block; height: .4em; }
         .divider { height: 1px; background: var(--sand-deep); margin: 16px 0; border: 0; }
-        .translation-en { font-size: 1.15rem; }
-        .translation-ar { }
-        .notes { color: var(--ink); white-space: pre-wrap; }
-        .field-empty { color: var(--muted); font-style: italic; font-size: .92rem; }
+        .translation-ar { font-size: 1.5rem; }
+        .translation-en { font-size: 1.1rem; }
+        .notes { color: var(--ink); white-space: pre-wrap; font-size: 1.15rem; }
+        .sub-head { font-size: .8rem; color: var(--muted); margin: 0 0 6px; font-weight: 600; letter-spacing: .3px; }
         /* States */
         .state { text-align: center; padding: 60px 20px; color: var(--muted); }
-        .state .big { font-size: 2.4rem; margin-bottom: 10px; }
+        .state .big { font-size: 2.6rem; margin-bottom: 10px; }
+        .state .ar { font-size: 1.2rem; color: var(--ink); display: block; }
+        .state .en { font-size: .9rem; color: var(--muted); display: block; margin-top: 4px; }
         .spinner {
-            width: 38px; height: 38px; border: 4px solid var(--sand-deep);
+            width: 40px; height: 40px; border: 4px solid var(--sand-deep);
             border-top-color: var(--patina); border-radius: 50%;
             animation: spin 0.9s linear infinite; margin: 0 auto 14px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         .retry-btn {
-            margin-top: 16px; background: var(--patina); color: #fff; border: 0;
-            padding: 12px 24px; border-radius: 30px; font-size: 1rem; font-weight: 600;
+            margin-top: 18px; background: var(--patina); color: #fff; border: 0;
+            padding: 12px 26px; border-radius: 30px; font-size: 1.1rem; font-weight: 600;
             cursor: pointer; min-height: 48px;
         }
+        .retry-btn .en-muted { color: rgba(255,255,255,.75); }
         /* Footer */
         footer {
             max-width: 960px; margin: 0 auto; padding: 28px 16px 36px;
-            text-align: center; color: var(--muted); font-size: .8rem; line-height: 1.7;
+            text-align: center; color: var(--muted); font-size: .85rem; line-height: 1.8;
             border-top: 1px solid var(--sand-deep);
         }
         footer a { color: var(--stone); }
+        footer .en { display: block; font-size: .78rem; }
         .hidden { display: none !important; }
     </style>
 </head>
@@ -149,9 +157,9 @@
         <div class="header-inner">
             <img src="hh-logo.png" alt="" onerror="this.style.display='none'">
             <div class="header-titles">
-                <h1>Hakli Inscriptions</h1>
-                <p class="sub sub-ar arabic">نقوش الحكلي</p>
-                <p class="sub">Dhofar, Oman · ظفار، عُمان</p>
+                <h1 class="ar">نقوش الحكلي</h1>
+                <p class="sub-en en">Hakli Inscriptions</p>
+                <p class="place ar">ظفار، عُمان <span class="en-muted en">· Dhofar, Oman</span></p>
             </div>
         </div>
     </header>
@@ -160,26 +168,26 @@
         <!-- GALLERY VIEW -->
         <section id="gallery-view">
             <p class="intro">
-                Browse inscriptions shared by the community. Tap one to see it and listen.<br>
-                <span class="arabic">تصفّح النقوش التي شاركها المجتمع. اضغط على نقش لمشاهدته والاستماع إليه.</span>
+                <span class="ar">تصفّح النقوش التي شاركها المجتمع. اضغط على نقش لمشاهدته والاستماع إليه.</span>
+                <span class="en">Browse inscriptions shared by the community. Tap one to see it and listen.</span>
             </p>
             <div id="gallery" class="gallery"></div>
             <div id="gallery-state" class="state">
                 <div class="spinner"></div>
-                <div>Loading inscriptions… · <span class="arabic">جارِ التحميل…</span></div>
+                <div><span class="ar">جارِ التحميل…</span><span class="en">Loading inscriptions…</span></div>
             </div>
         </section>
 
         <!-- DETAIL VIEW -->
         <section id="detail-view" class="hidden">
-            <button class="back-btn" onclick="showGallery()">← Back · <span class="arabic">رجوع</span></button>
+            <button class="back-btn" onclick="showGallery()"><span class="ar">رجوع</span> <span class="en-muted en">Back</span> →</button>
             <div id="detail-content"></div>
         </section>
     </main>
 
     <footer>
-        <div>Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></div>
-        <div>A community archive · <a href="https://hudhud.dev">hudhud.dev</a> · © 2026</div>
+        <div class="ar">أرشيف مجتمعي · <a href="https://hudhud.dev">hudhud.dev</a> · © 2026</div>
+        <div class="en">Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em> · A community archive</div>
     </footer>
 
     <script>
@@ -205,14 +213,14 @@
 
         function fmtDate(iso) {
             if (!iso) return '';
-            try { return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+            try { return new Date(iso).toLocaleDateString('ar', { year: 'numeric', month: 'long', day: 'numeric' }); }
             catch (e) { return ''; }
         }
 
         // ---- Load the published list ----
         function loadGallery() {
             galleryState.classList.remove('hidden');
-            galleryState.innerHTML = '<div class="spinner"></div><div>Loading inscriptions… · <span class="arabic">جارِ التحميل…</span></div>';
+            galleryState.innerHTML = '<div class="spinner"></div><div><span class="ar">جارِ التحميل…</span><span class="en">Loading inscriptions…</span></div>';
             galleryEl.innerHTML = '';
 
             var q = encodeURIComponent("'" + SHARED_FOLDER_ID + "' in parents and trashed=false");
@@ -227,7 +235,7 @@
                         return vis === 'published';
                     });
                     if (!files.length) {
-                        galleryState.innerHTML = '<div class="big">📜</div><div>No published inscriptions yet.<br><span class="arabic">لا توجد نقوش منشورة بعد.</span></div>';
+                        galleryState.innerHTML = '<div class="big">📜</div><div><span class="ar">لا توجد نقوش منشورة بعد.</span><span class="en">No published inscriptions yet.</span></div>';
                         return;
                     }
                     files.sort(function (a, b) { return (b.modifiedTime || '').localeCompare(a.modifiedTime || ''); });
@@ -237,9 +245,9 @@
                 .catch(function (err) {
                     galleryState.innerHTML =
                         '<div class="big">🌐</div>' +
-                        '<div>Could not load inscriptions. Please check your connection.<br>' +
-                        '<span class="arabic">تعذّر تحميل النقوش. يرجى التحقق من الاتصال.</span></div>' +
-                        '<button class="retry-btn" onclick="HGRViewer.loadGallery()">Try again · <span class="arabic">حاول مجددًا</span></button>';
+                        '<div><span class="ar">تعذّر تحميل النقوش. يرجى التحقق من الاتصال.</span>' +
+                        '<span class="en">Could not load inscriptions. Please check your connection.</span></div>' +
+                        '<button class="retry-btn" onclick="HGRViewer.loadGallery()"><span class="ar">حاول مجددًا</span> <span class="en-muted en">Try again</span></button>';
                     console.error('Gallery load failed:', err);
                 });
         }
@@ -248,7 +256,7 @@
             var props = {};
             if (file.properties) Object.assign(props, file.properties);
             if (file.appProperties) Object.assign(props, file.appProperties);
-            var title = props.title || (file.name || '').replace(/\.hki$/i, '') || 'Untitled';
+            var title = props.title || (file.name || '').replace(/\.hki$/i, '') || 'بدون عنوان';
             var glyphCount = props.glyphCount ? parseInt(props.glyphCount, 10) : null;
             var date = fmtDate(file.modifiedTime);
 
@@ -258,10 +266,10 @@
             card.innerHTML =
                 '<div class="title">' + esc(title) + '</div>' +
                 '<div class="meta">' +
-                    (glyphCount ? '<span class="chip">' + glyphCount + ' glyph' + (glyphCount === 1 ? '' : 's') + '</span>' : '') +
+                    (glyphCount ? '<span class="chip">' + glyphCount + ' ' + (glyphCount === 1 ? 'حرف' : 'حروف') + '</span>' : '') +
                     (date ? '<span>' + esc(date) + '</span>' : '') +
                 '</div>' +
-                '<div class="go">View &amp; listen · <span class="arabic">عرض واستماع</span> →</div>';
+                '<div class="go">عرض واستماع <span class="en-muted en">View &amp; listen</span> ←</div>';
             card.addEventListener('click', function () { openInscription(file.id, title); });
             return card;
         }
@@ -272,7 +280,7 @@
             detailView.classList.remove('hidden');
             window.scrollTo(0, 0);
             detailContent.innerHTML =
-                '<div class="state"><div class="spinner"></div><div>Opening… · <span class="arabic">جارِ الفتح…</span></div></div>';
+                '<div class="state"><div class="spinner"></div><div><span class="ar">جارِ الفتح…</span><span class="en">Opening…</span></div></div>';
 
             var url = DRIVE + '/' + encodeURIComponent(fileId) + '?alt=media&key=' + API_KEY;
             fetch(url)
@@ -281,8 +289,8 @@
                 .catch(function (err) {
                     detailContent.innerHTML =
                         '<div class="state"><div class="big">🌐</div>' +
-                        '<div>Could not open this inscription.<br>' +
-                        '<span class="arabic">تعذّر فتح هذا النقش.</span></div></div>';
+                        '<div><span class="ar">تعذّر فتح هذا النقش.</span>' +
+                        '<span class="en">Could not open this inscription.</span></div></div>';
                     console.error('Open failed:', err);
                 });
         }
@@ -320,9 +328,9 @@
         }
 
         function renderDetail(hki, fallbackTitle) {
-            var title = hki.inscriptionTitle || fallbackTitle || 'Untitled';
+            var title = hki.inscriptionTitle || fallbackTitle || 'بدون عنوان';
             var source = hki.inscriptionSource || '';
-            var rtl = hki.readingDirection === 'rtl';
+            var rtl = hki.readingDirection !== 'ltr'; // Hakli defaults RTL
 
             var html = '';
             html += '<h1 class="detail-title">' + esc(title) + '</h1>';
@@ -335,48 +343,51 @@
                     '</div>';
             }
 
-            // Audio - the hero element
+            // Audio - the hero element (Arabic primary)
             html += '<div class="panel audio-panel">' +
                 '<div class="audio-lead">' +
                     '<span class="icon">🔊</span>' +
-                    '<span class="label">Listen</span>' +
-                    '<span class="label-ar arabic">استمع</span>' +
+                    '<span class="label-ar ar">استمع</span>' +
+                    '<span class="label-en en">Listen</span>' +
                 '</div>';
             if (hki.audioData) {
                 html += '<audio controls preload="none" src="' + esc(hki.audioData) + '"></audio>';
             } else {
-                html += '<div class="no-audio">No recording yet · <span class="arabic">لا يوجد تسجيل بعد</span></div>';
+                html += '<div class="no-audio"><span class="ar">لا يوجد تسجيل بعد</span> <span class="en-muted en">No recording yet</span></div>';
             }
             html += '</div>';
 
-            // Transcription
+            // Transcription (Arabic script primary, transliteration secondary)
             var translit = buildTranscription(hki, 'translit');
             var arabicTr = buildTranscription(hki, 'arabic');
             if (translit || arabicTr) {
                 html += '<div class="panel">' +
-                    '<h2><span>Reading</span><span class="ar-label arabic">النسخ</span></h2>';
-                if (translit) html += '<div class="translit" dir="ltr">' + translit + '</div>';
-                if (translit && arabicTr) html += '<hr class="divider">';
-                if (arabicTr) html += '<div class="trans-ar arabic" dir="' + (rtl ? 'rtl' : 'ltr') + '">' + arabicTr + '</div>';
+                    '<h2><span class="lbl-ar ar">النسخ</span><span class="lbl-en en">Reading</span></h2>';
+                if (arabicTr) html += '<div class="trans-ar ar" dir="' + (rtl ? 'rtl' : 'ltr') + '">' + arabicTr + '</div>';
+                if (arabicTr && translit) html += '<hr class="divider">';
+                if (translit) {
+                    html += '<p class="sub-head">Transliteration</p>';
+                    html += '<div class="translit" dir="ltr">' + translit + '</div>';
+                }
                 html += '</div>';
             }
 
-            // Translation
+            // Translation (Arabic primary)
             var hasEn = hki.translationEnglish && hki.translationEnglish.trim();
             var hasAr = hki.translationArabic && hki.translationArabic.trim();
             if (hasEn || hasAr) {
                 html += '<div class="panel">' +
-                    '<h2><span>Translation</span><span class="ar-label arabic">الترجمة</span></h2>';
-                if (hasEn) html += '<div class="translation-en">' + esc(hki.translationEnglish) + '</div>';
-                if (hasEn && hasAr) html += '<hr class="divider">';
-                if (hasAr) html += '<div class="translation-ar arabic" dir="rtl">' + esc(hki.translationArabic) + '</div>';
+                    '<h2><span class="lbl-ar ar">الترجمة</span><span class="lbl-en en">Translation</span></h2>';
+                if (hasAr) html += '<div class="translation-ar ar" dir="rtl">' + esc(hki.translationArabic) + '</div>';
+                if (hasAr && hasEn) html += '<hr class="divider">';
+                if (hasEn) html += '<div class="translation-en en" dir="ltr">' + esc(hki.translationEnglish) + '</div>';
                 html += '</div>';
             }
 
             // Notes
             if (hki.inscriptionNotes && hki.inscriptionNotes.trim()) {
                 html += '<div class="panel">' +
-                    '<h2><span>Notes</span><span class="ar-label arabic">ملاحظات</span></h2>' +
+                    '<h2><span class="lbl-ar ar">ملاحظات</span><span class="lbl-en en">Notes</span></h2>' +
                     '<div class="notes">' + esc(hki.inscriptionNotes) + '</div>' +
                     '</div>';
             }
