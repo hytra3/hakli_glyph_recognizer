@@ -4,7 +4,7 @@
 // (OpenCV.js, chart+templates, CDN libs) so offline recognition survives
 // both a fresh install and every deploy.
 
-const CACHE_VERSION = 'v261021a';
+const CACHE_VERSION = 'v261021b';
 const CACHE_NAME = `hakli-${CACHE_VERSION}`;          // app shell (versioned)
 const RUNTIME_CACHE = `hakli-runtime-${CACHE_VERSION}`; // same-origin app code (versioned)
 const STABLE_CACHE = 'hakli-stable-v1';               // heavy immutable deps (NOT purged on deploy)
@@ -46,8 +46,17 @@ async function cacheEachInto(cacheName, urls) {
   const cache = await caches.open(cacheName);
   const results = await Promise.allSettled(
     urls.map(async (url) => {
+      const isCross = /^https?:\/\//.test(url) && url.indexOf(self.location.origin) !== 0;
       try {
-        const res = await fetch(url, { cache: 'reload' });
+        // Try a normal (CORS) fetch first — gives verifiable responses for
+        // CDNs that send CORS headers (unpkg, cdnjs).
+        let res = await fetch(url, { cache: 'reload' }).catch(() => null);
+        // Some CDNs (e.g. cdn.tailwindcss.com) send no CORS headers, so the
+        // CORS fetch fails. Retry opaque (no-cors) so we can still cache them —
+        // opaque responses serve fine to <script src> tags.
+        if ((!res || !res.ok) && isCross) {
+          res = await fetch(url, { mode: 'no-cors', cache: 'reload' });
+        }
         if (res && (res.ok || res.type === 'opaque')) {
           await cache.put(url, res.clone());
           return url;
