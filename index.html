@@ -154,7 +154,7 @@
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v260811i --> 
+    <!-- Current version: v260811j --> 
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -170,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260811i"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260811i"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260811i"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260811i"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260811i"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260811i"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260811i"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260811i"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260811j"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260811j"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260811j"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260811j"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260811j"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260811j"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260811j"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260811j"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260811i';
+        const APP_VERSION = 'v260811j';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -3407,14 +3407,9 @@
                                             Hakli Glyph Recognizer
                                         </h1>
                                         {!headerCollapsed && (
-                                            <>
-                                                <p className="text-[10px] text-purple-200 leading-tight">
-                                                    Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em>
-                                                </p>
-                                                <p className="text-[10px] text-purple-300 leading-tight">
-                                                    beta {APP_VERSION} © 2026 · hudhud.dev
-                                                </p>
-                                            </>
+                                            <p className="text-[10px] text-purple-200 leading-tight">
+                                                Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em>
+                                            </p>
                                         )}
                                     </div>
                                     {/* Collapse indicator (mobile only) */}
@@ -5794,6 +5789,12 @@
                                     className="bg-[#f7f3ed] border-2 border-ochre"
                                 />
                         </div>
+
+                        {/* Muted footer — version / provenance, scroll-to-see */}
+                        <footer className="mt-8 pt-4 pb-6 border-t border-gray-200 text-center text-[11px] text-gray-400 leading-relaxed">
+                            <div>Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></div>
+                            <div>beta {APP_VERSION} · © 2026 · hudhud.dev</div>
+                        </footer>
                     </main>
                     
                     {/* ===== SOURCE IMAGE LIGHTBOX ===== */}
@@ -7219,7 +7220,17 @@
             
             navigator.serviceWorker.register('sw.js').then((registration) => {
                 console.log('✅ SW registered');
-                
+
+                // After a successful online load, ask the SW to (re)warm the heavy
+                // offline-critical deps (OpenCV, chart+templates, CDN libs) into the
+                // stable cache — so the next field trip works offline even right after a deploy.
+                if (navigator.onLine) {
+                    navigator.serviceWorker.ready.then((reg) => {
+                        const sw = reg.active || navigator.serviceWorker.controller;
+                        if (sw) { try { sw.postMessage({ type: 'WARM_STABLE' }); } catch (e) {} }
+                    });
+                }
+
                 // Only check for updates when:
                 // 1. Online
                 // 2. On wifi (not cellular/metered connection)
