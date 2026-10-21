@@ -154,7 +154,7 @@
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v260811j --> 
+    <!-- Current version: v20261021a --> 
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -170,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=260811j"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=260811j"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=260811j"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=260811j"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=260811j"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=260811j"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=260811j"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=260811j"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=20261021a"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=20261021a"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=20261021a"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=20261021a"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=20261021a"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=20261021a"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=20261021a"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=20261021a"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v260811j';
+        const APP_VERSION = 'v20261021a';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -3431,6 +3431,23 @@
                                     
                                     {/* Status indicators - grouped on right */}
                                     <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
+                                        {/* Offline / pending-sync indicator — field reassurance (only shows when relevant) */}
+                                        {!syncStatus.isOnline && (
+                                            <div
+                                                className="px-2 py-1 rounded-full text-xs bg-stone/50 border border-white/30 text-white whitespace-nowrap"
+                                                title="You're offline. Work is saved locally and will sync to Drive automatically when you're back online."
+                                            >
+                                                ⚡ Offline{syncStatus.pending > 0 ? ` · ${syncStatus.pending}↑` : ''}
+                                            </div>
+                                        )}
+                                        {syncStatus.isOnline && syncStatus.pending > 0 && (
+                                            <div
+                                                className="px-2 py-1 rounded-full text-xs bg-ochre/50 border border-white/30 text-white whitespace-nowrap"
+                                                title={`${syncStatus.pending} inscription(s) waiting to sync to Drive`}
+                                            >
+                                                {syncStatus.isSyncing ? '↻ Syncing…' : `↑ ${syncStatus.pending} to sync`}
+                                            </div>
+                                        )}
                                         {chartStatus !== 'loaded' && (
                                             <div 
                                                 className="px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-amber-900 animate-pulse"
