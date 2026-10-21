@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="origin">
     <title>نقوش الحكلي · Hakli Inscriptions</title>
     <meta name="description" content="تصفّح واستمع إلى نقوش الحكلي المنشورة من ظفار، عُمان. بدون حساب. — Browse and listen to published Hakli inscriptions from Dhofar, Oman.">
     <link rel="icon" href="favicon.svg">
@@ -227,7 +228,7 @@
             var fields = encodeURIComponent('files(id,name,properties,appProperties,thumbnailLink,modifiedTime)');
             var url = DRIVE + '?q=' + q + '&fields=' + fields + '&key=' + API_KEY;
 
-            fetch(url)
+            fetch(url, { referrerPolicy: 'origin' })
                 .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                 .then(function (data) {
                     var files = (data.files || []).filter(function (f) {
@@ -283,7 +284,7 @@
                 '<div class="state"><div class="spinner"></div><div><span class="ar">جارِ الفتح…</span><span class="en">Opening…</span></div></div>';
 
             var url = DRIVE + '/' + encodeURIComponent(fileId) + '?alt=media&key=' + API_KEY;
-            fetch(url)
+            fetch(url, { referrerPolicy: 'origin' })
                 .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                 .then(function (hki) { renderDetail(hki, fallbackTitle); })
                 .catch(function (err) {
