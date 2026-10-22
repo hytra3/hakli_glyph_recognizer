@@ -838,25 +838,6 @@ const ExportPanel = ({
                                 <span className="font-medium text-gray-700 truncate">
                                     📦 {inscriptionTitle || 'Untitled'}
                                 </span>
-                                
-                                {/* Visibility Dropdown */}
-                                <div className="relative flex-shrink-0">
-                                    <select
-                                        value={visibility || 'draft'}
-                                        onChange={(e) => onVisibilityChange && onVisibilityChange(e.target.value)}
-                                        className={'text-xs px-2 py-1 rounded-full border-0 cursor-pointer appearance-none pr-6 ' + (
-                                            visibility === 'draft' ? 'bg-gray-200 text-gray-700' :
-                                            visibility === 'review' ? 'bg-amber-100 text-amber-700' :
-                                            'bg-patina/20 text-patina'
-                                        )}
-                                        title={currentVisibility.desc}
-                                    >
-                                        {visibilityOptions.map(opt => (
-                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                        ))}
-                                    </select>
-                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-xs">▼</span>
-                                </div>
                             </div>
                             
                             {/* ID if exists */}
@@ -908,7 +889,7 @@ const ExportPanel = ({
                                 onClick={() => onOpenWarehouse && onOpenWarehouse()}
                                 className="flex-1 px-3 py-2 bg-ochre text-white rounded-lg hover:bg-ochre/80 transition-colors text-sm font-medium"
                             >
-                                📚 Browse Warehouse
+                                📚 Browse Archive
                             </button>
                             
                             <label className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 cursor-pointer transition-colors text-sm text-center font-medium">
@@ -1097,7 +1078,7 @@ const ExportPanel = ({
                                     onClick={onOpenWarehouse}
                                     className="text-ancient-purple hover:underline font-medium"
                                 >
-                                    Open Warehouse → select items → Generate Booklet
+                                    Open Archive → select items → Generate Booklet
                                 </button>
                             </div>
                         )}

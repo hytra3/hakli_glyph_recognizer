@@ -450,7 +450,7 @@ const WarehouseModal = ({
                 <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-ancient-purple to-ochre text-white rounded-t-xl">
                     <div>
                         <h2 className="text-xl font-bold flex items-center gap-2">
-                            📚 Hakli Warehouse
+                            📚 Hakli Archive
                         </h2>
                         <p className="text-sm text-white/80">
                             Browse and load inscription files
@@ -460,12 +460,6 @@ const WarehouseModal = ({
                     <div className="flex items-center gap-3">
                         {currentUserEmail ? (
                             <>
-                                <button
-                                    onClick={() => setShowCollaborators(true)}
-                                    className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm"
-                                >
-                                    👥 Team
-                                </button>
                                 <div className="text-sm">
                                     <div className="font-medium">{currentUserEmail}</div>
                                     <div className="flex gap-2 items-center">
@@ -542,8 +536,8 @@ const WarehouseModal = ({
                             {!currentUserEmail && (
                                 <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
                                     <div>
-                                        <div className="font-medium text-blue-800">🔒 Sign in to access more</div>
-                                        <div className="text-sm text-blue-600">See your drafts, shared inscriptions, and save edits</div>
+                                        <div className="font-medium text-blue-800">🔒 Sign in to publish</div>
+                                        <div className="text-sm text-blue-600">Add your own inscriptions to the community archive</div>
                                     </div>
                                     <button
                                         onClick={onSignIn}
@@ -553,43 +547,10 @@ const WarehouseModal = ({
                                     </button>
                                 </div>
                             )}
-                            
-                            {/* Drafts - only when signed in (exclude review items) */}
-                            {currentUserEmail && (
-                                <Section
-                                    title="My Drafts"
-                                    icon="📝"
-                                    items={draftItems.filter(item => item.visibility !== 'review')}
-                                    emptyText="No drafts yet. Upload an image to start!"
-                                    isOwner={true}
-                                />
-                            )}
-                            
-                            {/* In Review - only when signed in */}
-                            {currentUserEmail && draftItems.filter(item => item.visibility === 'review').length > 0 && (
-                                <Section
-                                    title="In Review"
-                                    icon="👁️"
-                                    items={draftItems.filter(item => item.visibility === 'review')}
-                                    emptyText="No items in review"
-                                    isOwner={true}
-                                />
-                            )}
-                            
-                            {/* Shared with me - only when signed in */}
-                            {currentUserEmail && (
-                                <Section
-                                    title="Shared with Me"
-                                    icon="🤝"
-                                    items={sharedItems}
-                                    emptyText="No inscriptions shared with you yet"
-                                    showSharedBy={true}
-                                />
-                            )}
-                            
-                            {/* Published - always visible */}
+
+                            {/* The community archive — one shared store of published inscriptions */}
                             <Section
-                                title="Published"
+                                title="Published inscriptions"
                                 icon="✅"
                                 items={publishedItems}
                                 emptyText="No published inscriptions yet"
