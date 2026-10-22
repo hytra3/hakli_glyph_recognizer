@@ -195,10 +195,10 @@
     (function () {
         'use strict';
 
-        // ---- Public warehouse config (read-only, no account needed) ----
-        var API_KEY = 'AIzaSyAZ6ptZw3XfBZJDUdV9V-GKClCej0iEkRI';
-        var SHARED_FOLDER_ID = '1XttYhdnw4Pl11ccfS5AEuO3W-aCRZ2qo';
-        var DRIVE = 'https://www.googleapis.com/drive/v3/files';
+        // ---- Community archive config (read-only, public, no account) ----
+        // Reads the catalog from the archive function; inscription blobs are
+        // fetched straight from their public Cloud Storage URLs (CORS-allowed).
+        var LIST_URL = 'https://us-central1-tawkin-blue.cloudfunctions.net/listInscriptions';
 
         var galleryView = document.getElementById('gallery-view');
         var detailView = document.getElementById('detail-view');
@@ -218,30 +218,23 @@
             catch (e) { return ''; }
         }
 
-        // ---- Load the published list ----
+        // ---- Load the published list from the archive catalog ----
         function loadGallery() {
             galleryState.classList.remove('hidden');
             galleryState.innerHTML = '<div class="spinner"></div><div><span class="ar">جارِ التحميل…</span><span class="en">Loading inscriptions…</span></div>';
             galleryEl.innerHTML = '';
 
-            var q = encodeURIComponent("'" + SHARED_FOLDER_ID + "' in parents and trashed=false");
-            var fields = encodeURIComponent('files(id,name,properties,appProperties,thumbnailLink,modifiedTime)');
-            var url = DRIVE + '?q=' + q + '&fields=' + fields + '&key=' + API_KEY;
-
-            fetch(url, { referrerPolicy: 'origin' })
+            fetch(LIST_URL)
                 .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                 .then(function (data) {
-                    var files = (data.files || []).filter(function (f) {
-                        var vis = (f.appProperties && f.appProperties.visibility) || (f.properties && f.properties.visibility);
-                        return vis === 'published';
-                    });
-                    if (!files.length) {
+                    var items = (data && data.items) || [];
+                    if (!items.length) {
                         galleryState.innerHTML = '<div class="big">📜</div><div><span class="ar">لا توجد نقوش منشورة بعد.</span><span class="en">No published inscriptions yet.</span></div>';
                         return;
                     }
-                    files.sort(function (a, b) { return (b.modifiedTime || '').localeCompare(a.modifiedTime || ''); });
+                    // Server already returns published, non-hidden, newest-first.
                     galleryState.classList.add('hidden');
-                    files.forEach(function (f) { galleryEl.appendChild(renderCard(f)); });
+                    items.forEach(function (it) { galleryEl.appendChild(renderCard(it)); });
                 })
                 .catch(function (err) {
                     galleryState.innerHTML =
@@ -253,13 +246,10 @@
                 });
         }
 
-        function renderCard(file) {
-            var props = {};
-            if (file.properties) Object.assign(props, file.properties);
-            if (file.appProperties) Object.assign(props, file.appProperties);
-            var title = props.title || (file.name || '').replace(/\.hki$/i, '') || 'بدون عنوان';
-            var glyphCount = props.glyphCount ? parseInt(props.glyphCount, 10) : null;
-            var date = fmtDate(file.modifiedTime);
+        function renderCard(item) {
+            var title = item.title || 'بدون عنوان';
+            var glyphCount = (typeof item.glyphCount === 'number') ? item.glyphCount : null;
+            var date = fmtDate(item.createdAt);
 
             var card = document.createElement('button');
             card.className = 'card';
@@ -268,23 +258,31 @@
                 '<div class="title">' + esc(title) + '</div>' +
                 '<div class="meta">' +
                     (glyphCount ? '<span class="chip">' + glyphCount + ' ' + (glyphCount === 1 ? 'حرف' : 'حروف') + '</span>' : '') +
+                    (item.hasAudio ? '<span class="chip">🔊</span>' : '') +
                     (date ? '<span>' + esc(date) + '</span>' : '') +
                 '</div>' +
                 '<div class="go">عرض واستماع <span class="en-muted en">View &amp; listen</span> ←</div>';
-            card.addEventListener('click', function () { openInscription(file.id, title); });
+            card.addEventListener('click', function () { openInscription(item.blobUrl, title); });
             return card;
         }
 
-        // ---- Open one inscription ----
-        function openInscription(fileId, fallbackTitle) {
+        // ---- Open one inscription (fetch the .hki straight from its public URL) ----
+        function openInscription(blobUrl, fallbackTitle) {
             galleryView.classList.add('hidden');
             detailView.classList.remove('hidden');
             window.scrollTo(0, 0);
             detailContent.innerHTML =
                 '<div class="state"><div class="spinner"></div><div><span class="ar">جارِ الفتح…</span><span class="en">Opening…</span></div></div>';
 
-            var url = DRIVE + '/' + encodeURIComponent(fileId) + '?alt=media&key=' + API_KEY;
-            fetch(url, { referrerPolicy: 'origin' })
+            if (!blobUrl) {
+                detailContent.innerHTML =
+                    '<div class="state"><div class="big">🌐</div>' +
+                    '<div><span class="ar">تعذّر فتح هذا النقش.</span>' +
+                    '<span class="en">Could not open this inscription.</span></div></div>';
+                return;
+            }
+
+            fetch(blobUrl)
                 .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                 .then(function (hki) { renderDetail(hki, fallbackTitle); })
                 .catch(function (err) {
