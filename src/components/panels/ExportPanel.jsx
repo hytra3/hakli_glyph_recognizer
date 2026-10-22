@@ -69,11 +69,8 @@ const ExportPanel = ({
     
     // Get sync status
     const getSyncStatusText = () => {
-        if (!driveSignedIn) return '☁️ Sign in to Drive to enable sync';
-        if (!syncStatus || typeof syncStatus !== 'object') return '☁️ Auto-syncs to Drive';
-        if (syncStatus.isOnline === false) return '📴 Offline - will sync when connected';
-        if (syncStatus.pending > 0) return '⏳ ' + syncStatus.pending + ' pending sync';
-        return '☁️ Auto-syncs to Drive';
+        if (!driveSignedIn) return '☁️ Sign in to publish to the community archive';
+        return '✅ Signed in — publishing adds a public entry';
     };
     
     const getSyncStatusClass = () => {
@@ -893,7 +890,7 @@ const ExportPanel = ({
                                             ? 'bg-stone hover:bg-stone/80 flex-1' 
                                             : 'bg-ancient-purple hover:bg-[#4a3d5a] flex-1')}
                                 >
-                                    {currentFileId && fileOwner === driveUserEmail ? '📄 Save As New' : '☁️ Save to Cloud'}
+                                    {currentFileId && fileOwner === driveUserEmail ? '📄 Publish Version' : '☁️ Publish to Archive'}
                                 </button>
                             </div>
                         ) : (
@@ -901,7 +898,7 @@ const ExportPanel = ({
                                 onClick={() => onSignIn && onSignIn()}
                                 className="w-full text-xs text-center text-ancient-purple py-2 bg-ancient-purple/10 hover:bg-ancient-purple/20 rounded border border-ancient-purple/30 cursor-pointer transition-colors font-medium"
                             >
-                                🔑 Sign in to save to cloud
+                                🔑 Sign in to publish
                             </button>
                         )}
                         
@@ -952,7 +949,7 @@ const ExportPanel = ({
                             onClick={() => onSignIn && onSignIn()}
                             className="w-full text-xs text-center text-ancient-purple hover:underline cursor-pointer"
                         >
-                            ☁️ Sign in to Drive to enable sync
+                            ☁️ Sign in to publish
                         </button>
                     )}
                     

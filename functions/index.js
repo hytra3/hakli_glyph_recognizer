@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
   'https://hudhud.dev,https://hytra3.github.io,http://localhost,http://localhost:8080')
   .split(',').map((s) => s.trim()).filter(Boolean);
 // Reject absurdly large payloads early (bytes of JSON in the request body).
-const MAX_HKI_BYTES = parseInt(process.env.MAX_HKI_BYTES || '8000000', 10); // ~8MB
+const MAX_HKI_BYTES = parseInt(process.env.MAX_HKI_BYTES || '25000000', 10); // ~25MB (photo + audio)
 
 const datastore = new Datastore();
 const storage = new Storage();

@@ -147,7 +147,7 @@
     <script src="src/storage/cache.js"></script>
     <script src="src/storage/corrections.js"></script>
     <script src="src/storage/change-tracker.js"></script>
-    <script src="src/storage/drive-sync.js"></script>
+    <script src="src/storage/archive-sync.js?v=261022a"></script>
     <script src="src/storage/access-control.js"></script>
     <script src="src/storage/sync-manager.js"></script>
     <script src="src/storage/local-autosave.js"></script>
@@ -170,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261021b"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261021b"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261021b"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261021b"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261021b"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261021b"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261021b"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261021b"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261022a"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261022a"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261022a"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261022a"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261022a"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261022a"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261022a"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261022a"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v261021b';
+        const APP_VERSION = 'v261022a';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -657,6 +657,7 @@
                     readingDirection,
                     wordBoundaries: Array.from(wordBoundaries),
                     lineBreaks: Array.from(lineBreaks),
+                    columnBreaks: Array.from(columnBreaks),
                     validations,
                     translationEnglish,
                     translationArabic,
@@ -665,7 +666,7 @@
                     changeLog: changeLog || []
                 };
             }, [recognitionResults, currentInscriptionId, inscriptionTitle, inscriptionNotes, inscriptionSource, originalImage,
-                displayImage, preprocessing, readingOrder, readingDirection, wordBoundaries, lineBreaks,
+                displayImage, preprocessing, readingOrder, readingDirection, wordBoundaries, lineBreaks, columnBreaks,
                 validations, translationEnglish, translationArabic, audioData, visibility, changeLog]);
 
             // ========== LOCAL AUTO-SAVE TRIGGER ==========
@@ -721,28 +722,12 @@
             // Because it always passes currentFileId, it updates in place and never
             // creates duplicates. Debounced so we don't hammer the Drive API.
             useEffect(() => {
-                if (!driveSignedIn || !currentFileId) return;                 // only sync already-saved drafts
-                if (!recognitionResults || recognitionResults.length === 0) return;
-                if (fileOwner && fileOwner !== driveUserEmail) return;        // don't auto-write someone else's file
-
-                const handle = setTimeout(async () => {
-                    try {
-                        const result = await DriveSync.saveHki(buildHkiData(), {
-                            fileId: currentFileId,
-                            title: inscriptionTitle || inscriptionSource || 'Untitled',
-                            visibility
-                        });
-                        if (result && result.id) setCurrentFileId(result.id);
-                        console.log('☁️ Auto-synced to Drive');
-                    } catch (e) {
-                        console.warn('Auto-sync failed (will retry on next change):', e);
-                    }
-                }, 4000);
-
-                return () => clearTimeout(handle);
-            }, [recognitionResults, validations, readingOrder, wordBoundaries, lineBreaks,
-                translationEnglish, translationArabic, inscriptionTitle, inscriptionNotes,
-                readingDirection, visibility, currentFileId, driveSignedIn, buildHkiData]);
+                // Cloud auto-sync retired. The community archive publishes explicit,
+                // attributed versions (no silent in-place cloud updates), so work is
+                // sent only when the user clicks "Publish to Archive". In-progress work
+                // still autosaves locally via LocalAutoSave (IndexedDB) above.
+                return;
+            }, []);
             
             // ========== LOAD CHART ==========
             useEffect(() => {
@@ -5632,96 +5617,47 @@
                                         }
                                     }}
                                     onSaveAsNew={async () => {
-                                        // Save As New = Create new file (user becomes owner)
+                                        // Publish to the community archive = create a new attributed entry.
                                         if (!driveSignedIn) {
-                                            alert('❌ Please sign in to save to Drive');
+                                            alert('❌ Please sign in to publish');
                                             return;
                                         }
-                                        
+                                        if (!recognitionResults || recognitionResults.length === 0) {
+                                            alert('❌ Nothing to publish yet — recognize some glyphs first.');
+                                            return;
+                                        }
+
                                         try {
-                                            const newId = `HKI-${Date.now().toString(36).toUpperCase()}`;
-                                            
-                                            // Clean recognition results to remove circular references
-                                            const cleanResults = recognitionResults.map(r => ({
-                                                glyph: {
-                                                    id: r.glyph?.id,
-                                                    name: r.glyph?.name,
-                                                    transliteration: r.glyph?.transliteration,
-                                                    arabic: r.glyph?.arabic,
-                                                    description: r.glyph?.description
-                                                },
-                                                confidence: r.confidence,
-                                                position: r.position,
-                                                thumbnail: r.thumbnail,
-                                                matchType: r.matchType,
-                                                corrected: r.corrected,
-                                                originalGlyph: r.originalGlyph ? {
-                                                    id: r.originalGlyph.id,
-                                                    name: r.originalGlyph.name,
-                                                    transliteration: r.originalGlyph.transliteration
-                                                } : null
-                                            }));
-                                            
-                                            const hkiData = {
-                                                version: '2.0',
-                                                created: new Date().toISOString(),
-                                                inscriptionId: newId,
-                                                inscriptionTitle: inscriptionTitle || inscriptionSource || 'Untitled',
-                                                inscriptionNotes,
-                                                image: originalImage,
-                                                displayImage,
-                                                preprocessing,
-                                                recognitionResults: cleanResults,
-                                                readingOrder: Array.isArray(readingOrder) ? readingOrder : Array.from(readingOrder),
-                                                readingDirection,
-                                                wordBoundaries: Array.from(wordBoundaries),
-                                                lineBreaks: Array.from(lineBreaks),
-                                                validations,
-                                                translationEnglish,
-                                                translationArabic,
-                                                audioData, // Audio recording/notes
-                                                visibility: 'draft', // New files start as draft
-                                                changeLog: [] // New file starts with empty history
-                                            };
-                                            
-                                            const result = await DriveSync.saveHki(hkiData, {
-                                                fileId: null, // null = create new
+                                            const result = await ArchiveSync.saveHki(buildHkiData(), {
                                                 title: inscriptionTitle || inscriptionSource || 'Untitled',
-                                                visibility: 'draft'
+                                                provenance: inscriptionSource
                                             });
-                                            
-                                            // Update tracking
-                                            setCurrentInscriptionId(newId);
-                                            setCurrentFileId(result.id);
-                                            setFileOwner(driveUserEmail);
-                                            setVisibility('draft');
-                                            
-                                            alert('✅ Saved as new inscription!');
+                                            setVisibility('published');
+                                            console.log('✅ Published:', result.id, result.blobUrl);
+                                            alert('✅ Published to the community archive!\n\nIt will appear in the public viewer:\nhudhud.dev/hakli-viewer.html');
                                         } catch (err) {
-                                            console.error('Save As New failed:', err);
-                                            // Check if it's an auth error
+                                            console.error('Publish failed:', err);
                                             const isAuthError = err.message && (
-                                                err.message.includes('authentication') ||
-                                                err.message.includes('OAuth') ||
+                                                err.message.includes('signed in') ||
                                                 err.message.includes('token') ||
                                                 err.message.includes('401') ||
                                                 err.message.includes('403')
                                             );
                                             if (isAuthError) {
-                                                const retry = confirm('❌ Session expired. Click OK to reconnect to Google Drive.');
-                                                if (retry && typeof DriveSync !== 'undefined') {
+                                                const retry = confirm('❌ Your session expired. Click OK to sign in again.');
+                                                if (retry && typeof ArchiveSync !== 'undefined') {
                                                     try {
-                                                        await DriveSync.signIn();
-                                                        setDriveSignedIn(DriveSync.isSignedIn());
-                                                        setDriveUserEmail(DriveSync.getUserEmail());
-                                                        alert('✅ Reconnected! Please try saving again.');
+                                                        await ArchiveSync.signIn();
+                                                        setDriveSignedIn(ArchiveSync.isSignedIn());
+                                                        setDriveUserEmail(ArchiveSync.getUserEmail());
+                                                        alert('✅ Reconnected! Please try publishing again.');
                                                     } catch (e) {
                                                         setDriveSignedIn(false);
-                                                        alert('❌ Reconnect failed. Please sign in again.');
+                                                        alert('❌ Sign-in failed. Please try again.');
                                                     }
                                                 }
                                             } else {
-                                                alert('❌ Save failed: ' + err.message);
+                                                alert('❌ Publish failed: ' + err.message);
                                             }
                                         }
                                     }}
@@ -6982,10 +6918,9 @@
                                     setCurrentFileId(fileInfo.id);
                                     setFileOwner(fileInfo.owner);
                                     
-                                    // Determine if read-only (not owner and not collaborator)
-                                    const isOwner = fileInfo.owner === driveUserEmail;
-                                    const isCollaborator = fileInfo.collaborators?.includes(driveUserEmail);
-                                    setIsReadOnly(!driveUserEmail || (!isOwner && !isCollaborator));
+                                    // Loaded archive entries are editable so contributors can
+                                    // make and publish their own version (a new attributed entry).
+                                    setIsReadOnly(false);
                                     
                                     const count = hkiData.recognitionResults?.length || hkiData.detections?.length || 0;
                                     console.log(`📂 Loaded from warehouse: ${fileInfo.title} (${count} glyphs)`);
