@@ -1,0 +1,10 @@
+# Datastore composite index for listInscriptions:
+#   WHERE visibility = 'published' AND hidden = false ORDER BY createdAt DESC
+# Create with:  gcloud datastore indexes create index.yaml
+indexes:
+- kind: HakliInscription
+  properties:
+  - name: visibility
+  - name: hidden
+  - name: createdAt
+    direction: desc
