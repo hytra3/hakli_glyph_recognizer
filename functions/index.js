@@ -23,7 +23,6 @@
 const functions = require('@google-cloud/functions-framework');
 const { Datastore, PropertyFilter } = require('@google-cloud/datastore');
 const { Storage } = require('@google-cloud/storage');
-const { OAuth2Client } = require('google-auth-library');
 
 // ---- Config (overridable via deploy-time env vars) -------------------------
 const BUCKET = process.env.BUCKET || 'hakli-archive-tawkin-blue';
@@ -40,7 +39,6 @@ const MAX_HKI_BYTES = parseInt(process.env.MAX_HKI_BYTES || '8000000', 10); // ~
 
 const datastore = new Datastore();
 const storage = new Storage();
-const oauth = new OAuth2Client();
 
 // ---- Helpers ---------------------------------------------------------------
 function setCors(req, res) {
@@ -53,22 +51,27 @@ function setCors(req, res) {
   res.set('Access-Control-Max-Age', '3600');
 }
 
-// Verify the Google ID token and return { email, name }. Throws {code,msg}.
+// Verify the caller's Google OAuth access token by asking Google who it belongs
+// to. Identity-only (openid/email/profile) — no Drive scope, so no "unsafe"
+// consent screen. Returns { email, name }. Throws { code, msg }.
 async function verifyUser(req) {
   const auth = req.headers.authorization || '';
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (!m) throw { code: 401, msg: 'Missing bearer token' };
-  let ticket;
+  let info;
   try {
-    ticket = await oauth.verifyIdToken({ idToken: m[1].trim(), audience: CLIENT_ID });
+    const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${m[1].trim()}` }
+    });
+    if (!resp.ok) throw new Error('userinfo ' + resp.status);
+    info = await resp.json();
   } catch (e) {
-    throw { code: 401, msg: 'Invalid identity token' };
+    throw { code: 401, msg: 'Invalid or expired token' };
   }
-  const p = ticket.getPayload();
-  if (!p || !p.email || p.email_verified !== true) {
+  if (!info || !info.email || info.email_verified === false) {
     throw { code: 401, msg: 'Unverified identity' };
   }
-  return { email: p.email.toLowerCase(), name: p.name || p.email };
+  return { email: String(info.email).toLowerCase(), name: info.name || info.email };
 }
 
 function newId() {

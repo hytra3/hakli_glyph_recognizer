@@ -9,7 +9,6 @@
   "dependencies": {
     "@google-cloud/functions-framework": "^3.4.0",
     "@google-cloud/datastore": "^9.1.0",
-    "@google-cloud/storage": "^7.14.0",
-    "google-auth-library": "^9.14.0"
+    "@google-cloud/storage": "^7.14.0"
   }
 }
