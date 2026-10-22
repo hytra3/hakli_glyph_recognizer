@@ -151,6 +151,17 @@
         footer a { color: var(--stone); }
         footer .en { display: block; font-size: .78rem; }
         .hidden { display: none !important; }
+        /* Maturity badges — every entry is public; this only shows how settled it is */
+        .st { border-radius: 20px; padding: 2px 10px; font-size: .82rem; font-weight: 600; }
+        .st-draft  { background: #ece7df; color: #6b6155; }
+        .st-review { background: #f4e4c6; color: #8a6d2f; }
+        .st-final  { background: #dceee6; color: #3f6f5c; }
+        .detail-stage { display: inline-block; margin: 0 0 14px; }
+        .status-note {
+            background: #fbf7ef; border: 1px solid var(--ochre); color: var(--rust);
+            border-radius: var(--radius); padding: 12px 16px; margin: 0 0 16px; font-size: 1rem;
+        }
+        .status-note .en { display: block; color: var(--muted); font-size: .85rem; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -218,6 +229,14 @@
             catch (e) { return ''; }
         }
 
+        // Reading maturity (all public): draft -> review -> final
+        var STATUS = {
+            draft:  { ar: 'قراءة أولية',  en: 'Preliminary',  cls: 'st-draft' },
+            review: { ar: 'قيد المراجعة', en: 'Under review', cls: 'st-review' },
+            final:  { ar: 'قراءة مؤكّدة', en: 'Confirmed',    cls: 'st-final' }
+        };
+        function statusInfo(s) { return STATUS[s] || STATUS.final; }
+
         // ---- Load the published list from the archive catalog ----
         function loadGallery() {
             galleryState.classList.remove('hidden');
@@ -251,23 +270,25 @@
             var glyphCount = (typeof item.glyphCount === 'number') ? item.glyphCount : null;
             var date = fmtDate(item.createdAt);
 
+            var si = statusInfo(item.status);
             var card = document.createElement('button');
             card.className = 'card';
             card.type = 'button';
             card.innerHTML =
                 '<div class="title">' + esc(title) + '</div>' +
                 '<div class="meta">' +
+                    '<span class="chip st ' + si.cls + '">' + si.ar + '</span>' +
                     (glyphCount ? '<span class="chip">' + glyphCount + ' ' + (glyphCount === 1 ? 'حرف' : 'حروف') + '</span>' : '') +
                     (item.hasAudio ? '<span class="chip">🔊</span>' : '') +
                     (date ? '<span>' + esc(date) + '</span>' : '') +
                 '</div>' +
                 '<div class="go">عرض واستماع <span class="en-muted en">View &amp; listen</span> ←</div>';
-            card.addEventListener('click', function () { openInscription(item.blobUrl, title); });
+            card.addEventListener('click', function () { openInscription(item.blobUrl, title, item.status); });
             return card;
         }
 
         // ---- Open one inscription (fetch the .hki straight from its public URL) ----
-        function openInscription(blobUrl, fallbackTitle) {
+        function openInscription(blobUrl, fallbackTitle, status) {
             galleryView.classList.add('hidden');
             detailView.classList.remove('hidden');
             window.scrollTo(0, 0);
@@ -284,7 +305,7 @@
 
             fetch(blobUrl)
                 .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-                .then(function (hki) { renderDetail(hki, fallbackTitle); })
+                .then(function (hki) { renderDetail(hki, fallbackTitle, status); })
                 .catch(function (err) {
                     detailContent.innerHTML =
                         '<div class="state"><div class="big">🌐</div>' +
@@ -326,14 +347,22 @@
             return html;
         }
 
-        function renderDetail(hki, fallbackTitle) {
+        function renderDetail(hki, fallbackTitle, status) {
             var title = hki.inscriptionTitle || fallbackTitle || 'بدون عنوان';
             var source = hki.inscriptionSource || '';
             var rtl = hki.readingDirection !== 'ltr'; // Hakli defaults RTL
+            var si = statusInfo(status);
 
             var html = '';
             html += '<h1 class="detail-title">' + esc(title) + '</h1>';
             if (source) html += '<p class="detail-source">' + esc(source) + '</p>';
+            html += '<div class="detail-stage"><span class="chip st ' + si.cls + '">' + si.ar + ' · <span class="en">' + si.en + '</span></span></div>';
+            if (status && status !== 'final') {
+                html += '<div class="status-note">' +
+                    '<span class="ar">هذه قراءة قيد الإنجاز — الملاحظات والتصحيحات مُرحَّب بها.</span>' +
+                    '<span class="en">This reading is still in progress — comments and corrections are welcome.</span>' +
+                    '</div>';
+            }
 
             // Source image
             if (hki.image) {

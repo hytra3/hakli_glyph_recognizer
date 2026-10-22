@@ -145,6 +145,7 @@ const ArchiveSync = {
                 thumbnail: null,
                 glyphCount: (typeof it.glyphCount === 'number') ? it.glyphCount : undefined,
                 hasAudio: !!it.hasAudio,
+                status: it.status || 'final',
                 blobUrl: it.blobUrl,
                 modifiedTime: it.createdAt
             }));
@@ -172,11 +173,11 @@ const ArchiveSync = {
     // epigraphy model). Local in-progress work stays in IndexedDB.
     saveHki: async (hkiData, options = {}) => {
         if (!ArchiveSync.isSignedIn()) throw new Error('Must be signed in to publish (401)');
-        const { title = 'Untitled', provenance = '' } = options;
+        const { title = 'Untitled', provenance = '', status = 'draft' } = options;
         const body = {
             title: title,
             provenance: provenance || hkiData.inscriptionSource || '',
-            visibility: 'published',
+            status: status,
             hki: hkiData
         };
         const r = await fetch(`${ArchiveSync.CONFIG.FN_BASE}/submitInscription`, {
@@ -209,6 +210,22 @@ const ArchiveSync = {
         return await r.json();
     },
     deleteHki: async (id) => { await ArchiveSync.setHidden(id, true); return true; },
+
+    // Owner or curator: advance a reading's maturity stage (metadata only).
+    setStatus: async (id, status) => {
+        if (!ArchiveSync.isSignedIn()) throw new Error('Must be signed in (401)');
+        const r = await fetch(`${ArchiveSync.CONFIG.FN_BASE}/setStatus`, {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, ArchiveSync._authHeader()),
+            body: JSON.stringify({ id: id, status: status })
+        });
+        if (!r.ok) {
+            let msg = 'HTTP ' + r.status;
+            try { const e = await r.json(); if (e && e.error) msg = e.error + ' (' + r.status + ')'; } catch (x) {}
+            throw new Error(msg);
+        }
+        return await r.json();
+    },
 
     // ---- Inert in Phase 1 (no Drive folders / collaborators / cloud chart) ----
     loadProfile: async () => ({ collaborators: [], pendingRequests: [] }),

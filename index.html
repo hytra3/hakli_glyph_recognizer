@@ -147,7 +147,7 @@
     <script src="src/storage/cache.js"></script>
     <script src="src/storage/corrections.js"></script>
     <script src="src/storage/change-tracker.js"></script>
-    <script src="src/storage/archive-sync.js?v=261022b"></script>
+    <script src="src/storage/archive-sync.js?v=261022c"></script>
     <script src="src/storage/access-control.js"></script>
     <script src="src/storage/sync-manager.js"></script>
     <script src="src/storage/local-autosave.js"></script>
@@ -170,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261022b"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261022b"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261022b"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261022b"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261022b"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261022b"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261022b"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261022b"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261022c"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261022c"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261022c"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261022c"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261022c"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261022c"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261022c"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261022c"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v261022b';
+        const APP_VERSION = 'v261022c';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -5628,12 +5628,13 @@
                                         }
 
                                         try {
+                                            const stage = (visibility === 'published') ? 'final' : (visibility || 'draft');
                                             const result = await ArchiveSync.saveHki(buildHkiData(), {
                                                 title: inscriptionTitle || inscriptionSource || 'Untitled',
-                                                provenance: inscriptionSource
+                                                provenance: inscriptionSource,
+                                                status: stage
                                             });
-                                            setVisibility('published');
-                                            console.log('✅ Published:', result.id, result.blobUrl);
+                                            console.log('✅ Published:', result.id, result.status, result.blobUrl);
                                             alert('✅ Published to the community archive!\n\nIt will appear in the public viewer:\nhudhud.dev/hakli-viewer.html');
                                         } catch (err) {
                                             console.error('Publish failed:', err);

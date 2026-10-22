@@ -21,7 +21,7 @@
  */
 
 const functions = require('@google-cloud/functions-framework');
-const { Datastore, PropertyFilter } = require('@google-cloud/datastore');
+const { Datastore } = require('@google-cloud/datastore');
 const { Storage } = require('@google-cloud/storage');
 
 // ---- Config (overridable via deploy-time env vars) -------------------------
@@ -36,6 +36,15 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
   .split(',').map((s) => s.trim()).filter(Boolean);
 // Reject absurdly large payloads early (bytes of JSON in the request body).
 const MAX_HKI_BYTES = parseInt(process.env.MAX_HKI_BYTES || '25000000', 10); // ~25MB (photo + audio)
+
+// Maturity of a reading (all public). Orthogonal to `hidden` (curator moderation).
+const STAGES = ['draft', 'review', 'final'];
+function normStatus(body) {
+  if (STAGES.includes(body.status)) return body.status;
+  if (body.visibility === 'published') return 'final';
+  if (STAGES.includes(body.visibility)) return body.visibility;
+  return 'draft';
+}
 
 const datastore = new Datastore();
 const storage = new Storage();
@@ -120,7 +129,8 @@ functions.http('submitInscription', async (req, res) => {
         { name: 'ownerEmail', value: user.email },
         { name: 'ownerName', value: str(user.name, 120) },
         { name: 'anchorProvenance', value: str(body.provenance || hki.inscriptionSource || '', 500), excludeFromIndexes: true },
-        { name: 'visibility', value: body.visibility === 'draft' ? 'draft' : 'published' },
+        { name: 'status', value: normStatus(body) },
+        { name: 'visibility', value: 'published' },   // back-compat; listing no longer filters on it
         { name: 'hidden', value: false },
         { name: 'glyphCount', value: glyphCount },
         { name: 'hasAudio', value: !!(hki.audioData || hki.hasAudio) },
@@ -130,7 +140,7 @@ functions.http('submitInscription', async (req, res) => {
       ]
     });
 
-    return res.status(200).json({ id, blobUrl });
+    return res.status(200).json({ id, blobUrl, status: normStatus(body) });
   } catch (e) {
     const code = Number.isInteger(e && e.code) ? e.code : 500;
     if (code === 500) console.error('submitInscription error:', e);
@@ -143,22 +153,26 @@ functions.http('listInscriptions', async (req, res) => {
   setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(204).send('');
   try {
+    // List all non-hidden entries (any maturity stage), newest first. We filter
+    // `hidden` in code so the query needs only the automatic createdAt index —
+    // no composite index to maintain.
     const query = datastore.createQuery(KIND)
-      .filter(new PropertyFilter('visibility', '=', 'published'))
-      .filter(new PropertyFilter('hidden', '=', false))
       .order('createdAt', { descending: true })
       .limit(500);
     const [rows] = await datastore.runQuery(query);
-    const items = rows.map((r) => ({
-      id: r[datastore.KEY].name,
-      title: r.title,
-      ownerName: r.ownerName,
-      provenance: r.anchorProvenance,
-      glyphCount: r.glyphCount,
-      hasAudio: r.hasAudio,
-      blobUrl: r.blobUrl,
-      createdAt: r.createdAt
-    }));
+    const items = rows
+      .filter((r) => r.hidden !== true)
+      .map((r) => ({
+        id: r[datastore.KEY].name,
+        title: r.title,
+        ownerName: r.ownerName,
+        provenance: r.anchorProvenance,
+        glyphCount: r.glyphCount,
+        hasAudio: r.hasAudio,
+        status: r.status || (r.visibility === 'published' ? 'final' : (r.visibility || 'draft')),
+        blobUrl: r.blobUrl,
+        createdAt: r.createdAt
+      }));
     res.set('Cache-Control', 'public, max-age=60');
     return res.status(200).json({ items });
   } catch (e) {
@@ -194,6 +208,42 @@ functions.http('setHidden', async (req, res) => {
   } catch (e) {
     const code = Number.isInteger(e && e.code) ? e.code : 500;
     if (code === 500) console.error('setHidden error:', e);
+    return res.status(code).json({ error: (e && e.msg) || 'Server error' });
+  }
+});
+
+// ---- setStatus (owner or curator) ------------------------------------------
+// Advance a reading's maturity (draft -> review -> final) in place. Metadata
+// only — it does not change the inscription's content (that stays versioned).
+functions.http('setStatus', async (req, res) => {
+  setCors(req, res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  try {
+    const user = await verifyUser(req);
+    const body = req.body || {};
+    if (!body.id) return res.status(400).json({ error: 'Missing id' });
+    if (!STAGES.includes(body.status)) return res.status(400).json({ error: 'Invalid status' });
+
+    const key = datastore.key([KIND, String(body.id)]);
+    const [entity] = await datastore.get(key);
+    if (!entity) return res.status(404).json({ error: 'Not found' });
+
+    const isOwner = entity.ownerEmail && String(entity.ownerEmail).toLowerCase() === user.email;
+    if (!isOwner && !CURATORS.includes(user.email)) {
+      return res.status(403).json({ error: 'Only the owner or a curator can change status' });
+    }
+
+    const data = Object.assign({}, entity);
+    delete data[datastore.KEY];
+    data.status = body.status;
+    data.updatedAt = new Date();
+    await datastore.save({ key, data });
+
+    return res.status(200).json({ id: String(body.id), status: body.status });
+  } catch (e) {
+    const code = Number.isInteger(e && e.code) ? e.code : 500;
+    if (code === 500) console.error('setStatus error:', e);
     return res.status(code).json({ error: (e && e.msg) || 'Server error' });
   }
 });

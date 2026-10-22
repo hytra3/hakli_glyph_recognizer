@@ -58,14 +58,15 @@ const ExportPanel = ({
     
     const hasData = recognitionResults && recognitionResults.length > 0;
     
-    // Visibility options
+    // Maturity stages — all PUBLIC; the badge just says how settled the reading is.
     const visibilityOptions = [
-        { value: 'draft', label: '📝 Draft', desc: 'Only you can see this' },
-        { value: 'review', label: '👁️ Review', desc: 'Colleagues with keywords can view' },
-        { value: 'published', label: '✅ Published', desc: 'Finalized and shared' }
+        { value: 'draft', label: '📝 Preliminary', desc: 'Early reading — may be partial (public)' },
+        { value: 'review', label: '👁️ Under review', desc: 'Circulated for colleagues’ input (public)' },
+        { value: 'final', label: '✅ Confirmed', desc: 'A settled reading (public)' }
     ];
-    
-    const currentVisibility = visibilityOptions.find(v => v.value === visibility) || visibilityOptions[0];
+
+    const stageValue = visibility === 'published' ? 'final' : (visibility || 'draft');
+    const currentVisibility = visibilityOptions.find(v => v.value === stageValue) || visibilityOptions[0];
     
     // Get sync status
     const getSyncStatusText = () => {
@@ -838,6 +839,25 @@ const ExportPanel = ({
                                 <span className="font-medium text-gray-700 truncate">
                                     📦 {inscriptionTitle || 'Untitled'}
                                 </span>
+
+                                {/* Maturity stage — all public; this is how settled the reading is */}
+                                <div className="relative flex-shrink-0">
+                                    <select
+                                        value={stageValue}
+                                        onChange={(e) => onVisibilityChange && onVisibilityChange(e.target.value)}
+                                        className={'text-xs px-2 py-1 rounded-full border-0 cursor-pointer appearance-none pr-6 ' + (
+                                            stageValue === 'final' ? 'bg-patina/20 text-patina' :
+                                            stageValue === 'review' ? 'bg-amber-100 text-amber-700' :
+                                            'bg-gray-200 text-gray-700'
+                                        )}
+                                        title={currentVisibility.desc}
+                                    >
+                                        {visibilityOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-xs">▼</span>
+                                </div>
                             </div>
                             
                             {/* ID if exists */}
