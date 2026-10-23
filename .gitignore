@@ -1,1 +1,14 @@
 hgr-*.patch
+
+# Dependency installs — never belong in git. The root node_modules/ is already
+# vendored (there's no package.json; check.js loads @babel/standalone from it),
+# so it stays tracked; this stops any NEW installs (e.g. the functions' cloud
+# build deps) from being committed.
+node_modules/
+functions/node_modules/
+
+# Local junk
+*.log
+.DS_Store
+.vscode/
+hki_import/
