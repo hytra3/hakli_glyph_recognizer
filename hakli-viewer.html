@@ -236,7 +236,7 @@
         // fetched straight from their public Cloud Storage URLs (CORS-allowed).
         var LIST_URL = 'https://us-central1-tawkin-blue.cloudfunctions.net/listInscriptions';
         var BUCKET_BASE = 'https://storage.googleapis.com/hakli-archive-tawkin-blue';
-        var VIEWER_VERSION = 'v261023c';
+        var VIEWER_VERSION = 'v261023d';
 
         var galleryView = document.getElementById('gallery-view');
         var detailView = document.getElementById('detail-view');
@@ -348,11 +348,20 @@
         function orderedPairs(hki) {
             var results = hki.recognitionResults || [];
             var ro = hki.readingOrder;
+            var pairs = [];
+            var used = {};
+            // Follow the reading order where it's valid...
             if (Array.isArray(ro) && ro.length) {
-                return ro.map(function (idx) { return { result: results[idx], idx: idx }; })
-                         .filter(function (p) { return p.result; });
+                ro.forEach(function (idx) {
+                    if (results[idx] && !used[idx]) { pairs.push({ result: results[idx], idx: idx }); used[idx] = true; }
+                });
             }
-            return results.map(function (r, i) { return { result: r, idx: i }; });
+            // ...then append any detections the order missed or duplicated, so a
+            // corrupt/partial reading order can never make a symbol disappear.
+            results.forEach(function (r, i) {
+                if (r && !used[i]) { pairs.push({ result: r, idx: i }); used[i] = true; }
+            });
+            return pairs;
         }
 
         function buildTranscription(hki, script) {
