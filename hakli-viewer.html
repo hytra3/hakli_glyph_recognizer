@@ -162,6 +162,14 @@
             border-radius: var(--radius); padding: 12px 16px; margin: 0 0 16px; font-size: 1rem;
         }
         .status-note .en { display: block; color: var(--muted); font-size: .85rem; margin-top: 2px; }
+        /* Per-symbol legend: ties each glyph image to its transliteration / Arabic */
+        .sym-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 12px; }
+        .sym { position: relative; text-align: center; border: 1px solid var(--sand-deep); border-radius: 10px; padding: 12px 6px 8px; background: #fff; }
+        .sym-img { width: 56px; height: 56px; object-fit: contain; display: block; margin: 0 auto 6px; }
+        .sym-ph { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 1.6rem; }
+        .sym-tr { font-size: 1.15rem; font-weight: 650; color: var(--ink); direction: ltr; }
+        .sym-ar { font-size: 1.3rem; color: var(--purple); margin-top: 2px; }
+        .sym-n { position: absolute; top: 4px; inset-inline-start: 6px; font-size: .7rem; color: var(--stone); background: var(--sand-deep); border-radius: 10px; padding: 0 6px; }
     </style>
 </head>
 <body>
@@ -354,7 +362,7 @@
             var si = statusInfo(status);
 
             var html = '';
-            html += '<h1 class="detail-title">' + esc(title) + '</h1>';
+            html += '<h1 class="detail-title" translate="no">' + esc(title) + '</h1>';
             if (source) html += '<p class="detail-source">' + esc(source) + '</p>';
             html += '<div class="detail-stage"><span class="chip st ' + si.cls + '">' + si.ar + ' · <span class="en">' + si.en + '</span></span></div>';
             if (status && status !== 'final') {
@@ -385,19 +393,42 @@
             }
             html += '</div>';
 
-            // Transcription (Arabic script primary, transliteration secondary)
+            // Transcription (Arabic script primary, transliteration secondary).
+            // translate="no" stops browser auto-translate from mangling the reading.
             var translit = buildTranscription(hki, 'translit');
             var arabicTr = buildTranscription(hki, 'arabic');
             if (translit || arabicTr) {
                 html += '<div class="panel">' +
                     '<h2><span class="lbl-ar ar">النسخ</span><span class="lbl-en en">Reading</span></h2>';
-                if (arabicTr) html += '<div class="trans-ar ar" dir="' + (rtl ? 'rtl' : 'ltr') + '">' + arabicTr + '</div>';
+                if (arabicTr) html += '<div class="trans-ar ar" translate="no" dir="' + (rtl ? 'rtl' : 'ltr') + '">' + arabicTr + '</div>';
                 if (arabicTr && translit) html += '<hr class="divider">';
                 if (translit) {
                     html += '<p class="sub-head">Transliteration</p>';
-                    html += '<div class="translit" dir="ltr">' + translit + '</div>';
+                    html += '<div class="translit" translate="no" dir="ltr">' + translit + '</div>';
                 }
                 html += '</div>';
+            }
+
+            // Per-symbol legend — each glyph image beside its transliteration / Arabic
+            var pairs = orderedPairs(hki);
+            if (pairs.length) {
+                var legend = '';
+                pairs.forEach(function (p, i) {
+                    var g = (p.result && p.result.glyph) || {};
+                    var thumb = (p.result && p.result.thumbnail) || '';
+                    var tr = g.transliteration || g.name || '';
+                    var ar = g.arabic || '';
+                    legend += '<div class="sym">' +
+                        '<span class="sym-n">' + (i + 1) + '</span>' +
+                        (thumb ? '<img class="sym-img" src="' + esc(thumb) + '" alt="">'
+                               : '<div class="sym-img sym-ph">◻</div>') +
+                        '<div class="sym-tr" translate="no" dir="ltr">' + esc(tr) + '</div>' +
+                        (ar ? '<div class="sym-ar" translate="no">' + esc(ar) + '</div>' : '') +
+                        '</div>';
+                });
+                html += '<div class="panel">' +
+                    '<h2><span class="lbl-ar ar">الرموز</span><span class="lbl-en en">Symbols</span></h2>' +
+                    '<div class="sym-grid">' + legend + '</div></div>';
             }
 
             // Translation (Arabic primary)

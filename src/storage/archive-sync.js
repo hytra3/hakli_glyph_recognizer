@@ -116,11 +116,12 @@ const ArchiveSync = {
     // to keep published blobs small. The source `image`, per-glyph thumbnails,
     // reading data and translations are preserved so the entry stays complete
     // and re-loadable into the editor.
-    _stringifyForUpload: (obj) => {
+    _stringifyForUpload: (obj, stripAudio) => {
         const seen = new WeakSet();
         return JSON.stringify(obj, (key, value) => {
             if (key === 'topMatches') return undefined;
             if (key === 'displayImage') return undefined;
+            if (stripAudio && (key === 'audioData' || key === 'audio')) return undefined;
             if (typeof value === 'object' && value !== null) {
                 if (seen.has(value)) return undefined;
                 seen.add(value);
@@ -173,7 +174,7 @@ const ArchiveSync = {
     // epigraphy model). Local in-progress work stays in IndexedDB.
     saveHki: async (hkiData, options = {}) => {
         if (!ArchiveSync.isSignedIn()) throw new Error('Must be signed in to publish (401)');
-        const { title = 'Untitled', provenance = '', status = 'draft' } = options;
+        const { title = 'Untitled', provenance = '', status = 'draft', shareAudio = true } = options;
         const body = {
             title: title,
             provenance: provenance || hkiData.inscriptionSource || '',
@@ -183,7 +184,7 @@ const ArchiveSync = {
         const r = await fetch(`${ArchiveSync.CONFIG.FN_BASE}/submitInscription`, {
             method: 'POST',
             headers: Object.assign({ 'Content-Type': 'application/json' }, ArchiveSync._authHeader()),
-            body: ArchiveSync._stringifyForUpload(body)
+            body: ArchiveSync._stringifyForUpload(body, shareAudio === false)
         });
         if (!r.ok) {
             let msg = 'HTTP ' + r.status;

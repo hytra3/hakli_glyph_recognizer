@@ -32,6 +32,9 @@ const ExportPanel = ({
     onLoadHki,
     visibility = 'draft',
     onVisibilityChange,
+    shareAudio = true,
+    onShareAudioChange,
+    hasAudioData = false,
     syncStatus = null,
     localSaveTime = null,
     driveSignedIn = false,
@@ -903,6 +906,19 @@ const ExportPanel = ({
                             </button>
                         )}
                         
+                        {/* Share-audio toggle — only when this inscription has a recording */}
+                        {driveSignedIn && hasAudioData && (
+                            <label className="flex items-start gap-2 text-xs text-gray-600 px-1 py-1 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={shareAudio}
+                                    onChange={(e) => onShareAudioChange && onShareAudioChange(e.target.checked)}
+                                    className="mt-0.5 rounded flex-shrink-0"
+                                />
+                                <span>🔊 Include the audio in the public archive. Uncheck to withhold it (e.g. pending the speaker's permission) — the inscription still publishes, just without the recording.</span>
+                            </label>
+                        )}
+
                         {/* Load buttons */}
                         <div className="flex gap-2">
                             <button
