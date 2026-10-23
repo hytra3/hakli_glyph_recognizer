@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل أصوات الحروف · Record Letter Sounds</title>
+    <link rel="icon" href="favicon.svg">
+    <style>
+        :root {
+            --purple:#5d4e6d; --patina:#6b8e7f; --ochre:#b8956a; --rust:#a0674f;
+            --sand:#f7f3ed; --sand-deep:#efe8dc; --ink:#3a332e; --muted:#8a7f73;
+            --card:#fff; --shadow:0 2px 10px rgba(58,51,46,.08); --radius:14px;
+        }
+        * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        html,body { margin:0; padding:0; }
+        body { font-family:"Noto Naskh Arabic","Segoe UI",system-ui,-apple-system,sans-serif;
+            background:var(--sand); color:var(--ink); font-size:17px; line-height:1.6; min-height:100vh; }
+        .ar { font-family:"Traditional Arabic","Scheherazade New","Noto Naskh Arabic",serif; }
+        .en { font-family:"Segoe UI",system-ui,sans-serif; direction:ltr; unicode-bidi:isolate; }
+        .en-muted { color:var(--muted); font-size:.82em; }
+        header { background:linear-gradient(135deg,var(--purple),var(--patina) 140%); color:#fff;
+            padding:16px; box-shadow:var(--shadow); position:sticky; top:0; z-index:20; }
+        .hwrap { max-width:1000px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        header h1 { margin:0; font-size:1.4rem; }
+        header .sub { font-size:.9rem; color:rgba(255,255,255,.85); }
+        main { max-width:1000px; margin:0 auto; padding:18px 16px 60px; }
+        .btn { border:0; border-radius:30px; padding:10px 20px; font-size:1rem; font-weight:600;
+            cursor:pointer; min-height:44px; display:inline-flex; align-items:center; gap:8px; }
+        .btn-light { background:#fff; color:var(--purple); }
+        .btn-patina { background:var(--patina); color:#fff; }
+        .btn-rust { background:var(--rust); color:#fff; }
+        .btn-ghost { background:var(--sand-deep); color:var(--ink); }
+        .btn:disabled { opacity:.5; cursor:not-allowed; }
+        .panel { background:var(--card); border:1px solid var(--sand-deep); border-radius:var(--radius);
+            box-shadow:var(--shadow); padding:16px; margin-bottom:18px; }
+        .intro .ar { font-size:1.15rem; }
+        .intro .en { display:block; color:var(--muted); font-size:.9rem; margin-top:4px; }
+        .setup { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+        .field { display:flex; flex-direction:column; gap:4px; }
+        .field label { font-size:.85rem; color:var(--muted); }
+        .field input, .field select { padding:10px 12px; border:1px solid var(--sand-deep); border-radius:10px;
+            font:inherit; min-height:44px; background:#fff; }
+        .grid { display:grid; grid-template-columns:1fr; gap:14px; }
+        @media (min-width:620px){ .grid { grid-template-columns:1fr 1fr; } }
+        @media (min-width:960px){ .grid { grid-template-columns:1fr 1fr 1fr; } }
+        .gcard { background:var(--card); border:1px solid var(--sand-deep); border-radius:var(--radius);
+            box-shadow:var(--shadow); padding:14px; display:flex; flex-direction:column; gap:10px; }
+        .ghead { display:flex; align-items:center; gap:12px; }
+        .gimg { width:60px; height:60px; object-fit:contain; background:var(--sand-deep); border-radius:10px; flex-shrink:0; }
+        .gmeta { flex:1; min-width:0; }
+        .gtr { font-size:1.3rem; font-weight:650; direction:ltr; }
+        .gar { font-size:1.5rem; color:var(--purple); }
+        .gcount { font-size:.8rem; color:var(--muted); }
+        .gcount.has { color:var(--patina); font-weight:600; }
+        .gctrls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+        .gctrls .btn { padding:8px 14px; font-size:.9rem; }
+        .rec-dot { width:10px; height:10px; border-radius:50%; background:var(--rust); animation:pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity:.3; } }
+        .gcard audio { width:100%; height:40px; }
+        .gstatus { font-size:.82rem; color:var(--muted); min-height:1.2em; }
+        .gstatus.ok { color:var(--patina); }
+        .gstatus.err { color:var(--rust); }
+        .hidden { display:none !important; }
+        footer { max-width:1000px; margin:0 auto; padding:24px 16px; text-align:center; color:var(--muted); font-size:.82rem; }
+        footer a { color:var(--stone); }
+        .state { text-align:center; padding:40px 20px; color:var(--muted); }
+        .spinner { width:38px; height:38px; border:4px solid var(--sand-deep); border-top-color:var(--patina);
+            border-radius:50%; animation:spin .9s linear infinite; margin:0 auto 12px; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="hwrap">
+            <div>
+                <h1 class="ar">تسجيل أصوات الحروف</h1>
+                <div class="sub en">Record the letter sounds</div>
+            </div>
+            <div id="auth"></div>
+        </div>
+    </header>
+
+    <main>
+        <div class="panel intro">
+            <span class="ar">ساعِد المجتمع على تعلّم القراءة: سجّل صوت كل حرف بصوتك. يمكنك التسجيل مباشرة أو رفع ملف صوتي (مثل تسجيل واتساب).</span>
+            <span class="en">Help the community learn to read: record the sound of each letter in your own voice — record here, or upload an audio file (e.g. a WhatsApp voice note).</span>
+        </div>
+
+        <div class="panel setup hidden" id="setup">
+            <div class="field">
+                <label class="ar">اسمك <span class="en-muted en">Your name</span></label>
+                <input id="speaker" type="text" placeholder="…">
+            </div>
+            <div class="field">
+                <label class="ar">الصوت <span class="en-muted en">Voice</span></label>
+                <select id="voice">
+                    <option value="male">ذكر · Male</option>
+                    <option value="female">أنثى · Female</option>
+                    <option value="other">آخر · Other</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="signin-note" class="panel">
+            <span class="ar">سجّل الدخول لتبدأ.</span> <span class="en-muted en">Sign in to begin.</span>
+        </div>
+
+        <div id="grid-state" class="state hidden"><div class="spinner"></div>
+            <span class="ar">جارِ التحميل…</span> <span class="en">Loading letters…</span></div>
+        <div id="grid" class="grid"></div>
+    </main>
+
+    <footer>
+        <div class="ar">أرشيف مجتمعي · <a href="https://hudhud.dev/hakli-viewer.html">تصفّح النقوش</a></div>
+        <div class="en-muted en" id="rec-ver"></div>
+    </footer>
+
+    <script>
+    (function () {
+        'use strict';
+        var REC_VERSION = 'v261023a';
+        var CLIENT_ID = '533670139668-51vdk21n97p2e9lgubfvmdsnqu3ie2jr.apps.googleusercontent.com';
+        var FN = 'https://us-central1-tawkin-blue.cloudfunctions.net';
+        var CHART_URL = 'Hakli_glyphs.JSON';
+
+        var token = null, userName = null, userEmail = null, tokenClient = null;
+        var sounds = {};        // glyphId -> [ {url,...} ]
+        var glyphs = [];
+        var mediaRec = null, recChunks = [], recGlyph = null;
+
+        var authEl = document.getElementById('auth');
+        var setupEl = document.getElementById('setup');
+        var signinNote = document.getElementById('signin-note');
+        var gridEl = document.getElementById('grid');
+        var gridState = document.getElementById('grid-state');
+
+        document.getElementById('rec-ver').textContent = 'recorder ' + REC_VERSION;
+
+        function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+        // ---- Google identity sign-in (access token, identity-only) ----
+        function loadGIS(){
+            return new Promise(function(resolve){
+                var s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client';
+                s.async=true; s.defer=true; s.onload=resolve; s.onerror=resolve; document.head.appendChild(s);
+            });
+        }
+        function renderAuth(){
+            if (userEmail){
+                authEl.innerHTML = '<span class="en" style="font-size:.9rem">'+esc(userEmail)+'</span> '
+                    + '<button class="btn btn-light" id="signout-btn" style="padding:6px 14px;font-size:.85rem">Sign out</button>';
+                document.getElementById('signout-btn').onclick = signOut;
+                setupEl.classList.remove('hidden');
+                signinNote.classList.add('hidden');
+            } else {
+                authEl.innerHTML = '<button class="btn btn-light" id="signin-btn">🔑 <span class="ar">تسجيل الدخول</span> <span class="en-muted en">Sign in</span></button>';
+                document.getElementById('signin-btn').onclick = signIn;
+                setupEl.classList.add('hidden');
+                signinNote.classList.remove('hidden');
+            }
+        }
+        async function signIn(){
+            if (!window.google || !google.accounts){ alert('Sign-in unavailable. Check your connection.'); return; }
+            if (!tokenClient){
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: CLIENT_ID, scope: 'openid email profile', callback: function(){}
+                });
+            }
+            tokenClient.callback = async function(resp){
+                if (resp && resp.access_token){
+                    token = resp.access_token;
+                    try {
+                        var u = await (await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+token}})).json();
+                        userEmail = u.email; userName = u.name || u.email;
+                        var sp = document.getElementById('speaker'); if (sp && !sp.value) sp.value = userName || '';
+                    } catch(e){}
+                    renderAuth();
+                }
+            };
+            tokenClient.requestAccessToken({ prompt: '' });
+        }
+        function signOut(){
+            try { if (token && google.accounts && google.accounts.oauth2) google.accounts.oauth2.revoke(token, function(){}); } catch(e){}
+            token=null; userEmail=null; userName=null; renderAuth();
+        }
+
+        // ---- Data ----
+        function loadManifest(){
+            return fetch(FN+'/listGlyphSounds').then(function(r){return r.json();})
+                .then(function(d){ sounds = (d&&d.sounds)||{}; }).catch(function(){ sounds={}; });
+        }
+        function loadChart(){
+            return fetch(CHART_URL).then(function(r){return r.json();})
+                .then(function(d){ glyphs = (d&&d.glyphs)||[]; });
+        }
+
+        function countFor(id){ var l = sounds[String(id)]; return l ? l.length : 0; }
+
+        function renderGrid(){
+            gridEl.innerHTML='';
+            glyphs.forEach(function(g){
+                var id = g.id;
+                var img = (g.images && g.images.primary) || '';
+                var card = document.createElement('div');
+                card.className='gcard';
+                var n = countFor(id);
+                card.innerHTML =
+                    '<div class="ghead">' +
+                        (img ? '<img class="gimg" src="'+esc(img)+'" alt="">' : '<div class="gimg"></div>') +
+                        '<div class="gmeta">' +
+                            '<div class="gtr" dir="ltr">'+esc(g.name||'')+'</div>' +
+                            '<div class="gar">'+esc(g.arabic||'')+'</div>' +
+                            '<div class="gcount'+(n?' has':'')+'" data-count>'+ (n? (n+' recording'+(n>1?'s':'')) : 'no recordings yet') +'</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="gctrls">' +
+                        '<button class="btn btn-rust rec-btn" type="button">🎙 <span class="ar">سجّل</span> <span class="en-muted en">Record</span></button>' +
+                        '<label class="btn btn-ghost" style="cursor:pointer">⬆ <span class="ar">رفع</span> <span class="en-muted en">Upload</span>' +
+                            '<input type="file" accept="audio/*" class="file-in" style="display:none"></label>' +
+                    '</div>' +
+                    '<audio class="preview hidden" controls></audio>' +
+                    '<div class="gctrls save-row hidden"><button class="btn btn-patina save-btn" type="button">💾 <span class="ar">حفظ</span> <span class="en-muted en">Save</span></button></div>' +
+                    '<div class="gstatus" data-status></div>';
+                wireCard(card, g);
+                gridEl.appendChild(card);
+            });
+        }
+
+        function setStatus(card, msg, cls){
+            var el = card.querySelector('[data-status]');
+            el.textContent = msg || '';
+            el.className = 'gstatus' + (cls ? ' '+cls : '');
+        }
+
+        function wireCard(card, g){
+            var recBtn = card.querySelector('.rec-btn');
+            var fileIn = card.querySelector('.file-in');
+            var preview = card.querySelector('.preview');
+            var saveRow = card.querySelector('.save-row');
+            var saveBtn = card.querySelector('.save-btn');
+            var pendingDataUrl = null;
+
+            function showPending(blobUrl, dataUrl){
+                pendingDataUrl = dataUrl;
+                preview.src = blobUrl; preview.classList.remove('hidden');
+                saveRow.classList.remove('hidden');
+                setStatus(card, '');
+            }
+
+            recBtn.onclick = function(){
+                if (mediaRec && recGlyph === g && mediaRec.state === 'recording'){
+                    mediaRec.stop(); return;
+                }
+                startRecording(card, g, recBtn, showPending);
+            };
+
+            fileIn.onchange = function(){
+                var f = fileIn.files && fileIn.files[0]; if (!f) return;
+                var reader = new FileReader();
+                reader.onload = function(){ showPending(URL.createObjectURL(f), reader.result); };
+                reader.readAsDataURL(f);
+                fileIn.value='';
+            };
+
+            saveBtn.onclick = async function(){
+                if (!pendingDataUrl) return;
+                if (!token){ setStatus(card,'Sign in first','err'); return; }
+                var speaker = (document.getElementById('speaker').value||'').trim();
+                var voice = document.getElementById('voice').value;
+                saveBtn.disabled = true; setStatus(card,'Saving…');
+                try {
+                    var r = await fetch(FN+'/submitGlyphSound', {
+                        method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+                        body: JSON.stringify({ glyphId: g.id, glyphName: g.name, speaker: speaker, voice: voice, audio: pendingDataUrl })
+                    });
+                    var t = await r.text();
+                    if (!r.ok) throw new Error(r.status+' '+t.slice(0,120));
+                    // update count
+                    (sounds[String(g.id)] = sounds[String(g.id)] || []).unshift({ voice: voice, speaker: speaker });
+                    var c = card.querySelector('[data-count]'); var n = countFor(g.id);
+                    c.textContent = n+' recording'+(n>1?'s':''); c.className='gcount has';
+                    preview.classList.add('hidden'); saveRow.classList.add('hidden'); pendingDataUrl=null;
+                    setStatus(card,'✓ saved','ok');
+                } catch(e){
+                    setStatus(card, 'Failed: '+e.message, 'err');
+                } finally { saveBtn.disabled=false; }
+            };
+        }
+
+        async function startRecording(card, g, recBtn, showPending){
+            // stop any other recording
+            if (mediaRec && mediaRec.state === 'recording'){ try{ mediaRec.stop(); }catch(e){} }
+            try {
+                var stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+                recChunks = []; recGlyph = g;
+                mediaRec = new MediaRecorder(stream);
+                mediaRec.ondataavailable = function(e){ if (e.data && e.data.size) recChunks.push(e.data); };
+                mediaRec.onstop = function(){
+                    stream.getTracks().forEach(function(t){ t.stop(); });
+                    recBtn.innerHTML = '🎙 <span class="ar">سجّل</span> <span class="en-muted en">Record</span>';
+                    recBtn.classList.remove('btn-ghost'); recBtn.classList.add('btn-rust');
+                    var blob = new Blob(recChunks, { type: (mediaRec.mimeType||'audio/webm') });
+                    var reader = new FileReader();
+                    reader.onload = function(){ showPending(URL.createObjectURL(blob), reader.result); };
+                    reader.readAsDataURL(blob);
+                };
+                mediaRec.start();
+                recBtn.innerHTML = '<span class="rec-dot"></span> <span class="ar">إيقاف</span> <span class="en-muted en">Stop</span>';
+                recBtn.classList.remove('btn-rust'); recBtn.classList.add('btn-ghost');
+                setStatus(card, 'Recording…');
+            } catch(e){
+                setStatus(card, 'Microphone blocked — use Upload instead.', 'err');
+            }
+        }
+
+        // ---- init ----
+        (async function init(){
+            renderAuth();
+            await loadGIS();
+            renderAuth();
+            gridState.classList.remove('hidden');
+            try {
+                await Promise.all([ loadChart(), loadManifest() ]);
+                gridState.classList.add('hidden');
+                renderGrid();
+            } catch(e){
+                gridState.innerHTML = '<span class="ar">تعذّر تحميل الحروف.</span> <span class="en">Could not load the letters.</span>';
+            }
+        })();
+    })();
+    </script>
+</body>
+</html>

@@ -319,3 +319,83 @@ functions.http('restrictAudio', async (req, res) => {
     return res.status(code).json({ error: (e && e.msg) || 'Server error' });
   }
 });
+
+// ============================================================================
+// GLYPH SOUNDS — per-symbol pronunciations, reusable across all inscriptions.
+// Multiple recordings per glyph are allowed (different speakers/voices).
+// ============================================================================
+const SOUND_KIND = process.env.SOUND_KIND || 'GlyphSound';
+const MAX_SOUND_BYTES = parseInt(process.env.MAX_SOUND_BYTES || '5000000', 10);
+
+// POST (signed-in): attach a pronunciation to a glyph.
+functions.http('submitGlyphSound', async (req, res) => {
+  setCors(req, res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  try {
+    const user = await verifyUser(req);
+    const body = req.body || {};
+    const glyphId = String(body.glyphId == null ? '' : body.glyphId).trim();
+    if (!glyphId) return res.status(400).json({ error: 'Missing glyphId' });
+
+    const am = /^data:([^;,]+)(?:;[^,]*)*;base64,([\s\S]+)$/.exec(body.audio || '');
+    if (!am || !/^audio\//.test(am[1])) {
+      return res.status(400).json({ error: 'Missing or invalid audio' });
+    }
+    const mime = am[1];
+    const buf = Buffer.from(am[2], 'base64');
+    if (buf.length > MAX_SOUND_BYTES) return res.status(413).json({ error: 'Audio too large' });
+    const ext = (mime.split('/')[1] || 'webm').replace(/[^\w]/g, '').slice(0, 8) || 'webm';
+
+    const sid = newId();
+    const objectPath = `sounds/${glyphId}/${sid}.${ext}`;
+    await storage.bucket(BUCKET).file(objectPath).save(buf, {
+      contentType: mime,
+      resumable: false,
+      metadata: { cacheControl: 'public, max-age=3600' }
+    });
+    const url = `https://storage.googleapis.com/${BUCKET}/${objectPath}`;
+
+    await datastore.save({
+      key: datastore.key([SOUND_KIND, sid]),
+      data: [
+        { name: 'glyphId', value: glyphId },
+        { name: 'glyphName', value: str(body.glyphName || '', 80) },
+        { name: 'speaker', value: str(body.speaker || '', 80) },
+        { name: 'voice', value: str(body.voice || '', 24) },
+        { name: 'contributorEmail', value: user.email },
+        { name: 'contributorName', value: str(user.name, 120) },
+        { name: 'url', value: url, excludeFromIndexes: true },
+        { name: 'hidden', value: false },
+        { name: 'createdAt', value: new Date() }
+      ]
+    });
+    return res.status(200).json({ id: sid, url, glyphId });
+  } catch (e) {
+    const code = Number.isInteger(e && e.code) ? e.code : 500;
+    if (code === 500) console.error('submitGlyphSound error:', e);
+    return res.status(code).json({ error: (e && e.msg) || 'Server error' });
+  }
+});
+
+// GET (public): the glyph-sound manifest — { sounds: { "<glyphId>": [ {url,speaker,voice,createdAt}, ... ] } }
+functions.http('listGlyphSounds', async (req, res) => {
+  setCors(req, res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  try {
+    const query = datastore.createQuery(SOUND_KIND).order('createdAt', { descending: true }).limit(5000);
+    const [rows] = await datastore.runQuery(query);
+    const sounds = {};
+    for (const r of rows) {
+      if (r.hidden === true) continue;
+      (sounds[r.glyphId] = sounds[r.glyphId] || []).push({
+        url: r.url, speaker: r.speaker, voice: r.voice, createdAt: r.createdAt
+      });
+    }
+    res.set('Cache-Control', 'public, max-age=60');
+    return res.status(200).json({ sounds });
+  } catch (e) {
+    console.error('listGlyphSounds error:', e);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});

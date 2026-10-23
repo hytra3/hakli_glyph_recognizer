@@ -240,7 +240,9 @@
         // fetched straight from their public Cloud Storage URLs (CORS-allowed).
         var LIST_URL = 'https://us-central1-tawkin-blue.cloudfunctions.net/listInscriptions';
         var BUCKET_BASE = 'https://storage.googleapis.com/hakli-archive-tawkin-blue';
+        var SOUNDS_URL = 'https://us-central1-tawkin-blue.cloudfunctions.net/listGlyphSounds';
         var VIEWER_VERSION = 'v261023f';
+        var _glyphSounds = {}; // glyphId -> [ {url, speaker, voice}, ... ]
 
         var galleryView = document.getElementById('gallery-view');
         var detailView = document.getElementById('detail-view');
@@ -592,7 +594,11 @@
         var _glyphAudio = null;
         function playGlyphSound(g) {
             var src = g && (g.sound || g.audio);
-            if (!src) return; // no per-symbol recording yet — silent, visual only
+            if (!src && g) {
+                var list = _glyphSounds[String(g.id)] || _glyphSounds[String(g.name)];
+                if (list && list.length) src = (list[0] || {}).url; // default voice = newest
+            }
+            if (!src) return; // no recording for this symbol yet — silent, visual only
             try {
                 if (!_glyphAudio) _glyphAudio = new Audio();
                 _glyphAudio.src = src;
@@ -655,6 +661,10 @@
 
         var _vEl = document.getElementById('viewer-ver');
         if (_vEl) _vEl.textContent = 'viewer ' + VIEWER_VERSION;
+        // Load the glyph-sound manifest so tap-to-hear / read-along can speak.
+        fetch(SOUNDS_URL).then(function (r) { return r.json(); })
+            .then(function (d) { _glyphSounds = (d && d.sounds) || {}; })
+            .catch(function () {});
         loadGallery();
     })();
     </script>
