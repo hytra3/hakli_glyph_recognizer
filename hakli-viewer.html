@@ -172,6 +172,20 @@
         .sym-n { position: absolute; top: 4px; inset-inline-start: 6px; font-size: .7rem; color: var(--stone); background: var(--sand-deep); border-radius: 10px; padding: 0 6px; }
         /* Gallery card thumbnail (loaded from a small standalone image object) */
         .card-thumb { width: 100%; height: 130px; object-fit: contain; background: var(--sand-deep); border-radius: 10px; margin-bottom: 4px; display: block; }
+        /* Interactive glyph boxes over the inscription image */
+        .img-wrap { position: relative; display: block; line-height: 0; }
+        .gbox { position: absolute; box-sizing: border-box; border: 2px solid rgba(107,142,127,.9); border-radius: 4px; cursor: pointer; transition: background .1s, border-color .1s; }
+        .gbox:hover { background: rgba(107,142,127,.18); }
+        .gbox.active { border-color: var(--rust); background: rgba(160,103,79,.22); }
+        .gnum { position: absolute; top: -9px; inset-inline-start: -9px; min-width: 16px; height: 16px; line-height: 16px; padding: 0 3px; font-size: 10px; font-weight: 700; color: #fff; background: var(--patina); border-radius: 9px; text-align: center; }
+        .gbox.active .gnum { background: var(--rust); }
+        .gbubble { position: absolute; z-index: 10; transform: translate(-50%, calc(-100% - 8px)); background: var(--ink); color: #fff; border-radius: 10px; padding: 6px 12px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; box-shadow: var(--shadow-lg); pointer-events: none; }
+        .gbubble.below { transform: translate(-50%, calc(100% + 8px)); }
+        .gbubble .b-n { font-size: .7rem; opacity: .65; }
+        .gbubble .b-tr { font-size: 1.1rem; font-weight: 650; }
+        .gbubble .b-ar { font-size: 1.25rem; }
+        .img-hint { text-align: center; color: var(--muted); font-size: .82rem; margin: 10px 0 0; line-height: 1.5; }
+        .sym.active { border-color: var(--rust); box-shadow: 0 0 0 2px rgba(160,103,79,.3); }
     </style>
 </head>
 <body>
@@ -377,10 +391,14 @@
                     '</div>';
             }
 
-            // Source image
+            // Source image with tappable glyph boxes (boxes are built after render)
             if (hki.image) {
                 html += '<div class="panel">' +
-                    '<img class="source-img" src="' + esc(hki.image) + '" alt="' + esc(title) + '">' +
+                    '<div class="img-wrap" id="imgwrap">' +
+                        '<img class="source-img" id="srcimg" src="' + esc(hki.image) + '" alt="' + esc(title) + '">' +
+                    '</div>' +
+                    '<p class="img-hint"><span class="ar">اضغط على رمز لرؤية قراءته</span> ' +
+                    '<span class="en-muted en">Tap a symbol to see its reading</span></p>' +
                     '</div>';
             }
 
@@ -423,7 +441,7 @@
                     var thumb = (p.result && p.result.thumbnail) || '';
                     var tr = g.transliteration || g.name || '';
                     var ar = g.arabic || '';
-                    legend += '<div class="sym">' +
+                    legend += '<div class="sym sym-link" data-idx="' + i + '" style="cursor:pointer">' +
                         '<span class="sym-n">' + (i + 1) + '</span>' +
                         (thumb ? '<img class="sym-img" src="' + esc(thumb) + '" alt="">'
                                : '<div class="sym-img sym-ph">◻</div>') +
@@ -458,6 +476,88 @@
 
             detailContent.innerHTML = html;
             window.scrollTo(0, 0);
+            initGlyphLinks(hki);
+        }
+
+        // ---- Interactive symbol <-> image correlation ----
+        var _activeIdx = null;
+        function clearGlyphSel() {
+            _activeIdx = null;
+            Array.prototype.forEach.call(document.querySelectorAll('.gbox.active, .sym.active'),
+                function (e) { e.classList.remove('active'); });
+            var b = document.getElementById('gbubble');
+            if (b && b.parentNode) b.parentNode.removeChild(b);
+        }
+        function selectGlyph(i, g) {
+            var same = (_activeIdx === i);
+            clearGlyphSel();
+            if (same) return null; // tap the active one again to clear
+            _activeIdx = i;
+            var card = document.querySelector('.sym[data-idx="' + i + '"]');
+            if (card) card.classList.add('active');
+            var box = document.querySelector('.gbox[data-idx="' + i + '"]');
+            if (box) {
+                box.classList.add('active');
+                var wrap = document.getElementById('imgwrap');
+                var bub = document.createElement('div');
+                bub.id = 'gbubble';
+                bub.className = 'gbubble';
+                var tr = g.transliteration || g.name || '';
+                var ar = g.arabic || '';
+                bub.innerHTML = '<span class="b-n">' + (i + 1) + '</span>' +
+                    '<span class="b-tr" translate="no" dir="ltr">' + esc(tr) + '</span>' +
+                    (ar ? '<span class="b-ar" translate="no">' + esc(ar) + '</span>' : '');
+                var leftPct = parseFloat(box.style.left) + parseFloat(box.style.width) / 2;
+                var topPct = parseFloat(box.style.top);
+                bub.style.left = leftPct + '%';
+                bub.style.top = topPct + '%';
+                if (topPct < 14) bub.classList.add('below');
+                wrap.appendChild(bub);
+            }
+            return box;
+        }
+        function initGlyphLinks(hki) {
+            var wrap = document.getElementById('imgwrap');
+            var img = document.getElementById('srcimg');
+            var pairs = orderedPairs(hki);
+
+            // Legend card tap -> highlight box and bring the image into view
+            Array.prototype.forEach.call(document.querySelectorAll('.sym-link'), function (card) {
+                card.addEventListener('click', function () {
+                    var i = parseInt(card.getAttribute('data-idx'), 10);
+                    var g = (pairs[i] && pairs[i].result && pairs[i].result.glyph) || {};
+                    var box = selectGlyph(i, g);
+                    if (box && wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+            });
+
+            if (!wrap || !img) return;
+            function place() {
+                var nw = img.naturalWidth || 0, nh = img.naturalHeight || 0;
+                if (!nw || !nh) return;
+                Array.prototype.forEach.call(wrap.querySelectorAll('.gbox'),
+                    function (e) { e.parentNode.removeChild(e); });
+                pairs.forEach(function (p, i) {
+                    var pos = p.result && p.result.position;
+                    if (!pos || typeof pos.x !== 'number' || !pos.width) return;
+                    var g = p.result.glyph || {};
+                    var box = document.createElement('div');
+                    box.className = 'gbox';
+                    box.setAttribute('data-idx', i);
+                    box.style.left = (pos.x / nw * 100) + '%';
+                    box.style.top = (pos.y / nh * 100) + '%';
+                    box.style.width = (pos.width / nw * 100) + '%';
+                    box.style.height = (pos.height / nh * 100) + '%';
+                    box.innerHTML = '<span class="gnum">' + (i + 1) + '</span>';
+                    box.addEventListener('click', function (e) { e.stopPropagation(); selectGlyph(i, g); });
+                    wrap.appendChild(box);
+                });
+            }
+            if (img.complete && img.naturalWidth) place();
+            else img.addEventListener('load', place);
+            wrap.addEventListener('click', function (e) {
+                if (e.target === img || e.target === wrap) clearGlyphSel();
+            });
         }
 
         function showGallery() {
