@@ -260,3 +260,53 @@ functions.http('setStatus', async (req, res) => {
     return res.status(code).json({ error: (e && e.msg) || 'Server error' });
   }
 });
+
+// ---- restrictAudio (owner or curator) --------------------------------------
+// Remove the audio from an inscription's PUBLIC copy (e.g. pending the speaker's
+// permission). Strips audioData from the blob, re-saves it no-cache, and clears
+// the catalog hasAudio flag. The owner's local .hki still has the recording, so
+// they can re-publish with audio once permission is granted.
+functions.http('restrictAudio', async (req, res) => {
+  setCors(req, res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  try {
+    const user = await verifyUser(req);
+    const body = req.body || {};
+    if (!body.id) return res.status(400).json({ error: 'Missing id' });
+
+    const key = datastore.key([KIND, String(body.id)]);
+    const [entity] = await datastore.get(key);
+    if (!entity) return res.status(404).json({ error: 'Not found' });
+    const isOwner = entity.ownerEmail && String(entity.ownerEmail).toLowerCase() === user.email;
+    if (!isOwner && !CURATORS.includes(user.email)) {
+      return res.status(403).json({ error: 'Only the owner or a curator can restrict audio' });
+    }
+
+    // Strip audio from the blob and re-save (no-cache so viewers pick it up).
+    const file = storage.bucket(BUCKET).file(`inscriptions/${String(body.id)}.hki`);
+    const [buf] = await file.download();
+    const hki = JSON.parse(buf.toString('utf8'));
+    const had = !!(hki.audioData || hki.audio);
+    delete hki.audioData;
+    delete hki.audio;
+    await file.save(JSON.stringify(hki), {
+      contentType: 'application/json',
+      resumable: false,
+      metadata: { cacheControl: 'no-cache' }
+    });
+
+    // Clear the catalog flag so the card's audio chip disappears.
+    const data = Object.assign({}, entity);
+    delete data[datastore.KEY];
+    data.hasAudio = false;
+    data.updatedAt = new Date();
+    await datastore.save({ key, data });
+
+    return res.status(200).json({ id: String(body.id), audioRemoved: had });
+  } catch (e) {
+    const code = Number.isInteger(e && e.code) ? e.code : 500;
+    if (code === 500) console.error('restrictAudio error:', e);
+    return res.status(code).json({ error: (e && e.msg) || 'Server error' });
+  }
+});
