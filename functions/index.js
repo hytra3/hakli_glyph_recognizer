@@ -172,10 +172,17 @@ functions.http('listInscriptions', async (req, res) => {
     const query = datastore.createQuery(KIND)
       .order('createdAt', { descending: true })
       .limit(500);
-    const [rows] = await datastore.runQuery(query);
-    const items = rows
-      .filter((r) => r.hidden !== true)
-      .map((r) => ({
+    const [rows] = await datastore.runQuery(query); // newest first
+    // Collapse an owner's own revisions of the same inscription (same title) to the
+    // newest one; different contributors' readings of the same title stay separate.
+    const seen = new Set();
+    const items = [];
+    for (const r of rows) {
+      if (r.hidden === true) continue;
+      const key = String(r.ownerEmail || '').toLowerCase() + '|' + String(r.title || '');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({
         id: r[datastore.KEY].name,
         title: r.title,
         ownerName: r.ownerName,
@@ -184,8 +191,10 @@ functions.http('listInscriptions', async (req, res) => {
         hasAudio: r.hasAudio,
         status: r.status || (r.visibility === 'published' ? 'final' : (r.visibility || 'draft')),
         blobUrl: r.blobUrl,
-        createdAt: r.createdAt
-      }));
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt || r.createdAt
+      });
+    }
     res.set('Cache-Control', 'public, max-age=60');
     return res.status(200).json({ items });
   } catch (e) {
