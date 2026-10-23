@@ -185,6 +185,10 @@
         .gbubble .b-tr { font-size: 1.1rem; font-weight: 650; }
         .gbubble .b-ar { font-size: 1.25rem; }
         .img-hint { text-align: center; color: var(--muted); font-size: .82rem; margin: 10px 0 0; line-height: 1.5; }
+        .readalong-bar { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 12px 0 0; flex-wrap: wrap; }
+        .readalong-btn { background: var(--patina); color: #fff; border: 0; border-radius: 30px; padding: 10px 22px; font-size: 1.05rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+        .readalong-btn:hover { background: var(--purple); }
+        .readalong-progress { font-size: .9rem; color: var(--stone); font-variant-numeric: tabular-nums; }
         .sym.active { border-color: var(--rust); box-shadow: 0 0 0 2px rgba(160,103,79,.3); }
     </style>
 </head>
@@ -236,7 +240,7 @@
         // fetched straight from their public Cloud Storage URLs (CORS-allowed).
         var LIST_URL = 'https://us-central1-tawkin-blue.cloudfunctions.net/listInscriptions';
         var BUCKET_BASE = 'https://storage.googleapis.com/hakli-archive-tawkin-blue';
-        var VIEWER_VERSION = 'v261023d';
+        var VIEWER_VERSION = 'v261023f';
 
         var galleryView = document.getElementById('gallery-view');
         var detailView = document.getElementById('detail-view');
@@ -412,6 +416,10 @@
                     '</div>' +
                     '<p class="img-hint"><span class="ar">اضغط على رمز لرؤية قراءته</span> ' +
                     '<span class="en-muted en">Tap a symbol to see its reading</span></p>' +
+                    '<div class="readalong-bar">' +
+                        '<button class="readalong-btn" id="ra-btn" type="button">▶ <span class="ar">اقرأ معي</span> <span class="en-muted en">Read along</span></button>' +
+                        '<span class="readalong-progress" id="ra-prog"></span>' +
+                    '</div>' +
                     '</div>';
             }
 
@@ -506,6 +514,7 @@
             clearGlyphSel();
             if (same) return null; // tap the active one again to clear
             _activeIdx = i;
+            playGlyphSound(g);  // speaks the symbol if it has a recording
             var card = document.querySelector('.sym[data-idx="' + i + '"]');
             if (card) card.classList.add('active');
             var box = document.querySelector('.gbox[data-idx="' + i + '"]');
@@ -533,10 +542,16 @@
             var wrap = document.getElementById('imgwrap');
             var img = document.getElementById('srcimg');
             var pairs = orderedPairs(hki);
+            raStop(); // clear any read-along left running from a previous inscription
+
+            // Read-along button
+            var raBtn = document.getElementById('ra-btn');
+            if (raBtn) raBtn.addEventListener('click', function () { raToggle(pairs); });
 
             // Legend card tap -> highlight box and bring the image into view
             Array.prototype.forEach.call(document.querySelectorAll('.sym-link'), function (card) {
                 card.addEventListener('click', function () {
+                    raStop();
                     var i = parseInt(card.getAttribute('data-idx'), 10);
                     var g = (pairs[i] && pairs[i].result && pairs[i].result.glyph) || {};
                     var box = selectGlyph(i, g);
@@ -562,7 +577,7 @@
                     box.style.width = (pos.width / nw * 100) + '%';
                     box.style.height = (pos.height / nh * 100) + '%';
                     box.innerHTML = '<span class="gnum">' + (i + 1) + '</span>';
-                    box.addEventListener('click', function (e) { e.stopPropagation(); selectGlyph(i, g); });
+                    box.addEventListener('click', function (e) { e.stopPropagation(); raStop(); selectGlyph(i, g); });
                     wrap.appendChild(box);
                 });
             }
@@ -573,7 +588,62 @@
             });
         }
 
+        // ---- Per-glyph sound (plays when a glyph has a recording attached) ----
+        var _glyphAudio = null;
+        function playGlyphSound(g) {
+            var src = g && (g.sound || g.audio);
+            if (!src) return; // no per-symbol recording yet — silent, visual only
+            try {
+                if (!_glyphAudio) _glyphAudio = new Audio();
+                _glyphAudio.src = src;
+                var pr = _glyphAudio.play();
+                if (pr && pr.catch) pr.catch(function () {});
+            } catch (e) {}
+        }
+
+        // ---- Read-along: step through the symbols in reading order ----
+        var _ra = { playing: false, i: 0, timer: null };
+        function raSetBtn(playing) {
+            var btn = document.getElementById('ra-btn');
+            if (!btn) return;
+            btn.innerHTML = playing
+                ? '⏸ <span class="ar">إيقاف</span> <span class="en-muted en">Pause</span>'
+                : '▶ <span class="ar">اقرأ معي</span> <span class="en-muted en">Read along</span>';
+        }
+        function raStop() {
+            _ra.playing = false;
+            if (_ra.timer) { clearTimeout(_ra.timer); _ra.timer = null; }
+            raSetBtn(false);
+        }
+        function raStep(pairs) {
+            if (!_ra.playing) return;
+            if (_ra.i >= pairs.length) {
+                raStop();
+                var p0 = document.getElementById('ra-prog'); if (p0) p0.textContent = '';
+                return;
+            }
+            var g = (pairs[_ra.i] && pairs[_ra.i].result && pairs[_ra.i].result.glyph) || {};
+            selectGlyph(_ra.i, g); // highlights box + bubble + legend, and speaks the sound
+            var prog = document.getElementById('ra-prog');
+            if (prog) prog.textContent = (_ra.i + 1) + ' / ' + pairs.length;
+            var box = document.querySelector('.gbox[data-idx="' + _ra.i + '"]');
+            if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            _ra.i++;
+            _ra.timer = setTimeout(function () { raStep(pairs); }, 1700);
+        }
+        function raToggle(pairs) {
+            if (_ra.playing) { raStop(); return; }
+            if (!pairs || !pairs.length) return;
+            clearGlyphSel();
+            _ra.i = 0;
+            _ra.playing = true;
+            raSetBtn(true);
+            raStep(pairs);
+        }
+
         function showGallery() {
+            raStop();
+            clearGlyphSel();
             detailView.classList.add('hidden');
             galleryView.classList.remove('hidden');
             window.scrollTo(0, 0);
