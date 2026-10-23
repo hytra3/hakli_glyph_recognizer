@@ -117,6 +117,19 @@ functions.http('submitInscription', async (req, res) => {
     });
     const blobUrl = `https://storage.googleapis.com/${BUCKET}/${objectPath}`;
 
+    // Also store the source image as a small standalone public object so the
+    // gallery can show a thumbnail without fetching the whole .hki blob.
+    try {
+      const im = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(hki.image || '');
+      if (im) {
+        await storage.bucket(BUCKET).file(`inscriptions/${id}.img`).save(Buffer.from(im[2], 'base64'), {
+          contentType: im[1],
+          resumable: false,
+          metadata: { cacheControl: 'public, max-age=3600' }
+        });
+      }
+    } catch (e) { console.warn('thumb write failed:', e && e.message); }
+
     const now = new Date();
     const glyphCount = Array.isArray(hki.recognitionResults)
       ? hki.recognitionResults.length
