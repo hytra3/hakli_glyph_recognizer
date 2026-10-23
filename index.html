@@ -147,7 +147,7 @@
     <script src="src/storage/cache.js"></script>
     <script src="src/storage/corrections.js"></script>
     <script src="src/storage/change-tracker.js"></script>
-    <script src="src/storage/archive-sync.js?v=261023a"></script>
+    <script src="src/storage/archive-sync.js?v=261023e"></script>
     <script src="src/storage/access-control.js"></script>
     <script src="src/storage/sync-manager.js"></script>
     <script src="src/storage/local-autosave.js"></script>
@@ -170,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261023a"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261023a"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261023a"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261023a"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261023a"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261023a"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261023a"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261023a"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261023e"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261023e"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261023e"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261023e"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261023e"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261023e"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261023e"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261023e"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v261023a';
+        const APP_VERSION = 'v261023e';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -3350,13 +3350,37 @@
                 });
                 
                 setSelectedRegions(new Set());
+                // After the splice above, the array is:
+                //   [< idx1 unchanged], merged@idx1, [idx1<..<idx2 unchanged], [> idx2 shifted -1].
+                // Reindex the reading order the SAME way. (The old code assumed the
+                // array merely shrank by 2, which collapsed indices onto 0 and made
+                // the orphaned glyphs vanish — the "0 bug".) Merged takes idx1's slot.
+                const reindex = (oi) => (oi > idx2 ? oi - 1 : oi);
                 setReadingOrder(prev => {
-                    // Remove old indices, adjust remaining
-                    return prev
-                        .filter(i => i !== idx1 && i !== idx2)
-                        .map(i => i > idx2 ? i - 2 : i > idx1 ? i - 1 : i)
-                        .concat([idx1]); // Add merged at end
+                    const out = [];
+                    let placed = false;
+                    prev.forEach(i => {
+                        if (i === idx1 || i === idx2) {
+                            if (!placed) { out.push(idx1); placed = true; }
+                            return;
+                        }
+                        out.push(reindex(i));
+                    });
+                    if (!placed) out.push(idx1);
+                    return out;
                 });
+                // Keep word/line/column breaks aligned with the new indices.
+                const remapBreaks = (prevSet) => {
+                    const u = new Set();
+                    prevSet.forEach(oi => {
+                        if (oi === idx1 || oi === idx2) { u.add(idx1); return; }
+                        u.add(reindex(oi));
+                    });
+                    return u;
+                };
+                setWordBoundaries(prev => remapBreaks(prev));
+                setLineBreaks(prev => remapBreaks(prev));
+                setColumnBreaks(prev => remapBreaks(prev));
                 
                 alert('✅ Detections merged');
             }, [selectedRegions, recognitionResults]);
