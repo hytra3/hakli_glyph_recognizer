@@ -5356,12 +5356,15 @@
                                 
                                 {/* Audio Recording Section */}
                                 <div className="mb-3 border-t border-gray-200 pt-3">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-xs font-semibold text-gray-600">🎤 Audio Notes:</span>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-xs font-semibold text-gray-600">🎤 Reading:</span>
                                         {audioData && (
                                             <span className="text-xs text-patina">● Recorded</span>
                                         )}
                                     </div>
+                                    <p className="text-[11px] text-gray-500 mb-2 leading-snug">
+                                        The whole inscription read aloud — this is what plays in the viewer’s “Listen.” Per-letter sounds are collected separately on the recorder page; written notes go in the Notes field.
+                                    </p>
                                     
                                     {!audioData ? (
                                         /* No audio - show record/upload options */
