@@ -72,6 +72,11 @@ const DetectionCard = ({
     openGlyphSelector,
     addToChart,
 
+    // Per-symbol note
+    noteCardIdx,
+    setNoteCardIdx,
+    setDetectionNote,
+
     // History deps
     driveUserEmail,
     changeLog,
@@ -94,6 +99,7 @@ const DetectionCard = ({
     const hasHistory = historyEnabled && ChangeTracker.getDetectionHistory(changeLog, idx).length > 0;
     const editOpen = editMenuCardIdx === idx;
     const breaksOpen = breaksMenuCardIdx === idx;
+    const noteOpen = noteCardIdx === idx;
     const dragEnabled = !isMobile && viewMode === 'reading';
 
     // Shared menu item lists (rendered as popovers on desktop, in-flow on mobile)
@@ -224,6 +230,7 @@ const DetectionCard = ({
                             {isExcluded && <span className="text-xs text-gray-400">(excluded)</span>}
                             {result.isMerged && <span className="text-xs text-blue-500">🔗</span>}
                             {hasHistory && <span className="w-2 h-2 rounded-full bg-blue-400" title="Has edit history"></span>}
+                            {result.note && <span className="text-xs text-ochre" title="Has a note">📝</span>}
                             {wordBoundaries.has(idx) && <span className="text-xs font-bold text-stone px-1 bg-stone/20 rounded">|</span>}
                             {columnBreaks.has(idx) && <span className="text-xs font-bold text-amber-700 px-1 bg-stone/20 rounded">‖</span>}
                             {lineBreaks.has(idx) && <span className="text-xs font-bold text-ancient-purple px-1 bg-ancient-purple/20 rounded">⏎</span>}
@@ -266,6 +273,12 @@ const DetectionCard = ({
                     className={`px-2 py-0.5 rounded text-xs ${isExpanded ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                     title="Show alternative matches">
                     {isExpanded ? '▼' : '▶'} Alts {hasAlts ? `(${result.topMatches.length - 1})` : ''}
+                </button>
+
+                <button onClick={(e) => { e.stopPropagation(); setNoteCardIdx(noteOpen ? null : idx); setEditMenuCardIdx(null); setBreaksMenuCardIdx(null); }}
+                    className={`px-2 py-0.5 rounded text-xs ${noteOpen ? 'bg-ochre text-white' : (result.note ? 'bg-ochre/20 text-ochre' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}`}
+                    title="Add a note about this symbol">
+                    📝 Note{result.note ? ' ✓' : ''}
                 </button>
 
                 {isExcluded && (
@@ -382,6 +395,24 @@ const DetectionCard = ({
                             </button>
                         )}
                     </div>
+                </div>
+            )}
+
+            {/* Per-symbol note editor */}
+            {noteOpen && (
+                <div className="px-2 pb-2 border-t border-gray-100 bg-ochre/5">
+                    <div className="flex items-center justify-between pt-1 mb-1">
+                        <div className="text-xs text-gray-500">📝 Note on this symbol</div>
+                        <button onClick={(e) => { e.stopPropagation(); setNoteCardIdx(null); }}
+                            className="text-xs text-gray-400 hover:text-gray-600">✕</button>
+                    </div>
+                    <textarea
+                        value={result.note || ''}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setDetectionNote(idx, e.target.value)}
+                        placeholder="e.g. uncertain reading · damaged · reads differently here"
+                        rows={2}
+                        className="w-full text-xs border border-gray-200 rounded p-2 resize-y focus:outline-none focus:border-ochre" />
                 </div>
             )}
 

@@ -179,7 +179,9 @@
         .gbox.active { border-color: var(--rust); background: rgba(160,103,79,.22); }
         .gnum { position: absolute; top: -9px; inset-inline-start: -9px; min-width: 16px; height: 16px; line-height: 16px; padding: 0 3px; font-size: 10px; font-weight: 700; color: #fff; background: var(--patina); border-radius: 9px; text-align: center; }
         .gbox.active .gnum { background: var(--rust); }
-        .gbubble { position: absolute; z-index: 10; transform: translate(-50%, calc(-100% - 8px)); background: var(--ink); color: #fff; border-radius: 10px; padding: 6px 12px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; box-shadow: var(--shadow-lg); pointer-events: none; }
+        .gbubble { position: absolute; z-index: 10; transform: translate(-50%, calc(-100% - 8px)); background: var(--ink); color: #fff; border-radius: 10px; padding: 6px 12px; display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 240px; box-shadow: var(--shadow-lg); pointer-events: none; }
+        .gbubble .b-row { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+        .gbubble .b-note { font-size: .74rem; line-height: 1.35; opacity: .9; white-space: normal; text-align: center; border-top: 1px solid rgba(255,255,255,.18); padding-top: 3px; margin-top: 1px; }
         .gbubble.below { transform: translate(-50%, calc(100% + 8px)); }
         .gbubble .b-n { font-size: .7rem; opacity: .65; }
         .gbubble .b-tr { font-size: 1.1rem; font-weight: 650; }
@@ -241,7 +243,7 @@
         var LIST_URL = 'https://us-central1-tawkin-blue.cloudfunctions.net/listInscriptions';
         var BUCKET_BASE = 'https://storage.googleapis.com/hakli-archive-tawkin-blue';
         var SOUNDS_URL = 'https://us-central1-tawkin-blue.cloudfunctions.net/listGlyphSounds';
-        var VIEWER_VERSION = 'v261023f';
+        var VIEWER_VERSION = 'v261024a';
         var _glyphSounds = {}; // glyphId -> [ {url, speaker, voice}, ... ]
 
         var galleryView = document.getElementById('gallery-view');
@@ -511,7 +513,7 @@
             var b = document.getElementById('gbubble');
             if (b && b.parentNode) b.parentNode.removeChild(b);
         }
-        function selectGlyph(i, g) {
+        function selectGlyph(i, g, note) {
             var same = (_activeIdx === i);
             clearGlyphSel();
             if (same) return null; // tap the active one again to clear
@@ -528,9 +530,10 @@
                 bub.className = 'gbubble';
                 var tr = g.transliteration || g.name || '';
                 var ar = g.arabic || '';
-                bub.innerHTML = '<span class="b-n">' + (i + 1) + '</span>' +
+                bub.innerHTML = '<div class="b-row"><span class="b-n">' + (i + 1) + '</span>' +
                     '<span class="b-tr" translate="no" dir="ltr">' + esc(tr) + '</span>' +
-                    (ar ? '<span class="b-ar" translate="no">' + esc(ar) + '</span>' : '');
+                    (ar ? '<span class="b-ar" translate="no">' + esc(ar) + '</span>' : '') + '</div>' +
+                    (note ? '<div class="b-note">' + esc(note) + '</div>' : '');
                 var leftPct = parseFloat(box.style.left) + parseFloat(box.style.width) / 2;
                 var topPct = parseFloat(box.style.top);
                 bub.style.left = leftPct + '%';
@@ -556,7 +559,8 @@
                     raStop();
                     var i = parseInt(card.getAttribute('data-idx'), 10);
                     var g = (pairs[i] && pairs[i].result && pairs[i].result.glyph) || {};
-                    var box = selectGlyph(i, g);
+                    var note = (pairs[i] && pairs[i].result && pairs[i].result.note) || '';
+                    var box = selectGlyph(i, g, note);
                     if (box && wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 });
             });
@@ -571,6 +575,7 @@
                     var pos = p.result && p.result.position;
                     if (!pos || typeof pos.x !== 'number' || !pos.width) return;
                     var g = p.result.glyph || {};
+                    var note = (p.result && p.result.note) || '';
                     var box = document.createElement('div');
                     box.className = 'gbox';
                     box.setAttribute('data-idx', i);
@@ -579,7 +584,7 @@
                     box.style.width = (pos.width / nw * 100) + '%';
                     box.style.height = (pos.height / nh * 100) + '%';
                     box.innerHTML = '<span class="gnum">' + (i + 1) + '</span>';
-                    box.addEventListener('click', function (e) { e.stopPropagation(); raStop(); selectGlyph(i, g); });
+                    box.addEventListener('click', function (e) { e.stopPropagation(); raStop(); selectGlyph(i, g, note); });
                     wrap.appendChild(box);
                 });
             }
@@ -629,7 +634,8 @@
                 return;
             }
             var g = (pairs[_ra.i] && pairs[_ra.i].result && pairs[_ra.i].result.glyph) || {};
-            selectGlyph(_ra.i, g); // highlights box + bubble + legend, and speaks the sound
+            var note = (pairs[_ra.i] && pairs[_ra.i].result && pairs[_ra.i].result.note) || '';
+            selectGlyph(_ra.i, g, note); // highlights box + bubble + legend, and speaks the sound
             var prog = document.getElementById('ra-prog');
             if (prog) prog.textContent = (_ra.i + 1) + ' / ' + pairs.length;
             var box = document.querySelector('.gbox[data-idx="' + _ra.i + '"]');

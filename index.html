@@ -147,7 +147,7 @@
     <script src="src/storage/cache.js"></script>
     <script src="src/storage/corrections.js"></script>
     <script src="src/storage/change-tracker.js"></script>
-    <script src="src/storage/archive-sync.js?v=261023e"></script>
+    <script src="src/storage/archive-sync.js?v=261024a"></script>
     <script src="src/storage/access-control.js"></script>
     <script src="src/storage/sync-manager.js"></script>
     <script src="src/storage/local-autosave.js"></script>
@@ -170,18 +170,18 @@
     <script src="src/reading/transcription.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261023e"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261023e"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261023e"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261023e"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261023e"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261023e"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261023e"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261023e"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261024a"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261024a"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261024a"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261024a"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261024a"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261024a"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261024a"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261024a"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v261023e';
+        const APP_VERSION = 'v261024a';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -243,6 +243,7 @@
             const [editMenuCardIdx, setEditMenuCardIdx] = useState(null); // Which card has edit menu open
             const [breaksMenuCardIdx, setBreaksMenuCardIdx] = useState(null); // Which card has breaks menu open
             const [historyCardIdx, setHistoryCardIdx] = useState(null); // Which card shows history
+            const [noteCardIdx, setNoteCardIdx] = useState(null); // Which card has its per-symbol note editor open
             const [editingBoxIdx, setEditingBoxIdx] = useState(null); // Index of detection being edited
             
             // Manual box drawing state
@@ -620,6 +621,11 @@
                 return () => window.removeEventListener('beforeunload', handleBeforeUnload);
             }, [hasUnsavedChanges]);
             
+            // Per-symbol note: attach short commentary to a single detection.
+            const setDetectionNote = useCallback((idx, text) => {
+                setRecognitionResults(prev => prev.map((r, i) => i === idx ? { ...r, note: text } : r));
+            }, []);
+
             // ========== SHARED .hki BUILDER ==========
             // Single source of truth for the .hki payload, used by BOTH the manual
             // Save handler and the Drive auto-sync effect so they can't drift apart.
@@ -635,6 +641,7 @@
                     confidence: r.confidence,
                     position: r.position,
                     thumbnail: r.thumbnail,
+                    note: r.note || '',
                     matchType: r.matchType,
                     corrected: r.corrected,
                     originalGlyph: r.originalGlyph ? {
@@ -699,6 +706,7 @@
                             confidence: r.confidence,
                             position: r.position,
                             thumbnail: r.thumbnail,
+                            note: r.note || '',
                             corrected: r.corrected || false
                         })),
                         validations: validations,
@@ -4119,6 +4127,9 @@
                                                         setBreaksMenuCardIdx={setBreaksMenuCardIdx}
                                                         historyCardIdx={historyCardIdx}
                                                         setHistoryCardIdx={setHistoryCardIdx}
+                                                        noteCardIdx={noteCardIdx}
+                                                        setNoteCardIdx={setNoteCardIdx}
+                                                        setDetectionNote={setDetectionNote}
                                                         onMoveCard={(from, to) => { pushUndo('readingOrder', [...readingOrder]); setReadingOrder(prev => { const n = [...prev]; const [m] = n.splice(from, 1); n.splice(to, 0, m); return n; }); }}
                                                         validateDetection={validateDetection}
                                                         setValidations={setValidations}
@@ -4979,6 +4990,9 @@
                                                             setBreaksMenuCardIdx={setBreaksMenuCardIdx}
                                                             historyCardIdx={historyCardIdx}
                                                             setHistoryCardIdx={setHistoryCardIdx}
+                                                            noteCardIdx={noteCardIdx}
+                                                            setNoteCardIdx={setNoteCardIdx}
+                                                            setDetectionNote={setDetectionNote}
                                                             draggedCardIdx={draggedCardIdx}
                                                             dragOverCardIdx={dragOverCardIdx}
                                                             handleDragStart={handleDragStart}
