@@ -419,7 +419,7 @@
                     '<p class="img-hint"><span class="ar">اضغط على رمز لرؤية قراءته</span> ' +
                     '<span class="en-muted en">Tap a symbol to see its reading</span></p>' +
                     '<div class="readalong-bar">' +
-                        '<button class="readalong-btn" id="ra-btn" type="button">▶ <span class="ar">اقرأ معي</span> <span class="en-muted en">Read along</span></button>' +
+                        '<button class="readalong-btn" id="ra-btn" type="button">▶ <span class="ar">تهجَّ معي</span> <span class="en-muted en">Spell along</span></button>' +
                         '<span class="readalong-progress" id="ra-prog"></span>' +
                     '</div>' +
                     '</div>';
@@ -614,7 +614,7 @@
             if (!btn) return;
             btn.innerHTML = playing
                 ? '⏸ <span class="ar">إيقاف</span> <span class="en-muted en">Pause</span>'
-                : '▶ <span class="ar">اقرأ معي</span> <span class="en-muted en">Read along</span>';
+                : '▶ <span class="ar">تهجَّ معي</span> <span class="en-muted en">Spell along</span>';
         }
         function raStop() {
             _ra.playing = false;

@@ -96,13 +96,12 @@
                 <select id="voice">
                     <option value="male">ذكر · Male</option>
                     <option value="female">أنثى · Female</option>
-                    <option value="other">آخر · Other</option>
                 </select>
             </div>
         </div>
 
         <div id="signin-note" class="panel">
-            <span class="ar">سجّل الدخول لتبدأ.</span> <span class="en-muted en">Sign in to begin.</span>
+            <span class="ar">سجّل الدخول قبل التسجيل.</span> <span class="en-muted en">Sign in to record or upload.</span>
         </div>
 
         <div id="grid-state" class="state hidden"><div class="spinner"></div>
@@ -158,6 +157,18 @@
                 setupEl.classList.add('hidden');
                 signinNote.classList.remove('hidden');
             }
+            applyAuthGate();
+        }
+        // Recording/upload require sign-in (the server verifies every save),
+        // so disable the controls until signed in — no more confusing dead-end saves.
+        function applyAuthGate(){
+            var on = !!token;
+            gridEl.querySelectorAll('.rec-btn').forEach(function(b){ b.disabled = !on; });
+            gridEl.querySelectorAll('.up-label').forEach(function(l){
+                l.style.opacity = on ? '' : '.45';
+                l.style.pointerEvents = on ? '' : 'none';
+                var inp = l.querySelector('.file-in'); if (inp) inp.disabled = !on;
+            });
         }
         async function signIn(){
             if (!window.google || !google.accounts){ alert('Sign-in unavailable. Check your connection.'); return; }
@@ -215,7 +226,7 @@
                     '</div>' +
                     '<div class="gctrls">' +
                         '<button class="btn btn-rust rec-btn" type="button">🎙 <span class="ar">سجّل</span> <span class="en-muted en">Record</span></button>' +
-                        '<label class="btn btn-ghost" style="cursor:pointer">⬆ <span class="ar">رفع</span> <span class="en-muted en">Upload</span>' +
+                        '<label class="btn btn-ghost up-label" style="cursor:pointer">⬆ <span class="ar">رفع</span> <span class="en-muted en">Upload</span>' +
                             '<input type="file" accept="audio/*" class="file-in" style="display:none"></label>' +
                     '</div>' +
                     '<audio class="preview hidden" controls></audio>' +
@@ -224,6 +235,7 @@
                 wireCard(card, g);
                 gridEl.appendChild(card);
             });
+            applyAuthGate();
         }
 
         function setStatus(card, msg, cls){
