@@ -389,7 +389,7 @@ functions.http('listGlyphSounds', async (req, res) => {
     for (const r of rows) {
       if (r.hidden === true) continue;
       (sounds[r.glyphId] = sounds[r.glyphId] || []).push({
-        url: r.url, speaker: r.speaker, voice: r.voice, createdAt: r.createdAt
+        id: r[datastore.KEY].name, url: r.url, speaker: r.speaker, voice: r.voice, createdAt: r.createdAt
       });
     }
     res.set('Cache-Control', 'public, max-age=60');
@@ -397,5 +397,39 @@ functions.http('listGlyphSounds', async (req, res) => {
   } catch (e) {
     console.error('listGlyphSounds error:', e);
     return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST (auth): hide a glyph-sound take. Soft-delete — sets hidden:true so it
+// drops out of the manifest but the blob is kept and it stays recoverable.
+// Allowed for the contributor who recorded it or a curator.
+functions.http('hideGlyphSound', async (req, res) => {
+  setCors(req, res);
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  try {
+    const user = await verifyUser(req);
+    const body = req.body || {};
+    if (!body.id) return res.status(400).json({ error: 'Missing id' });
+
+    const key = datastore.key([SOUND_KIND, String(body.id)]);
+    const [entity] = await datastore.get(key);
+    if (!entity) return res.status(404).json({ error: 'Not found' });
+
+    const isOwner = entity.contributorEmail && String(entity.contributorEmail).toLowerCase() === user.email;
+    if (!isOwner && !CURATORS.includes(user.email)) {
+      return res.status(403).json({ error: 'Only the contributor or a curator can remove a recording' });
+    }
+
+    const data = Object.assign({}, entity);
+    delete data[datastore.KEY];
+    data.hidden = true;
+    await datastore.save({ key, data });
+
+    return res.status(200).json({ id: String(body.id), hidden: true });
+  } catch (e) {
+    const code = Number.isInteger(e && e.code) ? e.code : 500;
+    if (code === 500) console.error('hideGlyphSound error:', e);
+    return res.status(code).json({ error: (e && e.msg) || 'Server error' });
   }
 });

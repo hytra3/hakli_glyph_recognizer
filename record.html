@@ -52,6 +52,23 @@
         .gar { font-size:1.5rem; color:var(--purple); }
         .gcount { font-size:.8rem; color:var(--muted); }
         .gcount.has { color:var(--patina); font-weight:600; }
+        .guide { margin-top:12px; padding:9px 13px; background:var(--sand-deep); border-radius:10px; }
+        .guide .ar { font-size:1.02rem; font-weight:650; }
+        .guide .en { display:block; color:var(--muted); font-size:.85rem; margin-top:2px; }
+        .coverage { margin-top:12px; }
+        .coverage .cov-txt { font-size:.9rem; font-weight:600; color:var(--patina); }
+        .cov-bar { height:7px; background:var(--sand-deep); border-radius:5px; margin-top:6px; overflow:hidden; }
+        .cov-fill { height:100%; width:0; background:var(--patina); transition:width .3s ease; }
+        .takes { display:flex; flex-direction:column; gap:6px; }
+        .takes:empty { display:none; }
+        .take { display:flex; align-items:center; gap:8px; background:var(--sand); border:1px solid var(--sand-deep);
+            border-radius:9px; padding:5px 8px; }
+        .take-play { border:0; background:var(--patina); color:#fff; border-radius:50%; width:30px; height:30px;
+            font-size:.85rem; cursor:pointer; flex-shrink:0; }
+        .take-label { flex:1; min-width:0; font-size:.82rem; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .take-voice { color:var(--muted); }
+        .take-rm { border:0; background:transparent; color:var(--rust); font-size:1.1rem; cursor:pointer; padding:2px 6px; flex-shrink:0; }
+        .take-rm:disabled { opacity:.4; cursor:default; }
         .gctrls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
         .gctrls .btn { padding:8px 14px; font-size:.9rem; }
         .rec-dot { width:10px; height:10px; border-radius:50%; background:var(--rust); animation:pulse 1s infinite; }
@@ -84,6 +101,11 @@
         <div class="panel intro">
             <span class="ar">ساعِد المجتمع على تعلّم القراءة: سجّل صوت كل حرف بصوتك. يمكنك التسجيل مباشرة أو رفع ملف صوتي (مثل تسجيل واتساب).</span>
             <span class="en">Help the community learn to read: record the sound of each letter in your own voice — record here, or upload an audio file (e.g. a WhatsApp voice note).</span>
+            <div class="guide">
+                <span class="ar">انطق صوتَ الحرف وحده، لا اسمه.</span>
+                <span class="en-muted en">Say the letter's sound on its own — not its name — so every recording matches.</span>
+            </div>
+            <div class="coverage" id="coverage"></div>
         </div>
 
         <div class="panel setup hidden" id="setup">
@@ -121,6 +143,7 @@
         var CLIENT_ID = '533670139668-51vdk21n97p2e9lgubfvmdsnqu3ie2jr.apps.googleusercontent.com';
         var FN = 'https://us-central1-tawkin-blue.cloudfunctions.net';
         var CHART_URL = 'Hakli_glyphs.JSON';
+        var _preview = null; // shared playback element for existing takes
 
         var token = null, userName = null, userEmail = null, tokenClient = null;
         var sounds = {};        // glyphId -> [ {url,...} ]
@@ -224,6 +247,7 @@
                             '<div class="gcount'+(n?' has':'')+'" data-count>'+ (n? (n+' recording'+(n>1?'s':'')) : 'no recordings yet') +'</div>' +
                         '</div>' +
                     '</div>' +
+                    '<div class="takes" data-takes></div>' +
                     '<div class="gctrls">' +
                         '<button class="btn btn-rust rec-btn" type="button">🎙 <span class="ar">سجّل</span> <span class="en-muted en">Record</span></button>' +
                         '<label class="btn btn-ghost up-label" style="cursor:pointer">⬆ <span class="ar">رفع</span> <span class="en-muted en">Upload</span>' +
@@ -234,14 +258,71 @@
                     '<div class="gstatus" data-status></div>';
                 wireCard(card, g);
                 gridEl.appendChild(card);
+                renderTakes(card, g);
             });
             applyAuthGate();
+            updateCoverage();
         }
 
         function setStatus(card, msg, cls){
             var el = card.querySelector('[data-status]');
             el.textContent = msg || '';
             el.className = 'gstatus' + (cls ? ' '+cls : '');
+        }
+
+        function voiceLabel(v){ return v === 'female' ? 'female' : (v === 'male' ? 'male' : (v || '')); }
+
+        function refreshCount(card, g){
+            var n = countFor(g.id);
+            var c = card.querySelector('[data-count]');
+            if (c){ c.textContent = n ? (n+' recording'+(n>1?'s':'')) : 'no recordings yet'; c.className = 'gcount'+(n?' has':''); }
+        }
+
+        // The existing takes for a glyph: play each, or remove your own (curators remove any).
+        function renderTakes(card, g){
+            var box = card.querySelector('[data-takes]'); if (!box) return;
+            var list = sounds[String(g.id)] || [];
+            box.innerHTML = '';
+            list.forEach(function(s){
+                if (!s || !s.url) return;
+                var who = (s.speaker || '').trim(), vl = voiceLabel(s.voice);
+                var row = document.createElement('div'); row.className = 'take';
+                row.innerHTML =
+                    '<button class="take-play" type="button" title="Play">▶</button>' +
+                    '<span class="take-label">' + esc(who || 'recording') +
+                        (vl ? ' <span class="take-voice">· '+esc(vl)+'</span>' : '') + '</span>' +
+                    '<button class="take-rm" type="button" title="Remove">✕</button>';
+                row.querySelector('.take-play').onclick = function(){
+                    try { if (!_preview) _preview = new Audio(); _preview.src = s.url; var p=_preview.play(); if(p&&p.catch)p.catch(function(){}); } catch(e){}
+                };
+                var rm = row.querySelector('.take-rm');
+                rm.onclick = async function(){
+                    if (!token){ setStatus(card, 'Sign in to remove', 'err'); return; }
+                    if (!s.id){ setStatus(card, 'Reload the page to remove this take', 'err'); return; }
+                    rm.disabled = true;
+                    try {
+                        var r = await fetch(FN+'/hideGlyphSound', {
+                            method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+                            body: JSON.stringify({ id: s.id })
+                        });
+                        var t = await r.text();
+                        if (!r.ok) throw new Error(r.status===403 ? 'Only the contributor or a curator can remove this' : (r.status+' '+t.slice(0,80)));
+                        sounds[String(g.id)] = (sounds[String(g.id)]||[]).filter(function(x){ return x.id !== s.id; });
+                        renderTakes(card, g); refreshCount(card, g); updateCoverage();
+                        setStatus(card, '✓ removed', 'ok');
+                    } catch(e){ rm.disabled = false; setStatus(card, 'Remove failed: '+e.message, 'err'); }
+                };
+                box.appendChild(row);
+            });
+        }
+
+        function updateCoverage(){
+            var total = glyphs.length || 0;
+            var done = glyphs.reduce(function(a,g){ return a + (countFor(g.id) ? 1 : 0); }, 0);
+            var el = document.getElementById('coverage'); if (!el) return;
+            var pct = total ? Math.round(done/total*100) : 0;
+            el.innerHTML = '<div class="cov-txt">'+done+' / '+total+' letters recorded</div>' +
+                '<div class="cov-bar"><div class="cov-fill" style="width:'+pct+'%"></div></div>';
         }
 
         function wireCard(card, g){
@@ -287,11 +368,10 @@
                     });
                     var t = await r.text();
                     if (!r.ok) throw new Error(r.status+' '+t.slice(0,120));
-                    // update count
-                    (sounds[String(g.id)] = sounds[String(g.id)] || []).unshift({ voice: voice, speaker: speaker });
-                    var c = card.querySelector('[data-count]'); var n = countFor(g.id);
-                    c.textContent = n+' recording'+(n>1?'s':''); c.className='gcount has';
-                    preview.classList.add('hidden'); saveRow.classList.add('hidden'); pendingDataUrl=null;
+                    var resp = {}; try { resp = JSON.parse(t); } catch(e){}
+                    (sounds[String(g.id)] = sounds[String(g.id)] || []).unshift({ id: resp.id, url: resp.url, voice: voice, speaker: speaker });
+                    refreshCount(card, g); renderTakes(card, g); updateCoverage();
+                    preview.classList.add('hidden'); preview.src=''; saveRow.classList.add('hidden'); pendingDataUrl=null;
                     setStatus(card,'✓ saved','ok');
                 } catch(e){
                     setStatus(card, 'Failed: '+e.message, 'err');
