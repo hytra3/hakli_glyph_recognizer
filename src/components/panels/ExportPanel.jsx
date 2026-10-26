@@ -956,18 +956,12 @@ const ExportPanel = ({
                         </button>
                     </div>
                     
-                    {/* Sync status */}
-                    {driveSignedIn ? (
+                    {/* Sync status — only meaningful when signed in; the primary
+                        "Sign in to publish" button above is the sole CTA when signed out */}
+                    {driveSignedIn && (
                         <div className={'text-xs text-center ' + getSyncStatusClass()}>
                             {getSyncStatusText()}
                         </div>
-                    ) : (
-                        <button 
-                            onClick={() => onSignIn && onSignIn()}
-                            className="w-full text-xs text-center text-ancient-purple hover:underline cursor-pointer"
-                        >
-                            ☁️ Sign in to publish
-                        </button>
                     )}
                     
                     {/* Local save indicator */}

@@ -80,7 +80,7 @@ hakli_glyph_recognizer/
 │   │   ├── cache.js            # localStorage management
 │   │   ├── corrections.js      # Correction learning & memory
 │   │   ├── change-tracker.js   # Attribution & audit trail
-│   │   ├── drive-sync.js       # Google Drive integration
+│   │   ├── archive-sync.js     # Community archive (identity-only) sync
 │   │   ├── access-control.js   # Owner/collaborator/public roles
 │   │   ├── sync-manager.js     # Battery-efficient sync coordination
 │   │   └── local-autosave.js   # IndexedDB autosave
