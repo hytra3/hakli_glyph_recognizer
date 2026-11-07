@@ -64,6 +64,13 @@
     <script async src="opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
     
     <style>
+        /* Dhofari Script 1a font (Old North Arabian codepoints) — see fonts/mapping.json */
+        @font-face {
+            font-family: "Dhofari Hakli";
+            src: url("fonts/DhofariHakli-Regular.woff2") format("woff2"),
+                 url("fonts/DhofariHakli-Regular.otf") format("opentype");
+            font-display: swap;
+        }
         .detection-box {
             position: absolute;
             pointer-events: auto;
@@ -147,14 +154,14 @@
     <script src="src/storage/cache.js"></script>
     <script src="src/storage/corrections.js"></script>
     <script src="src/storage/change-tracker.js"></script>
-    <script src="src/storage/archive-sync.js?v=261026a"></script>
+    <script src="src/storage/archive-sync.js?v=261107a"></script>
     <script src="src/storage/access-control.js"></script>
     <script src="src/storage/sync-manager.js"></script>
     <script src="src/storage/local-autosave.js"></script>
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v261021b --> 
+    <!-- Current version: v261107a --> 
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -168,20 +175,21 @@
     <!-- Reading modules -->
     <script src="src/reading/reading.js"></script>
     <script src="src/reading/transcription.js"></script>
+    <script src="src/reading/dhofari-unicode.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261026a"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261026a"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261026a"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261026a"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261026a"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261026a"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261026a"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261026a"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261107a"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261107a"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261107a"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261107a"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261107a"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261107a"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261107a"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261107a"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v261026a';
+        const APP_VERSION = 'v261107a';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -2242,12 +2250,31 @@
                     .filter(p => p.result);
             }, [viewMode, readingOrder, recognitionResults, excludedDetections, confidenceThreshold]);
             
+            // Label for one glyph in the transcription view, per selected script.
+            // Dhofari uses Old North Arabian codepoints (src/reading/dhofari-unicode.js);
+            // glyphs with no letter value fall back to their bracketed transliteration.
+            const glyphTranscriptionLabel = (glyph) => {
+                if (transcriptionScript === 'arabic') return glyph.arabic || glyph.name;
+                if (transcriptionScript === 'dhofari') {
+                    return (window.DhofariUnicode && DhofariUnicode.fromGlyph(glyph))
+                        || `[${glyph.transliteration || glyph.name}]`;
+                }
+                return glyph.transliteration || glyph.name;
+            };
+            const transcriptionFontFamily = transcriptionScript === 'arabic'
+                ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif'
+                : transcriptionScript === 'dhofari'
+                    ? '"Dhofari Hakli", "Noto Sans", sans-serif'
+                    : '"Noto Sans", "Segoe UI", "Roboto", "DejaVu Sans", "Arial Unicode MS", sans-serif';
+
             const copyTranscriptionToClipboard = useCallback(() => {
                 const results = getReadingOrderedPairs();
                 const text = results.map(({ result: r, idx }) => {
-                    let char = showArabicLabels 
-                        ? (r.glyph.arabic || r.glyph.name)
-                        : (r.glyph.transliteration || r.glyph.name);
+                    let char = transcriptionScript === 'dhofari'
+                        ? glyphTranscriptionLabel(r.glyph)
+                        : showArabicLabels 
+                            ? (r.glyph.arabic || r.glyph.name)
+                            : (r.glyph.transliteration || r.glyph.name);
                     if (wordBoundaries.has(idx)) char += ' ';
                     if (lineBreaks.has(idx)) char += '\n';
                     return char;
@@ -2259,7 +2286,7 @@
                     console.error('Copy failed:', err);
                     alert('❌ Failed to copy');
                 });
-            }, [getReadingOrderedResults, showArabicLabels, wordBoundaries, lineBreaks]);
+            }, [getReadingOrderedPairs, showArabicLabels, transcriptionScript, wordBoundaries, lineBreaks]);
             
             const exportTranscription = useCallback(() => {
                 const results = getReadingOrderedPairs();
@@ -5318,7 +5345,23 @@
                                     >
                                         Arabic
                                     </button>
-                                    
+                                    <button
+                                        onClick={() => setTranscriptionScript('dhofari')}
+                                        className={`px-3 py-1 rounded text-sm font-medium ${
+                                            transcriptionScript === 'dhofari'
+                                                ? 'bg-ancient-purple text-white'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                        title="Dhofari script as Unicode text (Dhofari Hakli font)"
+                                    >
+                                        Dhofari
+                                    </button>
+                                    {transcriptionScript === 'dhofari' && (
+                                        <a href="script.html" target="_blank" rel="noopener" className="text-xs text-ancient-purple underline ml-1">
+                                            Keyboard &amp; letter chart
+                                        </a>
+                                    )}
+
                                     <span className="text-gray-300 mx-2">|</span>
                                     
                                     <span className="text-xs text-gray-500 mr-1">Layout:</span>
@@ -5491,10 +5534,8 @@
                                                                 : 'border-l-2 border-stone/20 first:border-l-0'
                                                         }`}
                                                         style={{
-                                                            fontFamily: transcriptionScript === 'arabic'
-                                                                ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
-                                                                : '"Noto Sans", "Segoe UI", "Roboto", "DejaVu Sans", "Arial Unicode MS", sans-serif',
-                                                            fontSize: '20px',
+                                                            fontFamily: transcriptionFontFamily,
+                                                            fontSize: transcriptionScript === 'dhofari' ? '30px' : '20px',
                                                             lineHeight: '2',
                                                             direction: 'ltr' // Keep text direction LTR within columns
                                                         }}
@@ -5504,10 +5545,7 @@
                                                                 key={`vert-${index}-${actualIdx}`} 
                                                                 className={`text-gray-900 ${hasWordBoundary ? 'pb-2 mb-2 border-b-2 border-amber-600/50' : ''}`}
                                                             >
-                                                                {transcriptionScript === 'arabic'
-                                                                    ? (result.glyph.arabic || result.glyph.name)
-                                                                    : (result.glyph.transliteration || result.glyph.name)
-                                                                }
+                                                                {glyphTranscriptionLabel(result.glyph)}
                                                             </span>
                                                         ))}
                                                     </div>
@@ -5519,9 +5557,8 @@
                                         <div 
                                             className="font-mono text-lg leading-relaxed"
                                             style={{
-                                                fontFamily: transcriptionScript === 'arabic'
-                                                    ? '"Traditional Arabic", "Arabic Typesetting", "Scheherazade", serif' 
-                                                    : '"Noto Sans", "Segoe UI", "Roboto", "DejaVu Sans", "Arial Unicode MS", sans-serif',
+                                                fontFamily: transcriptionFontFamily,
+                                                ...(transcriptionScript === 'dhofari' ? { fontSize: '30px' } : {}),
                                                 direction: transcriptionFormat === 'horizontal-rtl' ? 'rtl' : 'ltr',
                                                 textAlign: transcriptionFormat === 'horizontal-rtl' ? 'right' : 'left'
                                             }}
@@ -5529,10 +5566,7 @@
                                             {getReadingOrderedPairs().map(({ result, idx }, index, arr) => (
                                                 <span key={`horiz-${index}`}>
                                                     <bdi className="text-gray-900">
-                                                        {transcriptionScript === 'arabic'
-                                                            ? (result.glyph.arabic || result.glyph.name)
-                                                            : (result.glyph.transliteration || result.glyph.name)
-                                                        }
+                                                        {glyphTranscriptionLabel(result.glyph)}
                                                     </bdi>
                                                     {lineBreaks.has(idx) && <span className="text-ancient-purple font-bold mx-2">⏎<br/></span>}
                                                     {!lineBreaks.has(idx) && columnBreaks.has(idx) && <span className="text-amber-700 font-bold mx-1">‖</span>}
@@ -5793,6 +5827,7 @@
                         {/* Muted footer — version / provenance, scroll-to-see */}
                         <footer className="mt-8 pt-4 pb-6 border-t border-gray-200 text-center text-[11px] text-gray-400 leading-relaxed">
                             <div>Based on Ahmad Al-Jallad (2025), <em>The Decipherment of the Dhofari Script</em></div>
+                            <div><a href="script.html" className="underline hover:text-gray-600">Dhofari font, keyboard &amp; letter chart</a></div>
                             <div>beta {APP_VERSION} · © 2026 · hudhud.dev</div>
                         </footer>
                     </main>

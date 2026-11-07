@@ -37,6 +37,13 @@
       "description": "Start analyzing a new inscription",
       "url": "/",
       "icons": [{ "src": "favicon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Dhofari Keyboard & Letter Chart",
+      "short_name": "Script",
+      "description": "Type Dhofari script and view the 26 letters",
+      "url": "/script.html",
+      "icons": [{ "src": "favicon.svg", "sizes": "any" }]
     }
   ]
 }

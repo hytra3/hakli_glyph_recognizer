@@ -4,7 +4,7 @@
 // (OpenCV.js, chart+templates, CDN libs) so offline recognition survives
 // both a fresh install and every deploy.
 
-const CACHE_VERSION = 'v261026a';
+const CACHE_VERSION = 'v261107a';
 const CACHE_NAME = `hakli-${CACHE_VERSION}`;          // app shell (versioned)
 const RUNTIME_CACHE = `hakli-runtime-${CACHE_VERSION}`; // same-origin app code (versioned)
 const STABLE_CACHE = 'hakli-stable-v1';               // heavy immutable deps (NOT purged on deploy)
@@ -16,7 +16,9 @@ const CORE_ASSETS = [
   './favicon.svg',
   './favicon.png',
   './hh-logo.png',
-  './manifest.json'
+  './manifest.json',
+  './script.html',
+  './fonts/DhofariHakli-Regular.woff2'
 ];
 
 // Heavy, (near-)immutable deps required for offline recognition.
