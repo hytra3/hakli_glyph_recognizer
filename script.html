@@ -56,6 +56,8 @@ td code{font-size:12px}
 <button id="bKmd">KMD forms (ss01)</button>
 <button id="bDir" class="on">Right to left</button>
 <button id="bCopy">Copy Unicode text</button>
+<button id="bImg" title="Copy as a picture, for email or chat apps without the font">Copy image</button>
+<button id="bPng">Save PNG</button>
 <span id="copied">Copied</span>
 </div>
 <p class="legend">ASCII shortcuts: H=ḥ · s2=s² · s or s1=s¹ · x or kh=ḫ · ' =ʾ · ` or c=ʿ · D=ḍ · G or gh=ġ · T=ṭ · z or dh=ḏ/z · th or s3=ṯ/s³ · Z or S=ẓ/ṣ. A space is a word break.</p>
@@ -98,7 +100,53 @@ function render(){$("out").textContent=conv($("in").value);$("out").classList.to
 $("in").addEventListener("input",render);
 $("bKmd").onclick=()=>{kmd=!kmd;$("bKmd").classList.toggle("on",kmd);render()};
 $("bDir").onclick=()=>{rtl=!rtl;$("bDir").classList.toggle("on",rtl);$("bDir").textContent=rtl?"Right to left":"Left to right";render()};
-$("bCopy").onclick=async()=>{try{await navigator.clipboard.writeText($("out").textContent);$("copied").style.visibility="visible";setTimeout(()=>$("copied").style.visibility="hidden",1400)}catch(e){$("copied").textContent="Copy blocked; select the text instead";$("copied").style.visibility="visible"}};
+function flash(msg){const c=$("copied");c.textContent=msg;c.style.visibility="visible";clearTimeout(flash.t);flash.t=setTimeout(()=>c.style.visibility="hidden",2200)}
+$("bCopy").onclick=async()=>{try{await navigator.clipboard.writeText($("out").textContent);flash("Copied")}catch(e){flash("Copy blocked; select the text instead")}};
+// --- PNG export: draws the current text with the Dhofari font, so it looks right
+// in apps that don't have the font (Gmail, WhatsApp...). Canvas ignores ss01,
+// so KMD forms are drawn from their PUA codepoints (U+E020+) instead.
+const toKmd=Object.fromEntries(L.filter(l=>l.kmd).map(l=>[l.ch,l.kmd]));
+async function makePng(){
+ await document.fonts.load('64px "Dhofari Hakli"');
+ let text=$("out").textContent;
+ if(kmd) text=[...text].map(c=>toKmd[c]||c).join("");
+ if(!text.trim()) return null;
+ const SCALE=2,SIZE=64,PAD=28,LH=Math.round(SIZE*1.4),MAXW=1400;
+ const cv=document.createElement("canvas"),ctx=cv.getContext("2d");
+ const font=`${SIZE}px "Dhofari Hakli"`;ctx.font=font;
+ const lines=[];
+ for(const para of text.split("\n")){
+  let cur="";
+  for(const w of para.split(" ")){
+   const t=cur?cur+" "+w:w;
+   if(cur&&ctx.measureText(t).width>MAXW){lines.push(cur);cur=w}else cur=t;
+  }
+  lines.push(cur);
+ }
+ const width=Math.ceil(Math.max(...lines.map(l=>ctx.measureText(l).width)))+PAD*2;
+ const height=lines.length*LH+PAD*2-(LH-SIZE)+8;
+ cv.width=width*SCALE;cv.height=height*SCALE;
+ ctx.scale(SCALE,SCALE);
+ ctx.fillStyle="#fffdf8";ctx.fillRect(0,0,width,height);
+ ctx.fillStyle="#1d1b18";ctx.font=font;ctx.textBaseline="top";
+ ctx.direction=rtl?"rtl":"ltr";ctx.textAlign=rtl?"right":"left";
+ lines.forEach((l,i)=>ctx.fillText(l,rtl?width-PAD:PAD,PAD+i*LH));
+ return await new Promise(r=>cv.toBlob(r,"image/png"));
+}
+$("bImg").onclick=async()=>{
+ try{
+  if(!window.ClipboardItem) throw new Error("no ClipboardItem");
+  await navigator.clipboard.write([new ClipboardItem({"image/png":makePng().then(b=>{if(!b)throw new Error("empty");return b})})]);
+  flash("Image copied: paste it into your email or chat");
+ }catch(e){flash("This browser can't copy images; use Save PNG instead")}
+};
+$("bPng").onclick=async()=>{
+ const b=await makePng();if(!b){flash("Nothing to save");return}
+ const a=document.createElement("a");a.href=URL.createObjectURL(b);
+ const name=($("in").value.trim().normalize("NFD").replace(/[^A-Za-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40)||"dhofari");
+ a.download=`dhofari-${name}.png`;document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(a.href),4000);flash("Saved");
+};
 const g=$("grid"),t=$("tbl");
 L.forEach(l=>{
  const d=document.createElement("div");d.className="cell";
