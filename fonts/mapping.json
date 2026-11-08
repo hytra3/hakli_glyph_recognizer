@@ -1,0 +1,218 @@
+{
+ "letters": [
+  {
+   "translit": "h",
+   "glyph": "heh",
+   "ona": "U+10A80",
+   "also": [],
+   "pua": "U+E000",
+   "pua_kmd": "U+E020"
+  },
+  {
+   "translit": "l",
+   "glyph": "lam",
+   "ona": "U+10A81",
+   "also": [],
+   "pua": "U+E001",
+   "pua_kmd": "U+E021"
+  },
+  {
+   "translit": "ḥ",
+   "glyph": "hah",
+   "ona": "U+10A82",
+   "also": [],
+   "pua": "U+E002",
+   "pua_kmd": "U+E022"
+  },
+  {
+   "translit": "m",
+   "glyph": "meem",
+   "ona": "U+10A83",
+   "also": [],
+   "pua": "U+E003",
+   "pua_kmd": "U+E023"
+  },
+  {
+   "translit": "q",
+   "glyph": "qaf",
+   "ona": "U+10A84",
+   "also": [],
+   "pua": "U+E004",
+   "pua_kmd": "U+E024"
+  },
+  {
+   "translit": "w",
+   "glyph": "waw",
+   "ona": "U+10A85",
+   "also": [],
+   "pua": "U+E005",
+   "pua_kmd": "U+E025"
+  },
+  {
+   "translit": "s²",
+   "glyph": "es2",
+   "ona": "U+10A86",
+   "also": [],
+   "pua": "U+E006",
+   "pua_kmd": "U+E026"
+  },
+  {
+   "translit": "r",
+   "glyph": "reh",
+   "ona": "U+10A87",
+   "also": [],
+   "pua": "U+E007",
+   "pua_kmd": "U+E027"
+  },
+  {
+   "translit": "b",
+   "glyph": "beh",
+   "ona": "U+10A88",
+   "also": [],
+   "pua": "U+E008",
+   "pua_kmd": "U+E028"
+  },
+  {
+   "translit": "t",
+   "glyph": "teh",
+   "ona": "U+10A89",
+   "also": [],
+   "pua": "U+E009",
+   "pua_kmd": "U+E029"
+  },
+  {
+   "translit": "s¹",
+   "glyph": "es1",
+   "ona": "U+10A8A",
+   "also": [],
+   "pua": "U+E00A",
+   "pua_kmd": "U+E02A"
+  },
+  {
+   "translit": "k",
+   "glyph": "kaf",
+   "ona": "U+10A8B",
+   "also": [],
+   "pua": "U+E00B",
+   "pua_kmd": "U+E02B"
+  },
+  {
+   "translit": "n",
+   "glyph": "noon",
+   "ona": "U+10A8C",
+   "also": [],
+   "pua": "U+E00C",
+   "pua_kmd": "U+E02C"
+  },
+  {
+   "translit": "ḫ",
+   "glyph": "khah",
+   "ona": "U+10A8D",
+   "also": [],
+   "pua": "U+E00D",
+   "pua_kmd": null
+  },
+  {
+   "translit": "f",
+   "glyph": "feh",
+   "ona": "U+10A90",
+   "also": [],
+   "pua": "U+E00E",
+   "pua_kmd": null
+  },
+  {
+   "translit": "ʾ",
+   "glyph": "alef",
+   "ona": "U+10A91",
+   "also": [],
+   "pua": "U+E00F",
+   "pua_kmd": null
+  },
+  {
+   "translit": "ʿ",
+   "glyph": "ain",
+   "ona": "U+10A92",
+   "also": [],
+   "pua": "U+E010",
+   "pua_kmd": "U+E030"
+  },
+  {
+   "translit": "ḍ",
+   "glyph": "dad",
+   "ona": "U+10A93",
+   "also": [],
+   "pua": "U+E011",
+   "pua_kmd": "U+E031"
+  },
+  {
+   "translit": "g",
+   "glyph": "geem",
+   "ona": "U+10A94",
+   "also": [],
+   "pua": "U+E012",
+   "pua_kmd": "U+E032"
+  },
+  {
+   "translit": "d",
+   "glyph": "dal",
+   "ona": "U+10A95",
+   "also": [],
+   "pua": "U+E013",
+   "pua_kmd": "U+E033"
+  },
+  {
+   "translit": "ġ",
+   "glyph": "ghain",
+   "ona": "U+10A96",
+   "also": [],
+   "pua": "U+E014",
+   "pua_kmd": "U+E034"
+  },
+  {
+   "translit": "ṭ",
+   "glyph": "tah",
+   "ona": "U+10A97",
+   "also": [],
+   "pua": "U+E015",
+   "pua_kmd": "U+E035"
+  },
+  {
+   "translit": "ḏ",
+   "glyph": "thal",
+   "ona": "U+10A99",
+   "also": [
+    "U+10A98"
+   ],
+   "pua": "U+E016",
+   "pua_kmd": "U+E036"
+  },
+  {
+   "translit": "y",
+   "glyph": "yeh",
+   "ona": "U+10A9A",
+   "also": [],
+   "pua": "U+E017",
+   "pua_kmd": "U+E037"
+  },
+  {
+   "translit": "ṯ",
+   "glyph": "theh",
+   "ona": "U+10A9B",
+   "also": [
+    "U+10A8F"
+   ],
+   "pua": "U+E018",
+   "pua_kmd": "U+E038"
+  },
+  {
+   "translit": "ẓ",
+   "glyph": "zah",
+   "ona": "U+10A9C",
+   "also": [
+    "U+10A8E"
+   ],
+   "pua": "U+E019",
+   "pua_kmd": "U+E039"
+  }
+ ]
+}

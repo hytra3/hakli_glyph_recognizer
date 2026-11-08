@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dhofari script — keyboard &amp; letter chart · Hakli Glyph Recognizer</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+@font-face{font-family:"Dhofari Hakli";src:url("fonts/DhofariHakli-Regular.woff2") format("woff2"),url("fonts/DhofariHakli-Regular.otf") format("opentype");font-display:swap;}
+:root{--ink:#1d1b18;--paper:#f6f1e7;--ochre:#9a4a1c;--muted:#7a7166;--line:#e0d6c4;--card:#fffdf8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 Georgia,"Times New Roman",serif}
+main{max-width:980px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:28px;margin:0 0 4px;font-weight:normal;letter-spacing:.01em}
+.sub{color:var(--muted);margin:0 0 22px;font-size:14px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--ochre);font-weight:normal;margin:34px 0 10px;font-family:system-ui,sans-serif}
+.dh{font-family:"Dhofari Hakli";font-feature-settings:normal}
+.kmd{font-feature-settings:"ss01" 1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+textarea{width:100%;font:16px/1.4 ui-monospace,Menlo,monospace;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;resize:vertical}
+#out{font-size:64px;line-height:1.35;min-height:110px;padding:10px 6px;word-wrap:break-word;color:var(--ink)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0;font-family:system-ui,sans-serif;font-size:13px}
+button{font:inherit;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;color:var(--ink)}
+button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.cell{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 6px 6px;text-align:center;cursor:pointer;transition:border-color .15s}
+.cell:hover{border-color:var(--ochre)}
+.cell .g{font-size:46px;line-height:64px;height:64px;display:flex;justify-content:center;align-items:center;gap:10px}
+.cell .g .alt{color:#3b6ea5}
+.cell .t{font-size:17px;margin-top:2px}
+.cell .c{font:11px ui-monospace,Menlo,monospace;color:var(--muted)}
+.legend{font-family:system-ui,sans-serif;font-size:12px;color:var(--muted);margin:6px 0 0}
+.legend b{color:#3b6ea5;font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:13px;font-family:system-ui,sans-serif}
+th,td{border-bottom:1px solid var(--line);padding:6px 6px;text-align:left;vertical-align:middle}
+th{color:var(--muted);font-weight:500}
+td.dh{font-size:30px}
+td code{font-size:12px}
+.note{font-size:14px;color:#3d3832}
+.note li{margin:4px 0}
+#copied{color:var(--ochre);visibility:hidden}
+</style>
+</head>
+<body>
+<main>
+<p style="margin:0 0 14px;font-family:system-ui,sans-serif;font-size:13px"><a href="./" style="color:var(--ochre)">← Back to the Glyph Recognizer</a></p>
+<h1>Dhofari Hakli <span class="dh" style="font-size:30px;vertical-align:-4px">&#x10A80;&#x10A81;&#x10A82;&#x10A83;</span></h1>
+<p class="sub">Dhofari Script 1a, v0.1. Letter forms are traced from the KMG 120-126 and KMD 28-31 abecedaries in Al-Jallad (2025), JEOL 49, Chart 1. Letters are encoded on the Old North Arabian block by sound value.</p>
+
+<h2>Type in transliteration</h2>
+<div class="card">
+<textarea id="in" rows="2" spellcheck="false">hlḥmqws²rbts¹knḫfʾʿḍgdġṭḏyṯẓ</textarea>
+<div id="out" class="dh" dir="rtl"></div>
+<div class="controls">
+<button id="bKmd">KMD forms (ss01)</button>
+<button id="bDir" class="on">Right to left</button>
+<button id="bCopy">Copy Unicode text</button>
+<span id="copied">Copied</span>
+</div>
+<p class="legend">ASCII shortcuts: H=ḥ · s2=s² · s or s1=s¹ · x or kh=ḫ · ' =ʾ · ` or c=ʿ · D=ḍ · G or gh=ġ · T=ṭ · z or dh=ḏ/z · th or s3=ṯ/s³ · Z or S=ẓ/ṣ. A space is a word break.</p>
+</div>
+
+<h2>The 26 letters, in halḥam order</h2>
+<div class="grid" id="grid"></div>
+<p class="legend">Black is the KMG 120-126 form (default). <b>Blue</b> is the KMD 28-31 form (ss01, or the PUA E020 range). KMD has no attested form for ḫ, f or ʾ. Tap a letter to type it.</p>
+
+<h2>Encoding</h2>
+<div class="card" style="overflow-x:auto">
+<table>
+<thead><tr><th>Letter</th><th></th><th>Old North Arabian</th><th>Also maps here</th><th>PUA (KMG)</th><th>PUA (KMD)</th></tr></thead>
+<tbody id="tbl"></tbody>
+</table>
+</div>
+
+<h2>Notes</h2>
+<div class="note">
+<ul>
+<li><b>Merged letters.</b> The paper finds no separate signs for ẓ/ṣ, ṯ/s³ and ḏ/z. Each merged pair shares one glyph, and both codepoints of the pair show it.</li>
+<li><b>Direction.</b> Old North Arabian is a right-to-left block, so text runs right to left by default. Glyph shapes are as published. Nothing is mirrored.</li>
+<li><b>Source resolution.</b> The sign images in the paper are about 50 px, so the outlines keep some of the original brush texture. Cleaner tracings from photographs would sharpen them.</li>
+<li><b>Files.</b> <a href="fonts/DhofariHakli-Regular.otf">OTF</a> for desktop installs · <a href="fonts/DhofariHakli-Regular.woff2">WOFF2</a> for the web · <a href="fonts/mapping.json">mapping.json</a>. The font is rebuilt with <code>tools/build_dhofari_font.py</code>.</li>
+<li><b>Not yet included:</b> Script 1b and Script 2, the word divider, and the unidentified sign ("?") in the HGR glyph set.</li>
+</ul>
+</div>
+</main>
+<script>
+const L=[{"translit": "h", "glyph": "heh", "ona": "U+10A80", "also": [], "pua": "U+E000", "pua_kmd": "U+E020", "ch": "𐪀", "kmd": ""}, {"translit": "l", "glyph": "lam", "ona": "U+10A81", "also": [], "pua": "U+E001", "pua_kmd": "U+E021", "ch": "𐪁", "kmd": ""}, {"translit": "ḥ", "glyph": "hah", "ona": "U+10A82", "also": [], "pua": "U+E002", "pua_kmd": "U+E022", "ch": "𐪂", "kmd": ""}, {"translit": "m", "glyph": "meem", "ona": "U+10A83", "also": [], "pua": "U+E003", "pua_kmd": "U+E023", "ch": "𐪃", "kmd": ""}, {"translit": "q", "glyph": "qaf", "ona": "U+10A84", "also": [], "pua": "U+E004", "pua_kmd": "U+E024", "ch": "𐪄", "kmd": ""}, {"translit": "w", "glyph": "waw", "ona": "U+10A85", "also": [], "pua": "U+E005", "pua_kmd": "U+E025", "ch": "𐪅", "kmd": ""}, {"translit": "s²", "glyph": "es2", "ona": "U+10A86", "also": [], "pua": "U+E006", "pua_kmd": "U+E026", "ch": "𐪆", "kmd": ""}, {"translit": "r", "glyph": "reh", "ona": "U+10A87", "also": [], "pua": "U+E007", "pua_kmd": "U+E027", "ch": "𐪇", "kmd": ""}, {"translit": "b", "glyph": "beh", "ona": "U+10A88", "also": [], "pua": "U+E008", "pua_kmd": "U+E028", "ch": "𐪈", "kmd": ""}, {"translit": "t", "glyph": "teh", "ona": "U+10A89", "also": [], "pua": "U+E009", "pua_kmd": "U+E029", "ch": "𐪉", "kmd": ""}, {"translit": "s¹", "glyph": "es1", "ona": "U+10A8A", "also": [], "pua": "U+E00A", "pua_kmd": "U+E02A", "ch": "𐪊", "kmd": ""}, {"translit": "k", "glyph": "kaf", "ona": "U+10A8B", "also": [], "pua": "U+E00B", "pua_kmd": "U+E02B", "ch": "𐪋", "kmd": ""}, {"translit": "n", "glyph": "noon", "ona": "U+10A8C", "also": [], "pua": "U+E00C", "pua_kmd": "U+E02C", "ch": "𐪌", "kmd": ""}, {"translit": "ḫ", "glyph": "khah", "ona": "U+10A8D", "also": [], "pua": "U+E00D", "pua_kmd": null, "ch": "𐪍", "kmd": null}, {"translit": "f", "glyph": "feh", "ona": "U+10A90", "also": [], "pua": "U+E00E", "pua_kmd": null, "ch": "𐪐", "kmd": null}, {"translit": "ʾ", "glyph": "alef", "ona": "U+10A91", "also": [], "pua": "U+E00F", "pua_kmd": null, "ch": "𐪑", "kmd": null}, {"translit": "ʿ", "glyph": "ain", "ona": "U+10A92", "also": [], "pua": "U+E010", "pua_kmd": "U+E030", "ch": "𐪒", "kmd": ""}, {"translit": "ḍ", "glyph": "dad", "ona": "U+10A93", "also": [], "pua": "U+E011", "pua_kmd": "U+E031", "ch": "𐪓", "kmd": ""}, {"translit": "g", "glyph": "geem", "ona": "U+10A94", "also": [], "pua": "U+E012", "pua_kmd": "U+E032", "ch": "𐪔", "kmd": ""}, {"translit": "d", "glyph": "dal", "ona": "U+10A95", "also": [], "pua": "U+E013", "pua_kmd": "U+E033", "ch": "𐪕", "kmd": ""}, {"translit": "ġ", "glyph": "ghain", "ona": "U+10A96", "also": [], "pua": "U+E014", "pua_kmd": "U+E034", "ch": "𐪖", "kmd": ""}, {"translit": "ṭ", "glyph": "tah", "ona": "U+10A97", "also": [], "pua": "U+E015", "pua_kmd": "U+E035", "ch": "𐪗", "kmd": ""}, {"translit": "ḏ", "glyph": "thal", "ona": "U+10A99", "also": ["U+10A98"], "pua": "U+E016", "pua_kmd": "U+E036", "ch": "𐪙", "kmd": ""}, {"translit": "y", "glyph": "yeh", "ona": "U+10A9A", "also": [], "pua": "U+E017", "pua_kmd": "U+E037", "ch": "𐪚", "kmd": ""}, {"translit": "ṯ", "glyph": "theh", "ona": "U+10A9B", "also": ["U+10A8F"], "pua": "U+E018", "pua_kmd": "U+E038", "ch": "𐪛", "kmd": ""}, {"translit": "ẓ", "glyph": "zah", "ona": "U+10A9C", "also": ["U+10A8E"], "pua": "U+E019", "pua_kmd": "U+E039", "ch": "𐪜", "kmd": ""}], K={"h": "h", "l": "l", "ḥ": "ḥ", "H": "ḥ", "m": "m", "q": "q", "w": "w", "s²": "s²", "s2": "s²", "š": "s²", "r": "r", "b": "b", "t": "t", "s¹": "s¹", "s1": "s¹", "s": "s¹", "k": "k", "n": "n", "ḫ": "ḫ", "x": "ḫ", "kh": "ḫ", "f": "f", "ʾ": "ʾ", "'": "ʾ", "ʿ": "ʿ", "`": "ʿ", "c": "ʿ", "ḍ": "ḍ", "D": "ḍ", "g": "g", "d": "d", "ġ": "ġ", "G": "ġ", "gh": "ġ", "ṭ": "ṭ", "T": "ṭ", "ḏ": "ḏ", "z": "ḏ", "dh": "ḏ", "y": "y", "ṯ": "ṯ", "th": "ṯ", "s3": "ṯ", "s³": "ṯ", "ẓ": "ẓ", "Z": "ẓ", "ṣ": "ẓ", "S": "ẓ"};
+const byT=Object.fromEntries(L.map(l=>[l.translit,l]));
+const keys=Object.keys(K).sort((a,b)=>b.length-a.length);
+const $=id=>document.getElementById(id);
+let kmd=false, rtl=true;
+function conv(s){let o="",i=0;s=s.normalize("NFC");
+ while(i<s.length){let hit=null;for(const k of keys){if(s.startsWith(k,i)){hit=k;break}}
+  if(hit){o+=byT[K[hit]].ch;i+=hit.length}else{const c=s[i];o+=(c===" "||c==="\n")?c:"";i++}}
+ return o}
+function render(){$("out").textContent=conv($("in").value);$("out").classList.toggle("kmd",kmd);$("out").dir=rtl?"rtl":"ltr"}
+$("in").addEventListener("input",render);
+$("bKmd").onclick=()=>{kmd=!kmd;$("bKmd").classList.toggle("on",kmd);render()};
+$("bDir").onclick=()=>{rtl=!rtl;$("bDir").classList.toggle("on",rtl);$("bDir").textContent=rtl?"Right to left":"Left to right";render()};
+$("bCopy").onclick=async()=>{try{await navigator.clipboard.writeText($("out").textContent);$("copied").style.visibility="visible";setTimeout(()=>$("copied").style.visibility="hidden",1400)}catch(e){$("copied").textContent="Copy blocked; select the text instead";$("copied").style.visibility="visible"}};
+const g=$("grid"),t=$("tbl");
+L.forEach(l=>{
+ const d=document.createElement("div");d.className="cell";
+ d.innerHTML=`<div class="g dh"><span>${l.ch}</span>${l.kmd?`<span class="alt">${l.kmd}</span>`:""}</div><div class="t">${l.translit}</div><div class="c">${l.ona}</div>`;
+ d.onclick=()=>{const i=$("in");i.value+=l.translit;render()};g.appendChild(d);
+ const r=document.createElement("tr");
+ r.innerHTML=`<td style="font-size:17px">${l.translit}</td><td class="dh">${l.ch}</td><td><code>${l.ona}</code></td><td><code>${l.also.join(", ")||"—"}</code></td><td><code>${l.pua}</code></td><td><code>${l.pua_kmd||"—"}</code></td>`;
+ t.appendChild(r)});
+render();
+</script>
+</body>
+</html>
