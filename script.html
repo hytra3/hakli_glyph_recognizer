@@ -53,6 +53,7 @@ td code{font-size:12px}
 <textarea id="in" rows="2" spellcheck="false">hlḥmqws²rbts¹knḫfʾʿḍgdġṭḏyṯẓ</textarea>
 <div id="out" class="dh" dir="rtl"></div>
 <div class="controls">
+<button id="bClear" title="Clear the transliteration box">Clear</button>
 <button id="bKmd">KMD forms (ss01)</button>
 <button id="bDir" class="on">Right to left</button>
 <button id="bCopy">Copy Unicode text</button>
@@ -98,6 +99,7 @@ function conv(s){let o="",i=0;s=s.normalize("NFC");
  return o}
 function render(){$("out").textContent=conv($("in").value);$("out").classList.toggle("kmd",kmd);$("out").dir=rtl?"rtl":"ltr"}
 $("in").addEventListener("input",render);
+$("bClear").onclick=()=>{$("in").value="";render();$("in").focus()};
 $("bKmd").onclick=()=>{kmd=!kmd;$("bKmd").classList.toggle("on",kmd);render()};
 $("bDir").onclick=()=>{rtl=!rtl;$("bDir").classList.toggle("on",rtl);$("bDir").textContent=rtl?"Right to left":"Left to right";render()};
 function flash(msg){const c=$("copied");c.textContent=msg;c.style.visibility="visible";clearTimeout(flash.t);flash.t=setTimeout(()=>c.style.visibility="hidden",2200)}
