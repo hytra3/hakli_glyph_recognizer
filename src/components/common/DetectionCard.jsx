@@ -323,11 +323,6 @@ const DetectionCard = ({
                         title="Edit options">
                         ✏️ Edit
                     </button>
-                    {!isMobile && editOpen && (
-                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[140px]">
-                            {editMenuItems}
-                        </div>
-                    )}
                 </div>
 
                 {/* Reorder: drag handle (desktop) or ▲▼ buttons (mobile), reading mode only */}
@@ -359,8 +354,8 @@ const DetectionCard = ({
                 </div>
             )}
 
-            {/* Mobile: in-flow Edit menu */}
-            {isMobile && editOpen && (
+            {/* In-flow Edit menu (all platforms) — a popover here got clipped by the scrolling card list */}
+            {editOpen && (
                 <div className="px-2 pb-2 border-t border-gray-100 bg-gray-50">
                     <div className="text-xs text-gray-500 pt-1 mb-1">Edit options:</div>
                     <div className="flex flex-col gap-0.5">{editMenuItems}</div>
