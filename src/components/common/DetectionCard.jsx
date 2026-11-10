@@ -96,7 +96,7 @@ const DetectionCard = ({
     else if (validation && !validation.isCorrect) borderColor = 'border-rust';
 
     const historyEnabled = driveUserEmail && typeof ChangeTracker !== 'undefined';
-    const hasHistory = historyEnabled && ChangeTracker.getDetectionHistory(changeLog, idx).length > 0;
+    const hasHistory = historyEnabled && ChangeTracker.getDetectionHistory(changeLog, idx, result.detId).length > 0;
     const editOpen = editMenuCardIdx === idx;
     const breaksOpen = breaksMenuCardIdx === idx;
     const noteOpen = noteCardIdx === idx;
@@ -145,7 +145,7 @@ const DetectionCard = ({
                 className={`w-full px-3 ${isMobile ? 'py-2.5' : 'py-1.5'} text-left text-xs hover:bg-gray-100 flex items-center gap-2 ${isExcluded ? 'text-patina' : 'text-rust'}`}>
                 {isExcluded ? '👁 Include' : '🚫 Exclude'}
             </button>
-            <button onClick={(e) => { e.stopPropagation(); if (confirm('Delete this detection?')) { deleteDetection(idx); setEditMenuCardIdx(null); } }}
+            <button onClick={(e) => { e.stopPropagation(); deleteDetection(idx); setEditMenuCardIdx(null); }}
                 className={`w-full px-3 ${isMobile ? 'py-2.5' : 'py-1.5'} text-left text-xs hover:bg-gray-100 flex items-center gap-2 text-red-600`}>
                 🗑 Delete detection
             </button>
@@ -154,7 +154,7 @@ const DetectionCard = ({
                     <div className="border-t border-gray-100 my-1"></div>
                     <button onClick={(e) => { e.stopPropagation(); setHistoryCardIdx(historyCardIdx === idx ? null : idx); setEditMenuCardIdx(null); }}
                         className={`w-full px-3 ${isMobile ? 'py-2.5' : 'py-1.5'} text-left text-xs hover:bg-gray-100 flex items-center gap-2 text-gray-600`}>
-                        📜 History {ChangeTracker.getDetectionHistory(changeLog, idx).length > 0 ? `(${ChangeTracker.getDetectionHistory(changeLog, idx).length})` : ''}
+                        📜 History {ChangeTracker.getDetectionHistory(changeLog, idx, result.detId).length > 0 ? `(${ChangeTracker.getDetectionHistory(changeLog, idx, result.detId).length})` : ''}
                     </button>
                 </>
             )}
@@ -305,15 +305,6 @@ const DetectionCard = ({
                         title="Add break after this glyph">
                         Break ▾
                     </button>
-                    {!isMobile && breaksOpen && (
-                        <>
-                            {/* Click-away backdrop — closes the menu; selections stay open until then, so word+line can both be toggled */}
-                            <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setBreaksMenuCardIdx(null); }} />
-                            <div className="absolute left-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 min-w-[100px]">
-                                {breakMenuItems}
-                            </div>
-                        </>
-                    )}
                 </div>
 
                 {/* Edit control */}
@@ -346,8 +337,9 @@ const DetectionCard = ({
                 )}
             </div>
 
-            {/* Mobile: in-flow Break menu (avoids popover clipping in scroll container) */}
-            {isMobile && breaksOpen && (
+            {/* In-flow Break menu (all platforms; a popover got clipped by the scroll container).
+                Stays open until Break ▾ is clicked again, so word+line can both be toggled. */}
+            {breaksOpen && (
                 <div className="px-2 pb-2 border-t border-gray-100 bg-gray-50">
                     <div className="text-xs text-gray-500 pt-1 mb-1">Break after this glyph:</div>
                     <div className="flex flex-col gap-0.5">{breakMenuItems}</div>
@@ -420,7 +412,7 @@ const DetectionCard = ({
                             className="text-xs text-gray-400 hover:text-gray-600">✕</button>
                     </div>
                     {(() => {
-                        const history = ChangeTracker.getDetectionHistory(changeLog, idx);
+                        const history = ChangeTracker.getDetectionHistory(changeLog, idx, result.detId);
                         if (history.length === 0) {
                             return <div className="text-xs text-gray-400 italic">No changes recorded</div>;
                         }

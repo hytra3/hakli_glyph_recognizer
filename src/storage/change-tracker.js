@@ -110,10 +110,14 @@ const ChangeTracker = {
      * @param {number} detectionIndex - Detection index to filter by
      * @returns {Array} Filtered changes for this detection
      */
-    getDetectionHistory: (changeLog, detectionIndex) => {
+    getDetectionHistory: (changeLog, detectionIndex, detectionId) => {
         if (!changeLog || !Array.isArray(changeLog)) return [];
+        // Prefer the stable id (indices shift on delete/merge); fall back to
+        // the index only for entries that were never stamped with an id.
         return changeLog
-            .filter(entry => entry.detectionIndex === detectionIndex)
+            .filter(entry => (detectionId && entry.detectionId)
+                ? entry.detectionId === detectionId
+                : entry.detectionIndex === detectionIndex)
             .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     },
 

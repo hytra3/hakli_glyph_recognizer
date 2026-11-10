@@ -154,14 +154,14 @@
     <script src="src/storage/cache.js"></script>
     <script src="src/storage/corrections.js"></script>
     <script src="src/storage/change-tracker.js"></script>
-    <script src="src/storage/archive-sync.js?v=261109b"></script>
+    <script src="src/storage/archive-sync.js?v=261109c"></script>
     <script src="src/storage/access-control.js"></script>
     <script src="src/storage/sync-manager.js"></script>
     <script src="src/storage/local-autosave.js"></script>
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v261109b --> 
+    <!-- Current version: v261109c --> 
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -178,18 +178,18 @@
     <script src="src/reading/dhofari-unicode.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261109b"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261109b"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261109b"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261109b"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261109b"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261109b"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261109b"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261109b"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261109c"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261109c"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261109c"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261109c"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261109c"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261109c"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261109c"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261109c"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v261109b';
+        const APP_VERSION = 'v261109c';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -330,6 +330,38 @@
                 setUndoStack(prev => [...prev.slice(-MAX_UNDO + 1), snapshot]);
                 setRedoStack([]); // Clear redo on new action
             }, []);
+
+            // Whole-detection-set snapshot, for undoing delete / merge / clear-all
+            const snapshotDetections = useCallback(() => ({
+                results: recognitionResults,
+                validations,
+                readingOrder: [...readingOrder],
+                wordBoundaries: Array.from(wordBoundaries),
+                lineBreaks: Array.from(lineBreaks),
+                columnBreaks: Array.from(columnBreaks),
+                excluded: Array.from(excludedDetections),
+                expanded: Array.from(expandedCards),
+            }), [recognitionResults, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, excludedDetections, expandedCards]);
+            const restoreDetections = useCallback((snap) => {
+                setRecognitionResults(snap.results);
+                setValidations(snap.validations);
+                setReadingOrder(snap.readingOrder);
+                setWordBoundaries(new Set(snap.wordBoundaries));
+                setLineBreaks(new Set(snap.lineBreaks));
+                setColumnBreaks(new Set(snap.columnBreaks));
+                setExcludedDetections(new Set(snap.excluded));
+                setExpandedCards(new Set(snap.expanded));
+                setSelectedRegions(new Set());
+            }, []);
+
+            // Small self-dismissing message, optionally with an Undo button
+            const [toast, setToast] = useState(null); // { msg, canUndo }
+            const toastTimerRef = useRef(null);
+            const showToast = useCallback((msg, canUndo = false) => {
+                if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+                setToast({ msg, canUndo });
+                toastTimerRef.current = setTimeout(() => setToast(null), canUndo ? 8000 : 3000);
+            }, []);
             
             // Undo function
             const undo = useCallback(() => {
@@ -368,13 +400,17 @@
                         redoData = new Set(excludedDetections);
                         setExcludedDetections(new Set(lastAction.data));
                         break;
+                    case 'detections':
+                        redoData = snapshotDetections();
+                        restoreDetections(lastAction.data);
+                        break;
                     default:
                         return;
                 }
                 
                 setRedoStack(prev => [...prev, { type: lastAction.type, data: redoData }]);
                 setUndoStack(prev => prev.slice(0, -1));
-            }, [undoStack, preprocessing, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, excludedDetections]);
+            }, [undoStack, preprocessing, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, excludedDetections, snapshotDetections, restoreDetections]);
             
             // Redo function
             const redo = useCallback(() => {
@@ -413,13 +449,17 @@
                         undoData = new Set(excludedDetections);
                         setExcludedDetections(new Set(nextAction.data));
                         break;
+                    case 'detections':
+                        undoData = snapshotDetections();
+                        restoreDetections(nextAction.data);
+                        break;
                     default:
                         return;
                 }
                 
                 setUndoStack(prev => [...prev, { type: nextAction.type, data: undoData }]);
                 setRedoStack(prev => prev.slice(0, -1));
-            }, [redoStack, preprocessing, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, excludedDetections]);
+            }, [redoStack, preprocessing, validations, readingOrder, wordBoundaries, lineBreaks, columnBreaks, excludedDetections, snapshotDetections, restoreDetections]);
             
             // Template training state
             const [templateTrainingMode, setTemplateTrainingMode] = useState(false);
@@ -639,6 +679,7 @@
             // Save handler and the Drive auto-sync effect so they can't drift apart.
             const buildHkiData = useCallback(() => {
                 const cleanResults = recognitionResults.map(r => ({
+                    detId: r.detId,
                     glyph: {
                         id: r.glyph?.id,
                         name: r.glyph?.name,
@@ -684,6 +725,31 @@
             }, [recognitionResults, currentInscriptionId, inscriptionTitle, inscriptionNotes, inscriptionSource, originalImage,
                 displayImage, preprocessing, readingOrder, readingDirection, wordBoundaries, lineBreaks, columnBreaks,
                 validations, translationEnglish, translationArabic, audioData, visibility, changeLog]);
+
+            // ========== STABLE DETECTION IDS ==========
+            // Indices shift on delete/merge/reorder, so history is keyed by a
+            // per-detection id. Assign one to any detection that lacks it (new
+            // recognition, manual box, older .hki files), and stamp legacy history
+            // entries (index-only) with the id of the detection at that index.
+            useEffect(() => {
+                if (!recognitionResults.length) return;
+                const newId = () => `det_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+                const seen = new Set();
+                let changed = false;
+                const withIds = recognitionResults.map(r => {
+                    if (r && r.detId && !seen.has(r.detId)) { seen.add(r.detId); return r; }
+                    changed = true;
+                    const id = newId(); seen.add(id);
+                    return { ...r, detId: id };
+                });
+                if (changed) { setRecognitionResults(withIds); return; }
+                if (changeLog.some(e => e.detectionId === undefined && typeof e.detectionIndex === 'number')) {
+                    setChangeLog(prev => prev.map(e =>
+                        (e.detectionId === undefined && typeof e.detectionIndex === 'number')
+                            ? { ...e, detectionId: recognitionResults[e.detectionIndex]?.detId || null }
+                            : e));
+                }
+            }, [recognitionResults, changeLog]);
 
             // ========== LOCAL AUTO-SAVE TRIGGER ==========
             useEffect(() => {
@@ -3188,6 +3254,7 @@
                     // Only log if status actually changed
                     if (oldStatus !== isCorrect) {
                         const entry = ChangeTracker.logValidation(index, oldStatus, isCorrect, driveUserEmail);
+                        entry.detectionId = recognitionResults[index]?.detId || null;
                         setChangeLog(prev => [...prev, entry]);
                     }
                 }
@@ -3196,7 +3263,7 @@
                     ...prev,
                     [index]: { isCorrect, timestamp: new Date().toISOString() }
                 }));
-            }, [validations, pushUndo, driveUserEmail]);
+            }, [validations, pushUndo, driveUserEmail, recognitionResults]);
             
             // Delete one or more detections in a single pass, shifting every
             // index-keyed piece of state (validations, reading order, breaks,
@@ -3206,6 +3273,7 @@
             const deleteDetections = useCallback((indices) => {
                 const del = new Set(indices);
                 if (del.size === 0) return;
+                pushUndo('detections', snapshotDetections());
                 const sorted = Array.from(del).sort((a, b) => a - b);
                 const shift = (i) => { let n = 0; for (const d of sorted) { if (d < i) n++; else break; } return i - n; };
                 const remapSet = (prev) => {
@@ -3247,9 +3315,29 @@
                 setBreaksMenuCardIdx(null);
                 setNoteCardIdx(null);
                 setHistoryCardIdx(null);
-            }, [readingOrder]);
+                showToast(`🗑 Deleted ${del.size} detection${del.size > 1 ? 's' : ''}`, true);
+            }, [readingOrder, pushUndo, snapshotDetections, showToast]);
 
             const deleteDetection = useCallback((index) => deleteDetections([index]), [deleteDetections]);
+
+            const clearAllDetections = useCallback(() => {
+                if (recognitionResults.length === 0) return;
+                pushUndo('detections', snapshotDetections());
+                setRecognitionResults([]);
+                setValidations({});
+                setReadingOrder([]);
+                setExcludedDetections(new Set());
+                setExpandedCards(new Set());
+                setWordBoundaries(new Set());
+                setLineBreaks(new Set());
+                setColumnBreaks(new Set());
+                setSelectedRegions(new Set());
+                setEditMenuCardIdx(null);
+                setBreaksMenuCardIdx(null);
+                setNoteCardIdx(null);
+                setHistoryCardIdx(null);
+                showToast('🗑 Cleared all detections', true);
+            }, [recognitionResults.length, pushUndo, snapshotDetections, showToast]);
             
             // Change glyph assignment to an alternative match
             const changeGlyphAssignment = useCallback((detectionIdx, newGlyph) => {
@@ -3259,6 +3347,7 @@
                 // Log the change if user is logged in and glyph actually changed
                 if (driveUserEmail && oldGlyph?.id !== newGlyph?.id && typeof ChangeTracker !== 'undefined') {
                     const entry = ChangeTracker.logCorrection(detectionIdx, oldGlyph, newGlyph, driveUserEmail);
+                    entry.detectionId = recognitionResults[detectionIdx]?.detId || null;
                     setChangeLog(prev => [...prev, entry]);
                 }
                 
@@ -3383,6 +3472,7 @@
                 const det2 = recognitionResults[idx2];
                 
                 if (!det1 || !det2) return;
+                pushUndo('detections', snapshotDetections());
                 
                 // Create merged detection - use higher confidence one as base
                 const baseDet = det1.confidence >= det2.confidence ? det1 : det2;
@@ -3440,8 +3530,8 @@
                 setLineBreaks(prev => remapBreaks(prev));
                 setColumnBreaks(prev => remapBreaks(prev));
                 
-                alert('✅ Detections merged');
-            }, [selectedRegions, recognitionResults]);
+                showToast('🔗 Detections merged', true);
+            }, [selectedRegions, recognitionResults, pushUndo, snapshotDetections, showToast]);
             
             // Toggle card expansion (show alternatives)
             const toggleCardExpansion = useCallback((index) => {
@@ -3461,6 +3551,17 @@
             // ============================================
             return (
                 <div className="min-h-screen bg-gray-100 flex flex-col">
+                    {/* Toast (merge / delete / clear confirmations, with Undo) */}
+                    {toast && (
+                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 bg-gray-900 text-white text-sm rounded-lg shadow-lg px-4 py-2.5">
+                            <span>{toast.msg}</span>
+                            {toast.canUndo && (
+                                <button onClick={() => { undo(); setToast(null); }}
+                                    className="font-semibold text-amber-300 hover:text-amber-200">Undo</button>
+                            )}
+                            <button onClick={() => setToast(null)} className="text-gray-400 hover:text-white" title="Dismiss">✕</button>
+                        </div>
+                    )}
                     {/* Header */}
                     <header className="bg-ancient-purple text-white shadow-lg flex-shrink-0">
                         <div className="max-w-7xl mx-auto px-4 py-2">
@@ -4042,13 +4143,7 @@
                                                     📚 Examples
                                                 </button>
                                                 <button
-                                                    onClick={() => {
-                                                        const indices = Array.from(selectedRegions).sort((a, b) => b - a);
-                                                        if (confirm(`Delete ${indices.length} detection(s)?`)) {
-                                                            deleteDetections(indices);
-                                                            setSelectedRegions(new Set());
-                                                        }
-                                                    }}
+                                                    onClick={() => deleteDetections(Array.from(selectedRegions))}
                                                     className="px-2 py-1 bg-rust text-white rounded text-xs hover:opacity-90"
                                                     title="Delete selected detections"
                                                 >
@@ -4074,7 +4169,7 @@
                                                         className={`flex-1 px-3 py-2 border-l border-gray-300 ${showArabicLabels ? 'bg-ancient-purple text-white' : 'bg-gray-100 text-gray-600'}`}
                                                         title="Show Arabic script">عربي</button>
                                                 </div>
-                                                <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); setExcludedDetections(new Set()); setExpandedCards(new Set()); }}}
+                                                <button onClick={clearAllDetections}
                                                     className="px-3 py-2 bg-red-100 text-red-600 rounded text-sm hover:bg-red-200" title="Clear all detections">
                                                     🗑 Clear
                                                 </button>
@@ -4913,7 +5008,7 @@
                                                     className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'detection' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}>🔍 Detection</button>
                                                 <button onClick={() => setViewMode('reading')}
                                                     className={`flex-1 px-2 py-1 rounded text-xs ${viewMode === 'reading' ? 'bg-ancient-purple text-white' : 'bg-gray-100'}`}>📖 Reading</button>
-                                                <button onClick={() => { if(confirm('Clear all detections?')) { setRecognitionResults([]); setValidations({}); setReadingOrder([]); setExcludedDetections(new Set()); setExpandedCards(new Set()); }}}
+                                                <button onClick={clearAllDetections}
                                                     className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs hover:bg-red-200" title="Clear all detections">🗑</button>
                                             </div>
                                             
@@ -5009,13 +5104,7 @@
                                                             📚 Save as Examples
                                                         </button>
                                                         <button
-                                                            onClick={() => {
-                                                                const indices = Array.from(selectedRegions).sort((a, b) => b - a);
-                                                                if (confirm(`Delete ${indices.length} detection(s)?`)) {
-                                                                    deleteDetections(indices);
-                                                                    setSelectedRegions(new Set());
-                                                                }
-                                                            }}
+                                                            onClick={() => deleteDetections(Array.from(selectedRegions))}
                                                             className="px-2 py-1 bg-rust text-white rounded text-xs hover:opacity-90"
                                                             title="Delete selected detections"
                                                         >
