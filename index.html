@@ -154,14 +154,14 @@
     <script src="src/storage/cache.js"></script>
     <script src="src/storage/corrections.js"></script>
     <script src="src/storage/change-tracker.js"></script>
-    <script src="src/storage/archive-sync.js?v=261109a"></script>
+    <script src="src/storage/archive-sync.js?v=261109b"></script>
     <script src="src/storage/access-control.js"></script>
     <script src="src/storage/sync-manager.js"></script>
     <script src="src/storage/local-autosave.js"></script>
     
     <!-- ============================================ -->
     <!-- CACHE-BUSTING: When updating, change v=XXXXXX in ALL script tags below to match APP_VERSION -->
-    <!-- Current version: v261109a --> 
+    <!-- Current version: v261109b --> 
     <!-- ============================================ -->
     
     <!-- Recognition modules -->
@@ -178,18 +178,18 @@
     <script src="src/reading/dhofari-unicode.js"></script>
     
     <!-- UI Components (loaded as Babel) -->
-    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261109a"></script>
-    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261109a"></script>
-    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261109a"></script>
-    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261109a"></script>
-    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261109a"></script>
-    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261109a"></script>
-    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261109a"></script>
-    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261109a"></script>
+    <script type="text/babel" src="src/components/common/CommonComponents.jsx?v=261109b"></script>
+    <script type="text/babel" src="src/components/common/DetectionCard.jsx?v=261109b"></script>
+    <script type="text/babel" src="src/components/panels/InscriptionPanel.jsx?v=261109b"></script>
+    <script type="text/babel" src="src/components/panels/ExportPanel.jsx?v=261109b"></script>
+    <script type="text/babel" src="src/components/common/AccessControlUI.jsx?v=261109b"></script>
+    <script type="text/babel" src="src/components/modals/WarehouseModal.jsx?v=261109b"></script>
+    <script type="text/babel" src="src/components/modals/CollaboratorManager.jsx?v=261109b"></script>
+    <script type="text/babel" src="src/components/modals/BookletGenerator.jsx?v=261109b"></script>
 
     <!-- Main Application -->
     <script type="text/babel">
-        const APP_VERSION = 'v261109a';
+        const APP_VERSION = 'v261109b';
         console.log('🚀 Hakli Glyph Recognizer ' + APP_VERSION + ' (Transcription Syncs with Reading Order!)');
 
         function HakliGlyphRecognizer() {
@@ -3198,35 +3198,58 @@
                 }));
             }, [validations, pushUndo, driveUserEmail]);
             
-            const deleteDetection = useCallback((index) => {
-                setRecognitionResults(prev => prev.filter((_, i) => i !== index));
+            // Delete one or more detections in a single pass, shifting every
+            // index-keyed piece of state (validations, reading order, breaks,
+            // exclusions, expansion, selection) so nothing lands on the wrong glyph.
+            // A break on a deleted glyph moves to the glyph before it in reading
+            // order, so deleting the last letter of a word keeps the word break.
+            const deleteDetections = useCallback((indices) => {
+                const del = new Set(indices);
+                if (del.size === 0) return;
+                const sorted = Array.from(del).sort((a, b) => a - b);
+                const shift = (i) => { let n = 0; for (const d of sorted) { if (d < i) n++; else break; } return i - n; };
+                const remapSet = (prev) => {
+                    const u = new Set();
+                    prev.forEach(i => { if (!del.has(i)) u.add(shift(i)); });
+                    return u;
+                };
+                const remapBreakSet = (prev) => {
+                    const u = new Set();
+                    prev.forEach(i => {
+                        if (!del.has(i)) { u.add(shift(i)); return; }
+                        // carry the break back to the nearest surviving predecessor
+                        const pos = readingOrder.indexOf(i);
+                        for (let p = pos - 1; p >= 0; p--) {
+                            const prevIdx = readingOrder[p];
+                            if (!del.has(prevIdx)) { u.add(shift(prevIdx)); break; }
+                        }
+                    });
+                    return u;
+                };
+
+                setRecognitionResults(prev => prev.filter((_, i) => !del.has(i)));
                 setValidations(prev => {
                     const updated = {};
                     Object.entries(prev).forEach(([k, v]) => {
                         const oldIdx = parseInt(k);
-                        if (oldIdx < index) updated[oldIdx] = v;
-                        else if (oldIdx > index) updated[oldIdx - 1] = v;
+                        if (!del.has(oldIdx)) updated[shift(oldIdx)] = v;
                     });
                     return updated;
                 });
-                setReadingOrder(prev => prev.filter(i => i !== index).map(i => i > index ? i - 1 : i));
-                setExcludedDetections(prev => {
-                    const updated = new Set();
-                    prev.forEach(i => {
-                        if (i < index) updated.add(i);
-                        else if (i > index) updated.add(i - 1);
-                    });
-                    return updated;
-                });
-                setExpandedCards(prev => {
-                    const updated = new Set();
-                    prev.forEach(i => {
-                        if (i < index) updated.add(i);
-                        else if (i > index) updated.add(i - 1);
-                    });
-                    return updated;
-                });
-            }, []);
+                setReadingOrder(prev => prev.filter(i => !del.has(i)).map(shift));
+                setWordBoundaries(prev => remapBreakSet(prev));
+                setColumnBreaks(prev => remapBreakSet(prev));
+                setLineBreaks(prev => remapBreakSet(prev));
+                setExcludedDetections(prev => remapSet(prev));
+                setExpandedCards(prev => remapSet(prev));
+                setSelectedRegions(prev => remapSet(prev));
+                setEditMenuCardIdx(null);
+                setBreaksMenuCardIdx(null);
+                setNoteCardIdx(null);
+                setHistoryCardIdx(null);
+            }, [readingOrder]);
+
+            const deleteDetection = useCallback((index) => deleteDetections([index]), [deleteDetections]);
             
             // Change glyph assignment to an alternative match
             const changeGlyphAssignment = useCallback((detectionIdx, newGlyph) => {
@@ -4022,7 +4045,7 @@
                                                     onClick={() => {
                                                         const indices = Array.from(selectedRegions).sort((a, b) => b - a);
                                                         if (confirm(`Delete ${indices.length} detection(s)?`)) {
-                                                            indices.forEach(i => deleteDetection(i));
+                                                            deleteDetections(indices);
                                                             setSelectedRegions(new Set());
                                                         }
                                                     }}
@@ -4989,7 +5012,7 @@
                                                             onClick={() => {
                                                                 const indices = Array.from(selectedRegions).sort((a, b) => b - a);
                                                                 if (confirm(`Delete ${indices.length} detection(s)?`)) {
-                                                                    indices.forEach(i => deleteDetection(i));
+                                                                    deleteDetections(indices);
                                                                     setSelectedRegions(new Set());
                                                                 }
                                                             }}
