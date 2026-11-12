@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Azeeb · Hakli Glyph Recognizer</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+:root{--ink:#1d1b18;--paper:#f6f1e7;--ochre:#9a4a1c;--muted:#7a7166;--line:#e0d6c4;--card:#fffdf8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 Georgia,"Times New Roman",serif}
+main{max-width:720px;margin:0 auto;padding:28px 18px 60px;text-align:center}
+.back{text-align:left;margin:0 0 28px;font-family:system-ui,sans-serif;font-size:13px}
+.back a{color:var(--ochre);text-decoration:none}
+.back a:hover{text-decoration:underline}
+.logo-wrap{margin:8px auto 24px;max-width:460px}
+.logo-wrap img{width:100%;height:auto;display:block}
+h1{font-size:30px;margin:0 0 6px;font-weight:normal;letter-spacing:.02em}
+.sub{color:var(--muted);margin:0 auto 24px;font-size:14px;max-width:46ch}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;text-align:left;font-size:14.5px;color:#3d3832;max-width:46ch;margin:0 auto}
+.card p{margin:0 0 10px}
+.card p:last-child{margin:0}
+.meta{margin-top:26px;font-family:system-ui,sans-serif;font-size:12px;color:var(--muted)}
+.meta a{color:var(--ochre)}
+</style>
+</head>
+<body>
+<main>
+<p class="back"><a href="./">&larr; Back to the Glyph Recognizer</a></p>
+
+<div class="logo-wrap">
+<img src="azeeb-logo.png" alt="Azeeb — company logo: a howling wolf above the name Azeeb, rooted in a circuit-board pattern, struck on a bronze medallion">
+</div>
+
+<h1>Azeeb</h1>
+<p class="sub">The company behind the Hakli Glyph Recognizer and its sister tools for documenting the languages and written heritage of Dhofar.</p>
+
+<div class="card">
+<p>Azeeb builds software in service of endangered-language communities &mdash; recognizing and archiving ancient Dhofari inscriptions, and keeping the resulting record in the hands of the community it belongs to.</p>
+<p>The Hakli Glyph Recognizer is one of those tools.</p>
+</div>
+
+<p class="meta">&copy; <span id="yr"></span> Azeeb &middot; <a href="./">hudhud.dev</a></p>
+</main>
+<script>document.getElementById('yr').textContent=new Date().getFullYear();</script>
+</body>
+</html>
